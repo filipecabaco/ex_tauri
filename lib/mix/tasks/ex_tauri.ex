@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.Tauri do
+defmodule Mix.Tasks.ExTauri do
   @shortdoc "Invokes Tauri with the profile and args"
   @compile {:no_warn_undefined, Mix}
 
@@ -6,6 +6,6 @@ defmodule Mix.Tasks.Tauri do
 
   @impl true
   def run(args) do
-    Tauri.run(args)
+    ExTauri.run(args)
   end
 end

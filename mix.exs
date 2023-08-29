@@ -3,7 +3,7 @@ defmodule Desktop.MixProject do
 
   def project do
     [
-      app: :tauri,
+      app: :ex_tauri,
       version: "0.1.0",
       elixir: "~> 1.11",
       start_permanent: Mix.env() == :prod,
@@ -14,7 +14,6 @@ defmodule Desktop.MixProject do
   def application do
     [
       extra_applications: [:logger, inets: :optional, ssl: :optional],
-      mod: {Tauri, []},
       env: [default: []]
     ]
   end

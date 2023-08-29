@@ -1,15 +1,15 @@
-defmodule Tauri do
+defmodule ExTauri do
   @latest_version "1.4.0"
 
   use Application
   require Logger
   @doc false
   def start(_, _) do
-    unless Application.get_env(:tauri, :version) do
+    unless Application.get_env(:ex_tauri, :version) do
       Logger.warn("""
       tauri version is not configured. Please set it in your config files:
 
-          config :tauri, :version, "#{latest_version()}"
+          config :ex_tauri, :version, "#{latest_version()}"
       """)
     end
 
@@ -22,13 +22,13 @@ defmodule Tauri do
   def latest_version, do: @latest_version
 
   def install(extra_args \\ []) do
-    app_name = Application.get_env(:tauri, :app_name, "Phoenix Application")
+    app_name = Application.get_env(:ex_tauri, :app_name, "Phoenix Application")
 
-    window_title = Application.get_env(:tauri, :window_title, app_name)
-    scheme = Application.get_env(:tauri, :scheme) || "http"
-    host = Application.get_env(:tauri, :host) || raise "Expected :host to be configured"
-    port = Application.get_env(:tauri, :port) || raise "Expected :port to be configured"
-    version = Application.get_env(:tauri, :version) || latest_version()
+    window_title = Application.get_env(:ex_tauri, :window_title, app_name)
+    scheme = Application.get_env(:ex_tauri, :scheme) || "http"
+    host = Application.get_env(:ex_tauri, :host) || raise "Expected :host to be configured"
+    port = Application.get_env(:ex_tauri, :port) || raise "Expected :port to be configured"
+    version = Application.get_env(:ex_tauri, :version) || latest_version()
     installation_path = installation_path()
     File.mkdir_p!(installation_path)
 
@@ -120,7 +120,7 @@ defmodule Tauri do
   The executable may not be available if it was not yet installed.
   """
   def installation_path do
-    Application.get_env(:tauri, :path) ||
+    Application.get_env(:ex_tauri, :path) ||
       if Code.ensure_loaded?(Mix.Project) do
         Path.join(Path.dirname(Mix.Project.build_path()), "_tauri")
       else

@@ -6,7 +6,7 @@ defmodule ExTauri do
   @doc false
   def start(_, _) do
     unless Application.get_env(:ex_tauri, :version) do
-      Logger.warn("""
+      Logger.warning("""
       tauri version is not configured. Please set it in your config files:
 
           config :ex_tauri, :version, "#{latest_version()}"
@@ -23,12 +23,16 @@ defmodule ExTauri do
 
   def install(extra_args \\ []) do
     app_name = Application.get_env(:ex_tauri, :app_name, "Phoenix Application")
-
     window_title = Application.get_env(:ex_tauri, :window_title, app_name)
     scheme = Application.get_env(:ex_tauri, :scheme) || "http"
     host = Application.get_env(:ex_tauri, :host) || raise "Expected :host to be configured"
     port = Application.get_env(:ex_tauri, :port) || raise "Expected :port to be configured"
     version = Application.get_env(:ex_tauri, :version) || latest_version()
+    fullscreen = Application.get_env(:ex_tauri, :fullscreen, false)
+    height = Application.get_env(:ex_tauri, :height, 600)
+    width = Application.get_env(:ex_tauri, :width, 800)
+    resize = Application.get_env(:ex_tauri, :resize, true)
+
     installation_path = installation_path()
     File.mkdir_p!(installation_path)
 
@@ -96,19 +100,25 @@ defmodule ExTauri do
     |> Jason.decode!()
     |> then(fn content ->
       content
+      |> put_in(["package", "productName"], app_name)
       |> put_in(["tauri", "bundle", "externalBin"], ["../burrito_out/desktop"])
-      |> put_in(["tauri", "allowlist"], %{
-        shell: %{
-          sidecar: true,
-          scope: [
-            %{name: "../burrito_out/desktop", sidecar: true, args: ["start"]}
-          ]
-        }
-      })
       |> put_in(
         ["tauri", "bundle", "identifier"],
         "you.app.#{app_name |> String.replace("\s", "") |> Macro.underscore() |> String.replace("_", "-")}"
       )
+      |> put_in(["tauri", "allowlist"], %{
+        shell: %{
+          sidecar: true,
+          scope: [%{name: "../burrito_out/desktop", sidecar: true, args: ["start"]}]
+        }
+      })
+      |> put_in(["tauri", "windows"], [%{
+        title: window_title,
+        fullscreen: fullscreen,
+        width: width,
+        height: height,
+        resizable: resize
+      }])
     end)
     |> Jason.encode!(pretty: true)
     |> then(&File.write!(Path.join([File.cwd!(), "src-tauri", "tauri.conf.json"]), &1))
@@ -242,7 +252,7 @@ defmodule ExTauri do
     }
 
     fn check_server_started() {
-        let sleep_interval = std::time::Duration::from_secs(1);
+        let sleep_interval = std::time::Duration::from_millis(200);
         let host = "#{host}".to_string();
         let port = "#{port}".to_string();
         let addr = format!("{}:{}", host, port);

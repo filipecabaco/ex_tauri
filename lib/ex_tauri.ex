@@ -32,7 +32,6 @@ defmodule ExTauri do
     height = Application.get_env(:ex_tauri, :height, 600)
     width = Application.get_env(:ex_tauri, :width, 800)
     resize = Application.get_env(:ex_tauri, :resize, true)
-
     installation_path = installation_path()
     File.mkdir_p!(installation_path)
 
@@ -112,13 +111,15 @@ defmodule ExTauri do
           scope: [%{name: "../burrito_out/desktop", sidecar: true, args: ["start"]}]
         }
       })
-      |> put_in(["tauri", "windows"], [%{
-        title: window_title,
-        fullscreen: fullscreen,
-        width: width,
-        height: height,
-        resizable: resize
-      }])
+      |> put_in(["tauri", "windows"], [
+        %{
+          title: window_title,
+          fullscreen: fullscreen,
+          width: width,
+          height: height,
+          resizable: resize
+        }
+      ])
     end)
     |> Jason.encode!(pretty: true)
     |> then(&File.write!(Path.join([File.cwd!(), "src-tauri", "tauri.conf.json"]), &1))
@@ -159,22 +160,25 @@ defmodule ExTauri do
   returns the status of the underlying call.
   """
   def run(args) when is_list(args) do
+    wrap()
+
     # Set proper environment variables for tauri
     System.put_env("TAURI_SKIP_DEVSERVER_CHECK", "true")
-
-    wrap()
 
     opts = [
       into: IO.stream(:stdio, :line),
       stderr_to_stdout: true
     ]
 
-    Path.join([installation_path(), "bin", "cargo-tauri"])
-    |> System.cmd(args, opts)
-    |> elem(1)
+    {_, 0} =
+      [installation_path(), "bin", "cargo-tauri"]
+      |> Path.join()
+      |> System.cmd(args, opts)
   end
 
   defp wrap() do
+    File.rm_rf!(Path.join([Path.expand("~"), "Library", "Application Support", ".burrito"]))
+
     get_in(Mix.Project.config(), [:releases, :desktop]) ||
       raise "expected a burrito release configured for the app :desktop in your mix.exs"
 
@@ -190,6 +194,8 @@ defmodule ExTauri do
       "burrito_out/desktop_#{triplet}",
       "burrito_out/desktop-#{triplet}"
     )
+
+    :ok
   end
 
   defp cargo_toml(app_name) do

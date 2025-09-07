@@ -1,5 +1,35 @@
 defmodule ExTauri do
-  @latest_version "1.4.0"
+  @latest_version "2.5.1"
+
+  @arg_names %{
+    dev_url: %{
+      1 => "--dev-path",
+      2 => "--dev-url"
+    },
+    frontend_dist: %{
+      1 => "--dist-dir",
+      2 => "--frontend-dist"
+    }
+  }
+
+  @config_keys %{
+    productName: %{
+      1 => ["package", "productName"],
+      2 => ["productName"]
+    },
+    externalBin: %{
+      1 => ["tauri", "bundle", "externalBin"],
+      2 => ["bundle", "externalBin"]
+    },
+    identifier: %{
+      1 => ["tauri", "bundle", "identifier"],
+      2 => ["identifier"]
+    },
+    windows: %{
+      1 => ["tauri", "windows"],
+      2 => ["app", "windows"]
+    }
+  }
 
   use Application
   require Logger
@@ -21,6 +51,20 @@ defmodule ExTauri do
   """
   def latest_version, do: @latest_version
 
+  def get_major(version) do
+    case Version.parse(
+           version
+           |> String.trim()
+           |> String.replace(~r/^[^\d]+/, "")
+         ) do
+      {:ok, %Version{major: major}} ->
+        {:ok, major}
+
+      :error ->
+        {:error, "Failed to parse version from string '#{version}'."}
+    end
+  end
+
   def install(extra_args \\ []) do
     app_name = Application.get_env(:ex_tauri, :app_name, "Phoenix Application")
     window_title = Application.get_env(:ex_tauri, :window_title, app_name)
@@ -34,6 +78,8 @@ defmodule ExTauri do
     resize = Application.get_env(:ex_tauri, :resize, true)
     installation_path = installation_path()
     File.mkdir_p!(installation_path)
+
+    {:ok, major} = get_major(version)
 
     opts = [
       cd: installation_path,
@@ -50,9 +96,9 @@ defmodule ExTauri do
         app_name |> String.replace("\s", "") |> Macro.underscore(),
         "--window-title",
         window_title,
-        "--dev-path",
+        @arg_names.dev_url[major],
         "#{scheme}://#{host}:#{port}",
-        "--dist-dir",
+        @arg_names.frontend_dist[major],
         "#{scheme}://#{host}:#{port}",
         "--directory",
         File.cwd!(),
@@ -81,11 +127,11 @@ defmodule ExTauri do
 
     # Override Cargo.toml to use app_name and set proper crates so they are not dependent on folders
     path = Path.join([File.cwd!(), "src-tauri", "Cargo.toml"])
-    File.write!(path, cargo_toml(app_name))
+    File.write!(path, cargo_toml(app_name, version, major))
 
     # Override main.rs to set proper startup sequence
     path = Path.join([File.cwd!(), "src-tauri", "src", "main.rs"])
-    File.write!(path, main_src(host, port))
+    File.write!(path, main_src(host, port, major))
 
     # TODO remove this when possible, for some reason it's failing at the moment
     File.cp!(
@@ -99,19 +145,28 @@ defmodule ExTauri do
     |> Jason.decode!()
     |> then(fn content ->
       content
-      |> put_in(["package", "productName"], app_name)
-      |> put_in(["tauri", "bundle", "externalBin"], ["../burrito_out/desktop"])
+      |> put_in(@config_keys.productName[major], app_name)
+      |> put_in(@config_keys.externalBin[major], ["../burrito_out/desktop"])
       |> put_in(
-        ["tauri", "bundle", "identifier"],
+        @config_keys.identifier[major],
         "you.app.#{app_name |> String.replace("\s", "") |> Macro.underscore() |> String.replace("_", "-")}"
       )
-      |> put_in(["tauri", "allowlist"], %{
-        shell: %{
-          sidecar: true,
-          scope: [%{name: "../burrito_out/desktop", sidecar: true, args: ["start"]}]
-        }
-      })
-      |> put_in(["tauri", "windows"], [
+      |> then(fn content ->
+        case major do
+          1 ->
+            content
+            |> put_in(["tauri", "allowlist"], %{
+              shell: %{
+                sidecar: true,
+                scope: [%{name: "../burrito_out/desktop", sidecar: true, args: ["start"]}]
+              }
+            })
+
+          2 ->
+            content
+        end
+      end)
+      |> put_in(@config_keys.windows[major], [
         %{
           title: window_title,
           fullscreen: fullscreen,
@@ -123,6 +178,20 @@ defmodule ExTauri do
     end)
     |> Jason.encode!(pretty: true)
     |> then(&File.write!(Path.join([File.cwd!(), "src-tauri", "tauri.conf.json"]), &1))
+
+    case major do
+      2 ->
+        {_, 0} =
+          Path.join([installation_path, "bin", "cargo-tauri"])
+          |> System.cmd(["add", "log"], opts)
+
+        {_, 0} =
+          Path.join([installation_path, "bin", "cargo-tauri"])
+          |> System.cmd(["add", "shell"], opts)
+
+      _ ->
+        nil
+    end
   end
 
   @doc """
@@ -164,6 +233,8 @@ defmodule ExTauri do
 
     # Set proper environment variables for tauri
     System.put_env("TAURI_SKIP_DEVSERVER_CHECK", "true")
+    # Tauri v2 rename
+    System.put_env("TAURI_CLI_NO_DEV_SERVER_WAIT", "true")
 
     opts = [
       into: IO.stream(:stdio, :line),
@@ -198,7 +269,7 @@ defmodule ExTauri do
     :ok
   end
 
-  defp cargo_toml(app_name) do
+  defp cargo_toml(app_name, tauri_version, major) do
     app_name = app_name |> String.replace("\s", "") |> Macro.underscore()
 
     """
@@ -211,12 +282,16 @@ defmodule ExTauri do
     description = ""
 
     [build-dependencies]
-    tauri-build = "1.4.0"
+    tauri-build = "#{tauri_version}"
 
     [dependencies]
+    log = "0.4"
     serde_json = "1.0"
     serde = { version = "1.0", features = ["derive"] }
-    tauri = { version = "1.4.1",features = ["api-all"] }
+    #{case major do
+      1 -> ~s(tauri = { version = "#{tauri_version}", features = ["api-all"] })
+      2 -> ~s(tauri = { version = "#{tauri_version}" })
+    end}
 
     [features]
     # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
@@ -226,36 +301,77 @@ defmodule ExTauri do
     """
   end
 
-  defp main_src(host, port) do
+  defp main_src(host, port, major) do
     """
     // Prevents additional console window on Windows in release, DO NOT REMOVE!!
     #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-    use tauri::api::process::{Command, CommandEvent};
-
+    #{case major do
+      1 -> """
+        use tauri::api::process::{Command, CommandEvent};
+        """
+      2 -> """
+        use tauri_plugin_shell::process::CommandEvent;
+        use tauri_plugin_shell::ShellExt;
+        """
+    end}
     fn main() {
         tauri::Builder::default()
+    #{case major do
+      1 -> """
             .setup(|_app| {
                 start_server();
                 check_server_started();
                 Ok(())
             })
+        """
+      2 -> """
+            .setup(|app| {
+                start_server(app.handle());
+                check_server_started();
+                Ok(())
+            })
+        """
+    end}
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
     }
-    fn start_server() {
-        tauri::async_runtime::spawn(async move {
-            let (mut rx, mut _child) = Command::new_sidecar("desktop")
-                .expect("failed to setup `desktop` sidecar")
-                .spawn()
-                .expect("Failed to spawn packaged node");
+    #{case major do
+      1 -> """
+        fn start_server() {
+          tauri::async_runtime::spawn(async move {
+              let (mut rx, mut _child) = Command::new_sidecar("desktop")
+                  .expect("failed to setup `desktop` sidecar")
+                  .spawn()
+                  .expect("Failed to spawn packaged node");
 
-            while let Some(event) = rx.recv().await {
-                if let CommandEvent::Stdout(line) = event {
-                    println!("{}", line);
-                }
-            }
-        });
-    }
+              while let Some(event) = rx.recv().await {
+                  if let CommandEvent::Stdout(line) = event {
+                      println!("{}", line);
+                  }
+              }
+          });
+        }
+        """
+      2 -> """
+        fn start_server(app: &tauri::AppHandle) {
+          let sidecar_command = app.shell().sidecar("desktop")
+            .expect("failed to setup `desktop` sidecar");
+
+          let (mut rx, mut _child) = sidecar_command
+            .spawn()
+            .expect("Failed to spawn packaged node");
+
+          tauri::async_runtime::spawn(async move {
+              while let Some(event) = rx.recv().await {
+                  if let CommandEvent::Stdout(line_bytes) = event {
+                      let line = String::from_utf8_lossy(&line_bytes);
+                      println!("{}", line);
+                  }
+              }
+          });
+        }
+        """
+    end}
 
     fn check_server_started() {
         let sleep_interval = std::time::Duration::from_millis(200);

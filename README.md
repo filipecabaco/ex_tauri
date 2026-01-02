@@ -156,14 +156,14 @@ mix ex_tauri build
   "bundle": {
     "macOS": {
       "dmg": {
-        "size": 1000000
+        "size": 2500000
       }
     }
   }
 }
 ```
 
-The `size` is in KB. 1000000 KB = ~1 GB, which should be sufficient for most Burrito apps.
+The `size` is in KB. 2500000 KB = ~2.5 GB, which should be sufficient for most Burrito apps with full ERTS.
 
 **Alternative Solutions**:
 

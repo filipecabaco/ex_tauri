@@ -30,6 +30,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "macOS": {
+      "dmg": {
+        "size": 2500000
+      }
+    },
     "targets": "all"
   },
   "identifier": "you.app.example-desktop",

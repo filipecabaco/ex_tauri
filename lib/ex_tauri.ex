@@ -181,6 +181,21 @@ defmodule ExTauri do
   returns the status of the underlying call.
   """
   def run(args) when is_list(args) do
+    # Verify we're in a directory with src-tauri before proceeding
+    unless File.dir?("src-tauri") do
+      raise """
+      Could not find src-tauri directory in the current path: #{File.cwd!()}
+
+      Make sure you:
+      1. Run this command from your project root (where mix.exs is located)
+      2. Have run 'mix ex_tauri.install' to set up the Tauri project structure
+
+      If you're in the ex_tauri repository root, try:
+        cd example
+        mix ex_tauri build
+      """
+    end
+
     wrap()
 
     # Set proper environment variables for tauri
@@ -190,13 +205,24 @@ defmodule ExTauri do
 
     opts = [
       into: IO.stream(:stdio, :line),
-      stderr_to_stdout: true
+      stderr_to_stdout: true,
+      # Run from project root where src-tauri exists
+      cd: File.cwd!()
     ]
 
-    {_, 0} =
-      [installation_path(), "bin", "cargo-tauri"]
-      |> Path.join()
-      |> System.cmd(args, opts)
+    case [installation_path(), "bin", "cargo-tauri"]
+         |> Path.join()
+         |> System.cmd(args, opts) do
+      {_, 0} ->
+        :ok
+      {_, exit_code} ->
+        raise """
+        Tauri command failed with exit code #{exit_code}.
+
+        Make sure you have a valid Tauri project with src-tauri/tauri.conf.json
+        and that all dependencies are properly installed.
+        """
+    end
   end
 
   defp wrap() do

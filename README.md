@@ -145,22 +145,16 @@ mix ex_tauri build
 
 **Problem**: When running `mix ex_tauri build`, you get an error about DMG creation failing.
 
-**Common Causes**:
-1. Missing Xcode Command Line Tools
-2. Missing required dependencies for DMG creation
-3. Permission issues with the build directory
-
-**Solutions**:
+**Solution**: Tauri v2 has built-in DMG creation that requires only Xcode Command Line Tools:
 
 1. **Install Xcode Command Line Tools** (if not already installed):
    ```bash
    xcode-select --install
    ```
 
-2. **Check for homebrew dependencies**:
+2. **Check script permissions**: The generated `bundle_dmg.sh` might not be executable:
    ```bash
-   # The bundle_dmg.sh script may require these tools
-   brew install create-dmg
+   chmod +x src-tauri/target/release/bundle/dmg/bundle_dmg.sh
    ```
 
 3. **Clean and rebuild**:
@@ -174,16 +168,9 @@ mix ex_tauri build
 4. **Check the build output**: The `.app` bundle usually builds successfully even if DMG fails. You can find it at:
    - `src-tauri/target/release/bundle/macos/YourApp.app`
 
-   You can distribute the `.app` directly or create a DMG manually using Disk Utility.
+   You can distribute the `.app` directly.
 
-5. **Build without DMG** (if you only need the .app): Update `src-tauri/tauri.conf.json`:
-   ```json
-   {
-     "bundle": {
-       "targets": ["app"]
-     }
-   }
-   ```
+**Reference**: See [Tauri v2 DMG Documentation](https://v2.tauri.app/distribute/dmg/) for more details on DMG configuration options.
 
 ### Build Error: "Could not write configuration file because it has invalid terms"
 

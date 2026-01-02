@@ -208,11 +208,23 @@ defmodule ExTauri do
     # Run release with MIX_ENV=prod at shell level to avoid including dev config with regexes
     # Dev config (like live_reload patterns) contains regexes that can't be serialized
     # Must run as separate process so dependencies are loaded correctly for prod environment
-    {_, 0} = System.cmd("mix", ["release", "desktop", "--overwrite"],
+    case System.cmd("mix", ["release", "desktop", "--overwrite"],
       env: [{"MIX_ENV", "prod"}],
       into: IO.stream(:stdio, :line),
       stderr_to_stdout: true
-    )
+    ) do
+      {_, 0} ->
+        :ok
+      {_, exit_code} ->
+        raise """
+        Failed to build release with exit code #{exit_code}.
+
+        If you see a Burrito ERTS download error (404), you may need to configure
+        a different ERTS version in your mix.exs release configuration.
+
+        See: https://github.com/burrito-elixir/burrito#configuration
+        """
+    end
 
     triplet =
       System.cmd("rustc", ["-Vv"])

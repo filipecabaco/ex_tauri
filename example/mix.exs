@@ -79,7 +79,9 @@ defmodule ExampleDesktop.MixProject do
         steps: [:assemble, &Burrito.wrap/1],
         burrito: [
           targets: [
-            "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64]
+            # Use OTP-27 which has pre-compiled binaries available
+            # OTP-28 doesn't have universal macOS binaries yet
+            "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64, erts_version: "27.2"]
           ]
         ]
       ]

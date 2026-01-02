@@ -1,26 +1,32 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use tauri::api::process::{Command, CommandEvent};
+use tauri_plugin_shell::ShellExt;
 
 fn main() {
     tauri::Builder::default()
-        .setup(|_app| {
-            start_server();
+        .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            start_server(app.handle().clone());
             check_server_started();
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-fn start_server() {
+
+fn start_server(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let (mut rx, mut _child) = Command::new_sidecar("desktop")
-            .expect("failed to setup `desktop` sidecar")
+        let sidecar_command = app
+            .shell()
+            .sidecar("desktop")
+            .expect("failed to setup `desktop` sidecar");
+
+        let (mut rx, mut _child) = sidecar_command
             .spawn()
-            .expect("Failed to spawn packaged node");
+            .expect("Failed to spawn desktop sidecar");
 
         while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stdout(line) = event {
+            if let tauri_plugin_shell::process::CommandEvent::Stdout(line) = event {
                 println!("{}", line);
             }
         }

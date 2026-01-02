@@ -1,7 +1,38 @@
 
-<main class="px-4 py-20 sm:px-6 lg:px-8">
-  <div class="mx-auto max-w-4xl">
-    <.flash_group flash={@flash} />
-    <%= @inner_content %>
-  </div>
-</main>
+<div class="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
+  <!-- Header -->
+  <header class="border-b border-white/20 bg-white/50 backdrop-blur-lg backdrop-saturate-150">
+    <div class="mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex h-16 items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/20">
+            <.icon name="hero-document-text-solid" class="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 class="text-lg font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              Notes App
+            </h1>
+            <p class="text-xs text-slate-500">Your thoughts, organized</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="hidden sm:flex items-center gap-2 rounded-full bg-white/50 px-3 py-1.5 shadow-sm ring-1 ring-slate-200/50">
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
+              <span class="relative inline-flex h-2 w-2 rounded-full bg-green-500"></span>
+            </span>
+            <span class="text-xs font-medium text-slate-600">Live</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="px-4 py-6 sm:px-6 lg:px-8">
+    <div class="mx-auto">
+      <.flash_group flash={@flash} />
+      <%= @inner_content %>
+    </div>
+  </main>
+</div>

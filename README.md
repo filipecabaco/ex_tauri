@@ -137,7 +137,7 @@ cd your_project
 mix ex_tauri build
 ```
 
-**Note**: DMG creation requires Xcode Command Line Tools. If you encounter DMG build errors, see the troubleshooting section below.
+**Note**: DMG creation requires `create-dmg` (install via `brew install create-dmg`) and Xcode Command Line Tools. If you encounter DMG build errors, see the troubleshooting section below.
 
 ## Troubleshooting
 
@@ -145,32 +145,38 @@ mix ex_tauri build
 
 **Problem**: When running `mix ex_tauri build`, you get an error about DMG creation failing.
 
-**Solution**: Tauri v2 has built-in DMG creation that requires only Xcode Command Line Tools:
+**Solution**: Tauri v2's DMG bundler uses `create-dmg` which needs to be installed:
 
-1. **Install Xcode Command Line Tools** (if not already installed):
+1. **Install create-dmg via Homebrew**:
+   ```bash
+   brew install create-dmg
+   ```
+
+2. **Install Xcode Command Line Tools** (if not already installed):
    ```bash
    xcode-select --install
    ```
 
-2. **Check script permissions**: The generated `bundle_dmg.sh` might not be executable:
+3. **Rebuild**:
    ```bash
-   chmod +x src-tauri/target/release/bundle/dmg/bundle_dmg.sh
-   ```
-
-3. **Clean and rebuild**:
-   ```bash
-   cd src-tauri
-   cargo clean
-   cd ..
+   cd your_project
    mix ex_tauri build
    ```
 
-4. **Check the build output**: The `.app` bundle usually builds successfully even if DMG fails. You can find it at:
-   - `src-tauri/target/release/bundle/macos/YourApp.app`
+**Note**: If you get "Output file name must end with a .dmg extension", it means `create-dmg` is not installed. Install it with the command above.
 
-   You can distribute the `.app` directly.
+**Alternative - Build without DMG**: If you only need the `.app` bundle, update `src-tauri/tauri.conf.json`:
+```json
+{
+  "bundle": {
+    "targets": ["app"]
+  }
+}
+```
 
-**Reference**: See [Tauri v2 DMG Documentation](https://v2.tauri.app/distribute/dmg/) for more details on DMG configuration options.
+The `.app` bundle is created at `src-tauri/target/release/bundle/macos/YourApp.app` even if DMG fails.
+
+**Reference**: See [Tauri v2 DMG Documentation](https://v2.tauri.app/distribute/dmg/) for more details.
 
 ### Build Error: "Could not write configuration file because it has invalid terms"
 

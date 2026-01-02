@@ -112,6 +112,20 @@ defmodule ExTauri do
     |> File.read!()
     |> Jason.decode!()
     |> then(fn content ->
+      # Ensure bundle.macOS exists
+      content = if get_in(content, ["bundle", "macOS"]) == nil do
+        put_in(content, ["bundle", "macOS"], %{})
+      else
+        content
+      end
+
+      # Ensure bundle.macOS.dmg exists
+      content = if get_in(content, ["bundle", "macOS", "dmg"]) == nil do
+        put_in(content, ["bundle", "macOS", "dmg"], %{})
+      else
+        content
+      end
+
       content
       |> put_in(@config_keys.productName, app_name)
       |> put_in(@config_keys.externalBin, ["../burrito_out/desktop"])

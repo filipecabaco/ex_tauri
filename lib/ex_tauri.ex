@@ -223,6 +223,14 @@ defmodule ExTauri do
   defp cargo_toml(app_name, tauri_version) do
     app_name = app_name |> String.replace("\s", "") |> Macro.underscore()
 
+    # Extract major version for plugins (they have independent versioning)
+    # e.g., "2.5.1" -> "2", "2.0.0-rc.1" -> "2"
+    major_version =
+      case Version.parse(String.replace(tauri_version, ~r/^[^\d]+/, "")) do
+        {:ok, version} -> to_string(version.major)
+        :error -> tauri_version  # Fallback to full version if parsing fails
+      end
+
     """
     [package]
     name = "#{app_name}"
@@ -233,15 +241,15 @@ defmodule ExTauri do
     description = ""
 
     [build-dependencies]
-    tauri-build = "#{tauri_version}"
+    tauri-build = { version = "#{major_version}", features = [] }
 
     [dependencies]
     log = "0.4"
     serde_json = "1.0"
     serde = { version = "1.0", features = ["derive"] }
-    tauri = { version = "#{tauri_version}" }
-    tauri-plugin-shell = "#{tauri_version}"
-    tauri-plugin-log = "#{tauri_version}"
+    tauri = { version = "#{major_version}", features = [] }
+    tauri-plugin-shell = "#{major_version}"
+    tauri-plugin-log = "#{major_version}"
 
     [features]
     # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.

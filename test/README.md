@@ -37,6 +37,9 @@ Comprehensive integration tests for code generation:
 - Ensures Rust edition 2021 is used (not 2018)
 - Validates package configuration
 - Confirms NO V1 features like "api-all"
+- **Critical**: Verifies semver major version ranges are used for plugins (e.g., "2" not "2.5.1")
+- Tests version extraction across different version formats (stable, pre-release)
+- Ensures plugins use independent versioning to avoid Cargo build failures
 
 #### main.rs Generation Tests
 - Verifies V2 plugin system initialization
@@ -64,13 +67,15 @@ The integration tests ensure that ExTauri generates code compatible with **Tauri
 
 ### ✅ V2 Features Present
 - Rust edition 2021
-- `tauri-plugin-shell` dependency
-- `tauri-plugin-log` dependency
+- `tauri-plugin-shell` dependency with semver major version (e.g., "2")
+- `tauri-plugin-log` dependency with semver major version (e.g., "2")
+- Semver ranges for all Tauri dependencies to avoid version mismatch errors
 - `.plugin()` initialization calls
 - `ShellExt` trait usage
 - `app.shell().sidecar()` API
 - ACL capabilities system
 - V2 configuration structure (top-level productName, etc.)
+- `features = []` for tauri and tauri-build dependencies
 
 ### ❌ V1 Features Removed
 - No Rust edition 2018
@@ -92,3 +97,4 @@ These tests should be run as part of CI/CD pipelines to ensure:
 2. Generated code remains compatible with latest Tauri V2
 3. All required V2 dependencies are included
 4. Configuration structure matches V2 requirements
+5. Plugin versions use semver ranges to prevent build failures from version mismatches

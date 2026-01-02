@@ -4,7 +4,7 @@ defmodule ExTauriIntegrationTest do
   @moduletag :integration
 
   describe "Cargo.toml generation" do
-    test "generates valid Cargo.toml with V2 dependencies" do
+    test "generates valid Cargo.toml with V2 dependencies using semver ranges" do
       app_name = "test_app"
       tauri_version = "2.5.1"
 
@@ -16,18 +16,27 @@ defmodule ExTauriIntegrationTest do
       assert cargo_toml =~ ~r/edition = "2021"/
       assert cargo_toml =~ ~r/build = "src\/build\.rs"/
 
-      # Verify build dependencies
+      # Verify build dependencies use semver major version (not exact version)
       assert cargo_toml =~ ~r/\[build-dependencies\]/
-      assert cargo_toml =~ ~r/tauri-build = "#{tauri_version}"/
+      assert cargo_toml =~ ~r/tauri-build = \{ version = "2", features = \[\] \}/
 
       # Verify runtime dependencies
       assert cargo_toml =~ ~r/\[dependencies\]/
       assert cargo_toml =~ ~r/log = "0\.4"/
       assert cargo_toml =~ ~r/serde_json = "1\.0"/
       assert cargo_toml =~ ~r/serde = \{ version = "1\.0", features = \["derive"\] \}/
-      assert cargo_toml =~ ~r/tauri = \{ version = "#{tauri_version}" \}/
-      assert cargo_toml =~ ~r/tauri-plugin-shell = "#{tauri_version}"/
-      assert cargo_toml =~ ~r/tauri-plugin-log = "#{tauri_version}"/
+
+      # Core tauri should use semver major version
+      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \[\] \}/
+
+      # Plugins should use semver major version (not exact version like "2.5.1")
+      # This is critical because plugins have independent versioning
+      assert cargo_toml =~ ~r/tauri-plugin-shell = "2"/
+      assert cargo_toml =~ ~r/tauri-plugin-log = "2"/
+
+      # Ensure exact version is NOT used for plugins
+      refute cargo_toml =~ ~r/tauri-plugin-shell = "#{tauri_version}"/
+      refute cargo_toml =~ ~r/tauri-plugin-log = "#{tauri_version}"/
 
       # Verify features
       assert cargo_toml =~ ~r/\[features\]/
@@ -35,6 +44,33 @@ defmodule ExTauriIntegrationTest do
 
       # Ensure NO V1 features like "api-all"
       refute cargo_toml =~ ~r/api-all/
+    end
+
+    test "uses semver major version for plugins to avoid version mismatch" do
+      # Test with different Tauri versions to ensure major version extraction works
+      test_cases = [
+        {"2.5.1", "2"},
+        {"2.0.0", "2"},
+        {"2.10.3", "2"},
+        {"3.0.0-beta.1", "3"}
+      ]
+
+      for {tauri_version, expected_major} <- test_cases do
+        cargo_toml = ExTauri.__test_cargo_toml__("test_app", tauri_version)
+
+        # Plugins should use major version only
+        assert cargo_toml =~ ~r/tauri-plugin-shell = "#{expected_major}"/,
+               "Failed for version #{tauri_version}: expected major version #{expected_major}"
+
+        assert cargo_toml =~ ~r/tauri-plugin-log = "#{expected_major}"/,
+               "Failed for version #{tauri_version}: expected major version #{expected_major}"
+
+        assert cargo_toml =~ ~r/tauri = \{ version = "#{expected_major}", features = \[\] \}/,
+               "Failed for version #{tauri_version}: expected major version #{expected_major}"
+
+        assert cargo_toml =~ ~r/tauri-build = \{ version = "#{expected_major}", features = \[\] \}/,
+               "Failed for version #{tauri_version}: expected major version #{expected_major}"
+      end
     end
 
     test "generates Cargo.toml with Rust edition 2021, not 2018" do
@@ -49,6 +85,14 @@ defmodule ExTauriIntegrationTest do
 
       # Should convert to snake_case
       assert cargo_toml =~ ~r/name = "my_test_app"/
+    end
+
+    test "includes features = [] for tauri and tauri-build" do
+      cargo_toml = ExTauri.__test_cargo_toml__("test_app", "2.5.1")
+
+      # Verify empty features array to match working example
+      assert cargo_toml =~ ~r/tauri-build = \{ version = "2", features = \[\] \}/
+      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \[\] \}/
     end
   end
 
@@ -207,6 +251,15 @@ defmodule ExTauriIntegrationTest do
       assert main_src =~ ~r/\.plugin\(/
       assert main_src =~ ~r/tauri_plugin_shell::ShellExt/
       assert capabilities =~ ~r/shell:allow-execute/
+
+      # Verify semver ranges are used (not exact versions)
+      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \[\] \}/
+      assert cargo_toml =~ ~r/tauri-plugin-shell = "2"/
+      assert cargo_toml =~ ~r/tauri-plugin-log = "2"/
+
+      # Ensure exact versions like "2.5.1" are NOT used for plugins
+      refute cargo_toml =~ ~r/tauri-plugin-shell = "2\.\d+\.\d+"/
+      refute cargo_toml =~ ~r/tauri-plugin-log = "2\.\d+\.\d+"/
     end
   end
 

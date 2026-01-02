@@ -205,16 +205,14 @@ defmodule ExTauri do
     get_in(Mix.Project.config(), [:releases, :desktop]) ||
       raise "expected a burrito release configured for the app :desktop in your mix.exs"
 
-    # Run release with MIX_ENV=prod to avoid including dev config with regexes
+    # Run release with MIX_ENV=prod at shell level to avoid including dev config with regexes
     # Dev config (like live_reload patterns) contains regexes that can't be serialized
-    original_env = Mix.env()
-    Mix.env(:prod)
-
-    try do
-      Mix.Task.run("release", ["desktop", "--overwrite"])
-    after
-      Mix.env(original_env)
-    end
+    # Must run as separate process so dependencies are loaded correctly for prod environment
+    {_, 0} = System.cmd("mix", ["release", "desktop", "--overwrite"],
+      env: [{"MIX_ENV", "prod"}],
+      into: IO.stream(:stdio, :line),
+      stderr_to_stdout: true
+    )
 
     triplet =
       System.cmd("rustc", ["-Vv"])

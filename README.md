@@ -119,16 +119,6 @@ end
 
 - Check your runtime.exs, there's a lot of environment variables that you might need to build your server
 
-- **Important**: Ensure all regexes in your config files use the `/E` modifier for Burrito compatibility:
-
-```elixir
-# ❌ This will fail during build
-~r"priv/static/.*(js|css)$"
-
-# ✅ This works
-~r"priv/static/.*(js|css)$"E
-```
-
 - Setup tauri by running `mix ex_tauri.install`
 
 ## Running
@@ -141,29 +131,15 @@ end
 
 ### Build Error: "Could not write configuration file because it has invalid terms"
 
-**Problem**: This error occurs when regexes in your config files don't have the `/E` modifier, which is required for Burrito to serialize the configuration.
+**Problem**: This error occurs when Burrito tries to serialize development configuration that contains regexes (like Phoenix's `live_reload` patterns). Regexes cannot be serialized in Elixir releases.
 
-**Solution**: Add `/E` to all regex patterns in your config files:
+**Solution**: The library now automatically builds releases with `MIX_ENV=prod`, which excludes development configuration. No action needed on your part.
 
-```elixir
-# In config/dev.exs
-config :your_app, YourAppWeb.Endpoint,
-  live_reload: [
-    patterns: [
-      ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$"E,  # Note the E
-      ~r"lib/your_app_web/(controllers|live|components)/.*(ex|heex)$"E
-    ]
-  ]
-```
-
-**How to find problematic regexes**:
-```bash
-# Search for regexes in config files
-grep -r '~r"' config/
-
-# Look for patterns without /E modifier
-grep -r '~r"[^"]*"[^E]' config/
-```
+**How it works**: When you run `mix ex_tauri build`, the library:
+1. Sets `MIX_ENV=prod` before creating the release
+2. This ensures `config/dev.exs` is not included in the release
+3. Only `config/prod.exs` and `config/runtime.exs` are used
+4. After the release is created, the original MIX_ENV is restored
 
 ### Installation Error: "could not find tauri-cli in registry"
 

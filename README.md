@@ -123,11 +123,67 @@ end
 
 ## Running
 
-- Run tauri in development mode with `mix ex_tauri dev`
+### Development Mode (Recommended)
+Run your app in development mode with hot reloading:
+```bash
+cd your_project
+mix ex_tauri dev
+```
 
-- Build a distributable package with `mix ex_tauri build`
+### Building for Distribution
+Build a distributable package (creates both `.app` and `.dmg` on macOS):
+```bash
+cd your_project
+mix ex_tauri build
+```
+
+**Note**: DMG creation requires Xcode Command Line Tools. If you encounter DMG build errors, see the troubleshooting section below.
 
 ## Troubleshooting
+
+### Build Error: "failed to bundle project error running bundle_dmg.sh"
+
+**Problem**: When running `mix ex_tauri build`, you get an error about DMG creation failing.
+
+**Common Causes**:
+1. Missing Xcode Command Line Tools
+2. Missing required dependencies for DMG creation
+3. Permission issues with the build directory
+
+**Solutions**:
+
+1. **Install Xcode Command Line Tools** (if not already installed):
+   ```bash
+   xcode-select --install
+   ```
+
+2. **Check for homebrew dependencies**:
+   ```bash
+   # The bundle_dmg.sh script may require these tools
+   brew install create-dmg
+   ```
+
+3. **Clean and rebuild**:
+   ```bash
+   cd src-tauri
+   cargo clean
+   cd ..
+   mix ex_tauri build
+   ```
+
+4. **Check the build output**: The `.app` bundle usually builds successfully even if DMG fails. You can find it at:
+   - `src-tauri/target/release/bundle/macos/YourApp.app`
+
+   You can distribute the `.app` directly or create a DMG manually using Disk Utility.
+
+5. **Build without DMG** (if you only need the .app): Update `src-tauri/tauri.conf.json`:
+   ```json
+   {
+     "bundle": {
+       "targets": ["app"]
+     }
+   }
+   ```
 
 ### Build Error: "Could not write configuration file because it has invalid terms"
 
@@ -144,3 +200,38 @@ end
 ### Installation Error: "could not find tauri-cli in registry"
 
 This has been fixed in version 2.x. The library now automatically uses semver ranges for all Tauri dependencies. Make sure you're using the latest version.
+
+### Runtime Error: "You must provide a :database to the database"
+
+**Problem**: When running `mix ex_tauri dev`, you get Exqlite connection errors about missing database configuration.
+
+**Solution**: Add database configuration to your `config/runtime.exs`:
+
+```elixir
+# Configure the database at runtime
+database_path =
+  System.get_env("DATABASE_PATH") ||
+    Path.join([System.user_home!(), ".your_app", "your_app.db"])
+
+database_path |> Path.dirname() |> File.mkdir_p!()
+
+config :your_app, YourApp.Repo,
+  database: database_path,
+  pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
+```
+
+**Why**: Burrito-wrapped apps use production environment even in dev mode, so dev.exs database configs aren't loaded. Runtime configuration ensures the database path works in any environment.
+
+### Runtime Error: "could not warm up static assets"
+
+**Problem**: Error about missing `cache_manifest.json` when running the app.
+
+**Solution**: Comment out or remove the `cache_static_manifest` configuration in your `config/prod.exs`:
+
+```elixir
+# Comment this out:
+# config :your_app, YourAppWeb.Endpoint,
+#   cache_static_manifest: "priv/static/cache_manifest.json"
+```
+
+**Why**: The cache manifest is only needed for production deployments where assets are pre-compiled. In development and desktop apps, it's not required.

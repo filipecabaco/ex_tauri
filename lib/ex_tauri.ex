@@ -10,7 +10,8 @@ defmodule ExTauri do
     productName: ["productName"],
     externalBin: ["bundle", "externalBin"],
     identifier: ["identifier"],
-    windows: ["app", "windows"]
+    windows: ["app", "windows"],
+    dmgSize: ["bundle", "macOS", "dmg", "size"]
   }
 
   use Application
@@ -127,6 +128,9 @@ defmodule ExTauri do
           resizable: resize
         }
       ])
+      # Set DMG size to 2.5GB for Burrito apps with full ERTS
+      # Burrito apps are very large (include entire Erlang runtime)
+      |> put_in(@config_keys.dmgSize, 2_500_000)
     end)
     |> Jason.encode!(pretty: true)
     |> then(&File.write!(Path.join([File.cwd!(), "src-tauri", "tauri.conf.json"]), &1))

@@ -3,7 +3,7 @@ defmodule ExampleDesktopWeb.NotesLive do
 
   alias ExampleDesktop.Notes
 
-  def mount(params, session, socket) do
+  def mount(_params, _session, socket) do
     notes = Notes.list_notes()
 
     selected =

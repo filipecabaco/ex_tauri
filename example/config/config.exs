@@ -6,7 +6,7 @@
 
 # General application configuration
 import Config
-config :ex_tauri, version: "1.4.0", app_name: "Example Desktop", host: "localhost", port: 4000
+config :ex_tauri, version: "2.5.1", app_name: "Example Desktop", host: "localhost", port: 4000
 
 config :example_desktop,
   ecto_repos: [ExampleDesktop.Repo]

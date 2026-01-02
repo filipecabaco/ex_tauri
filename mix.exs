@@ -24,7 +24,7 @@ defmodule Desktop.MixProject do
   defp deps do
     [
       {:ex_doc, ">= 0.0.0", only: :docs},
-      {:burrito, github: "burrito-elixir/burrito"},
+      {:burrito, "~> 1.5"},
       {:jason, "~> 1.4.0"}
     ]
   end

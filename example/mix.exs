@@ -6,6 +6,9 @@ defmodule ExampleDesktop.MixProject do
       app: :example_desktop,
       version: "0.1.0",
       elixir: "~> 1.14",
+      # Limited to OTP 27 due to Burrito pre-compiled ERTS availability
+      # OTP 28 doesn't have universal macOS binaries available yet
+      otp_release: "~> 27.0",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),

@@ -37,9 +37,13 @@ Comprehensive integration tests for code generation:
 - Ensures Rust edition 2021 is used (not 2018)
 - Validates package configuration
 - Confirms NO V1 features like "api-all"
-- **Critical**: Verifies semver major version ranges are used for plugins (e.g., "2" not "2.5.1")
+- **Critical**: Verifies semver ranges are used for all Tauri components:
+  - Plugins: `tauri-plugin-shell = "2"` (not `"2.5.1"`)
+  - Core: `tauri = { version = "2", features = [] }`
+  - Build: `tauri-build = { version = "2", features = [] }`
+  - CLI installation: `cargo install tauri-cli --version ^2` (not exact version)
 - Tests version extraction across different version formats (stable, pre-release)
-- Ensures plugins use independent versioning to avoid Cargo build failures
+- Ensures independent versioning to avoid Cargo build failures
 
 #### main.rs Generation Tests
 - Verifies V2 plugin system initialization

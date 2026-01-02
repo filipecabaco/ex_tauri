@@ -47,13 +47,21 @@ defmodule ExTauri do
     installation_path = installation_path()
     File.mkdir_p!(installation_path)
 
+    # Extract major version for CLI installation (CLI has independent versioning)
+    # Use major version to avoid exact version mismatch errors
+    cli_version =
+      case Version.parse(String.replace(version, ~r/^[^\d]+/, "")) do
+        {:ok, v} -> to_string(v.major)
+        :error -> version
+      end
+
     opts = [
       cd: installation_path,
       into: IO.stream(:stdio, :line),
       stderr_to_stdout: true
     ]
 
-    System.cmd("cargo", ["install", "tauri-cli@#{version}", "--root", "."], opts)
+    System.cmd("cargo", ["install", "tauri-cli", "--version", "^#{cli_version}", "--root", "."], opts)
 
     args =
       [

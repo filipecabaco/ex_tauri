@@ -55,6 +55,8 @@ end
 - Add configuration
 
 ```elixir
+# The version can be any 2.x version - the library automatically extracts
+# the major version for CLI and plugin installations to avoid version mismatches
 config :ex_tauri, version: "2.5.1", app_name: "Example Desktop", host: "localhost", port: 4000
 ```
 

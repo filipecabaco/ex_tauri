@@ -10,6 +10,10 @@ defmodule ExTauriIntegrationTest do
 
       cargo_toml = ExTauri.__test_cargo_toml__(app_name, tauri_version)
 
+      # NOTE: The install() function also uses semver ranges for tauri-cli installation
+      # It extracts major version and uses: cargo install tauri-cli --version ^2
+      # This prevents "version not found" errors during CLI installation
+
       # Verify package configuration
       assert cargo_toml =~ ~r/name = "test_app"/
       assert cargo_toml =~ ~r/version = "0\.1\.0"/

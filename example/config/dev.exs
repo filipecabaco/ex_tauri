@@ -53,8 +53,8 @@ config :example_desktop, ExampleDesktopWeb.Endpoint,
 config :example_desktop, ExampleDesktopWeb.Endpoint,
   live_reload: [
     patterns: [
-      ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$",
-      ~r"lib/example_desktop_web/(controllers|live|components)/.*(ex|heex)$"
+      ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$"E,
+      ~r"lib/example_desktop_web/(controllers|live|components)/.*(ex|heex)$"E
     ]
   ]
 

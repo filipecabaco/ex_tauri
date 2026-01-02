@@ -119,6 +119,16 @@ end
 
 - Check your runtime.exs, there's a lot of environment variables that you might need to build your server
 
+- **Important**: Ensure all regexes in your config files use the `/E` modifier for Burrito compatibility:
+
+```elixir
+# ❌ This will fail during build
+~r"priv/static/.*(js|css)$"
+
+# ✅ This works
+~r"priv/static/.*(js|css)$"E
+```
+
 - Setup tauri by running `mix ex_tauri.install`
 
 ## Running
@@ -126,3 +136,35 @@ end
 - Run tauri in development mode with `mix ex_tauri dev`
 
 - Build a distributable package with `mix ex_tauri build`
+
+## Troubleshooting
+
+### Build Error: "Could not write configuration file because it has invalid terms"
+
+**Problem**: This error occurs when regexes in your config files don't have the `/E` modifier, which is required for Burrito to serialize the configuration.
+
+**Solution**: Add `/E` to all regex patterns in your config files:
+
+```elixir
+# In config/dev.exs
+config :your_app, YourAppWeb.Endpoint,
+  live_reload: [
+    patterns: [
+      ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$"E,  # Note the E
+      ~r"lib/your_app_web/(controllers|live|components)/.*(ex|heex)$"E
+    ]
+  ]
+```
+
+**How to find problematic regexes**:
+```bash
+# Search for regexes in config files
+grep -r '~r"' config/
+
+# Look for patterns without /E modifier
+grep -r '~r"[^"]*"[^E]' config/
+```
+
+### Installation Error: "could not find tauri-cli in registry"
+
+This has been fixed in version 2.x. The library now automatically uses semver ranges for all Tauri dependencies. Make sure you're using the latest version.

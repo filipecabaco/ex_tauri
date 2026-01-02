@@ -29,6 +29,15 @@ Basic unit tests for public API functions:
 - `latest_version/0` - Verifies the default Tauri version
 - `installation_path/0` - Verifies the installation path structure
 
+### `ex_tauri_build_command_test.exs`
+Validates build command requirements and common failure scenarios:
+- **Critical**: Ensures regexes in config have /E modifier for Burrito serialization
+- Tests dev.exs live_reload patterns are serializable
+- Validates the build process documentation
+- Provides helpers to check regex format
+- Documents common build failures and solutions
+- Prevents "Could not write configuration file" errors
+
 ### `ex_tauri_integration_test.exs`
 Comprehensive integration tests for code generation:
 
@@ -150,6 +159,31 @@ cargo check
 # Any dependency resolution errors indicate a version mismatch bug
 ```
 
+## Known Build Issues and Solutions
+
+### Issue: "Could not write configuration file because it has invalid terms"
+**Cause**: Regexes in config files must use the `/E` modifier to be serializable in Burrito releases.
+
+**Error Message**:
+```
+** (Mix) Could not write configuration file because it has invalid terms
+Application: :example_desktop
+Key: ExampleDesktopWeb.Endpoint
+Invalid value: ~r/priv\/static\/.*(js|css|png|jpeg|jpg|gif|svg)$/
+Reason: you must use the /E modifier to store regexes
+```
+
+**Solution**: Add `/E` after all regexes in config files:
+```elixir
+# ❌ Before (broken)
+~r"priv/static/.*(js|css)$"
+
+# ✅ After (fixed)
+~r"priv/static/.*(js|css)$"E
+```
+
+**Prevention**: The `ex_tauri_build_command_test.exs` test suite validates this automatically.
+
 ## Continuous Integration
 
 These tests should be run as part of CI/CD pipelines to ensure:
@@ -159,3 +193,4 @@ These tests should be run as part of CI/CD pipelines to ensure:
 4. Configuration structure matches V2 requirements
 5. Plugin versions use semver ranges to prevent build failures from version mismatches
 6. CLI installation command generation prevents exact version errors
+7. Config file regexes use /E modifier for Burrito compatibility

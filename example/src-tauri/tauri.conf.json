@@ -33,7 +33,10 @@
       "exceptionDomain": "",
       "frameworks": [],
       "providerShortName": null,
-      "signingIdentity": null
+      "signingIdentity": null,
+      "dmg": {
+        "size": 1000000
+      }
     },
     "resources": [],
     "shortDescription": "",

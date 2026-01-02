@@ -137,46 +137,54 @@ cd your_project
 mix ex_tauri build
 ```
 
-**Note**: DMG creation requires `create-dmg` (install via `brew install create-dmg`) and Xcode Command Line Tools. If you encounter DMG build errors, see the troubleshooting section below.
+**Note**: DMG creation requires Xcode Command Line Tools. If you encounter DMG build errors, see the troubleshooting section below.
 
 ## Troubleshooting
 
 ### Build Error: "failed to bundle project error running bundle_dmg.sh"
 
-**Problem**: When running `mix ex_tauri build`, you get an error about DMG creation failing.
+**Problem**: When running `mix ex_tauri build`, you get errors like:
+- "No space left on device" (even though you have disk space)
+- DMG creation fails
 
-**Solution**: Tauri v2's DMG bundler uses `create-dmg` which needs to be installed:
+**Root Cause**: Burrito-wrapped Phoenix apps are very large (include entire Erlang runtime), and the default DMG size is too small.
 
-1. **Install create-dmg via Homebrew**:
-   ```bash
-   brew install create-dmg
-   ```
+**Solution**: Configure a larger DMG size in `src-tauri/tauri.conf.json`:
 
-2. **Install Xcode Command Line Tools** (if not already installed):
-   ```bash
-   xcode-select --install
-   ```
-
-3. **Rebuild**:
-   ```bash
-   cd your_project
-   mix ex_tauri build
-   ```
-
-**Note**: If you get "Output file name must end with a .dmg extension", it means `create-dmg` is not installed. Install it with the command above.
-
-**Alternative - Build without DMG**: If you only need the `.app` bundle, update `src-tauri/tauri.conf.json`:
 ```json
 {
   "bundle": {
-    "targets": ["app"]
+    "macOS": {
+      "dmg": {
+        "size": 1000000
+      }
+    }
   }
 }
 ```
 
-The `.app` bundle is created at `src-tauri/target/release/bundle/macos/YourApp.app` even if DMG fails.
+The `size` is in KB. 1000000 KB = ~1 GB, which should be sufficient for most Burrito apps.
 
-**Reference**: See [Tauri v2 DMG Documentation](https://v2.tauri.app/distribute/dmg/) for more details.
+**Alternative Solutions**:
+
+1. **Build without DMG** (only create .app bundle):
+   ```json
+   {
+     "bundle": {
+       "targets": ["app"]
+     }
+   }
+   ```
+
+2. **Check actual app size** to set appropriate DMG size:
+   ```bash
+   du -sh src-tauri/target/release/bundle/macos/*.app
+   # Set dmg.size to at least 1.5x the app size (in KB)
+   ```
+
+The `.app` bundle is created successfully at `src-tauri/target/release/bundle/macos/YourApp.app` even if DMG creation fails.
+
+**Reference**: See [Tauri v2 DMG Documentation](https://v2.tauri.app/distribute/dmg/) for more configuration options.
 
 ### Build Error: "Could not write configuration file because it has invalid terms"
 

@@ -332,4 +332,15 @@ defmodule ExTauri do
     }
     """
   end
+
+  if Mix.env() == :test do
+    @doc false
+    def __test_cargo_toml__(app_name, tauri_version), do: cargo_toml(app_name, tauri_version)
+
+    @doc false
+    def __test_main_src__(host, port), do: main_src(host, port)
+
+    @doc false
+    def __test_capabilities_json__(), do: capabilities_json()
+  end
 end

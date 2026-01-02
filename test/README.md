@@ -65,6 +65,16 @@ Comprehensive integration tests for code generation:
 - Validates all V2-specific patterns are present
 - Ensures configuration uses V2 structure (not V1 allowlist)
 
+#### CLI Installation Command Generation Tests
+- **Critical**: Validates `mix ex_tauri.install` won't fail with version errors
+- Tests major version extraction from configured Tauri version
+- Verifies cargo install command uses caret semver range (`^2`)
+- Ensures exact versions are NOT used (prevents "version not found" errors)
+- Tests command structure matches cargo expectations
+- Validates handling of edge cases (pre-release, build metadata, etc.)
+- Tests fallback behavior for invalid version strings
+- Prevents regression of the `tauri-cli@2.5.1` installation bug
+
 ## What These Tests Verify
 
 The integration tests ensure that ExTauri generates code compatible with **Tauri V2 only**:
@@ -94,6 +104,52 @@ The integration tests ensure that ExTauri generates code compatible with **Tauri
 
 The library includes test-only functions (prefixed with `__test_`) that expose private code generation functions for testing purposes. These functions are only compiled when `Mix.env() == :test`.
 
+## Manual Testing
+
+While the integration tests validate command generation, you should also manually test the actual installation process:
+
+### Testing CLI Installation
+
+```bash
+# 1. Configure your app
+config :ex_tauri, version: "2.5.1", app_name: "Test App", host: "localhost", port: 4000
+
+# 2. Run installation
+mix ex_tauri.install
+
+# 3. Verify successful installation
+# You should see output like:
+#   Installing tauri-cli v2.x.x
+#   Installed package `tauri-cli v2.x.x` (executable `cargo-tauri`)
+
+# 4. Check the installed version
+./_build/_tauri/bin/cargo-tauri --version
+```
+
+### What to Look For
+
+✅ **Success indicators:**
+- CLI installs without "version not found" errors
+- Installation completes with "Installed package" message
+- `cargo-tauri` binary exists in `_build/_tauri/bin/`
+- Generated Cargo.toml uses semver ranges (e.g., `tauri-plugin-shell = "2"`)
+
+❌ **Failure indicators:**
+- Error: `could not find tauri-cli in registry with version =2.5.1`
+- Error: `could not find tauri-plugin-shell in registry with version =2.5.1`
+- Generated Cargo.toml has exact versions (e.g., `"2.5.1"`)
+
+### Testing Generated Code Compilation
+
+```bash
+# After installation, test that generated code builds
+cd example/src-tauri
+cargo check
+
+# Should complete without version errors
+# Any dependency resolution errors indicate a version mismatch bug
+```
+
 ## Continuous Integration
 
 These tests should be run as part of CI/CD pipelines to ensure:
@@ -102,3 +158,4 @@ These tests should be run as part of CI/CD pipelines to ensure:
 3. All required V2 dependencies are included
 4. Configuration structure matches V2 requirements
 5. Plugin versions use semver ranges to prevent build failures from version mismatches
+6. CLI installation command generation prevents exact version errors

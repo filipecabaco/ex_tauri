@@ -303,4 +303,125 @@ defmodule ExTauriIntegrationTest do
       refute arg_names.frontend_dist == "--dist-dir"
     end
   end
+
+  describe "CLI installation command generation" do
+    test "extracts major version correctly for CLI installation" do
+      test_cases = [
+        {"2.5.1", "2"},
+        {"2.0.0", "2"},
+        {"2.10.3", "2"},
+        {"3.0.0-beta.1", "3"},
+        {"3.1.2-rc.3", "3"}
+      ]
+
+      for {tauri_version, expected_major} <- test_cases do
+        cli_version = ExTauri.__test_extract_cli_version__(tauri_version)
+
+        assert cli_version == expected_major,
+               "Failed for version #{tauri_version}: expected #{expected_major}, got #{cli_version}"
+      end
+    end
+
+    test "generates correct cargo install command arguments" do
+      tauri_version = "2.5.1"
+      args = ExTauri.__test_build_cli_install_args__(tauri_version)
+
+      # Verify command structure
+      assert args == ["install", "tauri-cli", "--version", "^2", "--root", "."]
+
+      # Verify it uses semver caret range
+      assert "^2" in args
+
+      # Verify it does NOT use exact version
+      refute "2.5.1" in args
+      refute "@2.5.1" in args
+    end
+
+    test "uses caret semver range for all version formats" do
+      test_cases = [
+        {"2.5.1", "^2"},
+        {"2.0.0", "^2"},
+        {"3.0.0-beta.1", "^3"},
+        {"3.10.5", "^3"}
+      ]
+
+      for {tauri_version, expected_version_arg} <- test_cases do
+        args = ExTauri.__test_build_cli_install_args__(tauri_version)
+
+        assert expected_version_arg in args,
+               "Expected #{expected_version_arg} in args for version #{tauri_version}, got: #{inspect(args)}"
+
+        # Ensure the package name is correct
+        assert "tauri-cli" in args
+
+        # Ensure --version flag is used
+        assert "--version" in args
+
+        # Ensure --root flag is present
+        assert "--root" in args
+        assert "." in args
+      end
+    end
+
+    test "prevents exact version installation errors" do
+      # This is the command that was failing before the fix
+      tauri_version = "2.5.1"
+      args = ExTauri.__test_build_cli_install_args__(tauri_version)
+
+      # The old broken command would have been: ["install", "tauri-cli@2.5.1", ...]
+      # Verify we're NOT using that format
+      refute "tauri-cli@2.5.1" in args
+      refute "tauri-cli@#{tauri_version}" in args
+
+      # Verify we ARE using the correct format
+      assert args == ["install", "tauri-cli", "--version", "^2", "--root", "."],
+             "CLI install args should use --version flag with caret semver range"
+    end
+
+    test "command structure matches cargo install expectations" do
+      args = ExTauri.__test_build_cli_install_args__("2.5.1")
+
+      # Verify command structure: install <package> --version <version> --root <path>
+      assert Enum.at(args, 0) == "install"
+      assert Enum.at(args, 1) == "tauri-cli"
+      assert Enum.at(args, 2) == "--version"
+      assert Enum.at(args, 3) == "^2"
+      assert Enum.at(args, 4) == "--root"
+      assert Enum.at(args, 5) == "."
+
+      # Verify exact order (important for cargo)
+      assert args == ["install", "tauri-cli", "--version", "^2", "--root", "."]
+    end
+
+    test "handles edge cases in version parsing" do
+      edge_cases = [
+        # Pre-release versions
+        {"2.0.0-alpha.1", "^2"},
+        {"2.0.0-beta.10", "^2"},
+        {"2.0.0-rc.1", "^2"},
+        # Versions with build metadata
+        {"2.5.1+build.123", "^2"},
+        # Simple versions
+        {"2.0.0", "^2"},
+        {"3.0.0", "^3"}
+      ]
+
+      for {tauri_version, expected_version_arg} <- edge_cases do
+        args = ExTauri.__test_build_cli_install_args__(tauri_version)
+
+        assert expected_version_arg in args,
+               "Failed to handle version #{tauri_version}: expected #{expected_version_arg} in #{inspect(args)}"
+      end
+    end
+
+    test "fallback behavior for invalid version strings" do
+      # If version parsing fails, it should use the original version
+      # This is a safety fallback to prevent total failure
+      invalid_version = "invalid-version"
+      cli_version = ExTauri.__test_extract_cli_version__(invalid_version)
+
+      # Should fall back to the original string
+      assert cli_version == invalid_version
+    end
+  end
 end

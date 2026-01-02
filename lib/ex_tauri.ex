@@ -47,21 +47,14 @@ defmodule ExTauri do
     installation_path = installation_path()
     File.mkdir_p!(installation_path)
 
-    # Extract major version for CLI installation (CLI has independent versioning)
-    # Use major version to avoid exact version mismatch errors
-    cli_version =
-      case Version.parse(String.replace(version, ~r/^[^\d]+/, "")) do
-        {:ok, v} -> to_string(v.major)
-        :error -> version
-      end
-
     opts = [
       cd: installation_path,
       into: IO.stream(:stdio, :line),
       stderr_to_stdout: true
     ]
 
-    System.cmd("cargo", ["install", "tauri-cli", "--version", "^#{cli_version}", "--root", "."], opts)
+    # Install tauri-cli using semver range to avoid version mismatch errors
+    System.cmd("cargo", build_cli_install_args(version), opts)
 
     args =
       [
@@ -349,6 +342,18 @@ defmodule ExTauri do
     """
   end
 
+  defp extract_cli_version(tauri_version) do
+    case Version.parse(String.replace(tauri_version, ~r/^[^\d]+/, "")) do
+      {:ok, v} -> to_string(v.major)
+      :error -> tauri_version
+    end
+  end
+
+  defp build_cli_install_args(tauri_version) do
+    cli_version = extract_cli_version(tauri_version)
+    ["install", "tauri-cli", "--version", "^#{cli_version}", "--root", "."]
+  end
+
   if Mix.env() == :test do
     @doc false
     def __test_cargo_toml__(app_name, tauri_version), do: cargo_toml(app_name, tauri_version)
@@ -358,5 +363,11 @@ defmodule ExTauri do
 
     @doc false
     def __test_capabilities_json__(), do: capabilities_json()
+
+    @doc false
+    def __test_extract_cli_version__(tauri_version), do: extract_cli_version(tauri_version)
+
+    @doc false
+    def __test_build_cli_install_args__(tauri_version), do: build_cli_install_args(tauri_version)
   end
 end

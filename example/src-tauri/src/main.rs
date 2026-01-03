@@ -2,6 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
+use std::sync::Mutex;
+
+struct AppState {
+    sidecar_child: Mutex<Option<tauri_plugin_shell::process::CommandChild>>,
+}
 
 fn main() {
     tauri::Builder::default()
@@ -12,10 +17,25 @@ fn main() {
         )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_log::Builder::new().build())
+        .manage(AppState {
+            sidecar_child: Mutex::new(None),
+        })
         .setup(|app| {
             start_server(app.handle());
             check_server_started();
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Kill the sidecar when the window closes
+                if let Some(state) = window.try_state::<AppState>() {
+                    if let Ok(mut child) = state.sidecar_child.lock() {
+                        if let Some(mut process) = child.take() {
+                            let _ = process.kill();
+                        }
+                    }
+                }
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -27,9 +47,16 @@ fn start_server(app: &tauri::AppHandle) {
         .sidecar("desktop")
         .expect("failed to setup `desktop` sidecar");
 
-    let (mut rx, mut _child) = sidecar_command
+    let (mut rx, child) = sidecar_command
         .spawn()
         .expect("Failed to spawn desktop sidecar");
+
+    // Store the child process handle so we can kill it on exit
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Ok(mut guard) = state.sidecar_child.lock() {
+            *guard = Some(child);
+        }
+    }
 
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {

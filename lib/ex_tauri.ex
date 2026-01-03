@@ -10,8 +10,7 @@ defmodule ExTauri do
     productName: ["productName"],
     externalBin: ["bundle", "externalBin"],
     identifier: ["identifier"],
-    windows: ["app", "windows"],
-    dmgSize: ["bundle", "macOS", "dmg", "size"]
+    windows: ["app", "windows"]
   }
 
   use Application
@@ -112,20 +111,6 @@ defmodule ExTauri do
     |> File.read!()
     |> Jason.decode!()
     |> then(fn content ->
-      # Ensure bundle.macOS exists
-      content = if get_in(content, ["bundle", "macOS"]) == nil do
-        put_in(content, ["bundle", "macOS"], %{})
-      else
-        content
-      end
-
-      # Ensure bundle.macOS.dmg exists
-      content = if get_in(content, ["bundle", "macOS", "dmg"]) == nil do
-        put_in(content, ["bundle", "macOS", "dmg"], %{})
-      else
-        content
-      end
-
       content
       |> put_in(@config_keys.productName, app_name)
       |> put_in(@config_keys.externalBin, ["../burrito_out/desktop"])
@@ -142,9 +127,6 @@ defmodule ExTauri do
           resizable: resize
         }
       ])
-      # Set DMG size to 2.5GB for Burrito apps with full ERTS
-      # Burrito apps are very large (include entire Erlang runtime)
-      |> put_in(@config_keys.dmgSize, 2_500_000)
     end)
     |> Jason.encode!(pretty: true)
     |> then(&File.write!(Path.join([File.cwd!(), "src-tauri", "tauri.conf.json"]), &1))
@@ -220,6 +202,7 @@ defmodule ExTauri do
     System.put_env("TAURI_SKIP_DEVSERVER_CHECK", "true")
     # Tauri v2 rename
     System.put_env("TAURI_CLI_NO_DEV_SERVER_WAIT", "true")
+    maybe_set_dmg_size_env()
 
     opts = [
       into: IO.stream(:stdio, :line),
@@ -280,6 +263,21 @@ defmodule ExTauri do
       "burrito_out/desktop_#{triplet}",
       "burrito_out/desktop-#{triplet}"
     )
+
+    :ok
+  end
+
+  # Always set a DMG size for create-dmg to avoid under-sized images.
+  # Defaults to 500m, but can be overridden via config :dmg_size_mb or env DISK_IMAGE_SIZE.
+  defp maybe_set_dmg_size_env do
+    # Respect an explicit env override if set
+    if System.get_env("DISK_IMAGE_SIZE") do
+      :ok
+    else
+      size_mb = Application.get_env(:ex_tauri, :dmg_size_mb, "500m")
+
+      System.put_env("DISK_IMAGE_SIZE", size_mb)
+    end
 
     :ok
   end

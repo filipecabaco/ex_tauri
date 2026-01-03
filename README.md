@@ -57,7 +57,13 @@ end
 ```elixir
 # The version can be any 2.x version - the library automatically extracts
 # the major version for CLI and plugin installations to avoid version mismatches
-config :ex_tauri, version: "2.5.1", app_name: "Example Desktop", host: "localhost", port: 4000
+# DMG size defaults to 500m, override if your payload is larger.
+config :ex_tauri,
+  version: "2.5.1",
+  app_name: "Example Desktop",
+  host: "localhost",
+  port: 4000,
+  dmg_size_mb: 12000
 ```
 
 - Add burrito release
@@ -149,21 +155,18 @@ mix ex_tauri build
 
 **Root Cause**: Burrito-wrapped Phoenix apps are very large (include entire Erlang runtime), and the default DMG size is too small.
 
-**Solution**: Configure a larger DMG size in `src-tauri/tauri.conf.json`:
+**Solution**: We now set `DISK_IMAGE_SIZE` automatically to at least `500m`. Override it via config or env if you need more:
 
-```json
-{
-  "bundle": {
-    "macOS": {
-      "dmg": {
-        "size": 2500000
-      }
-    }
-  }
-}
+```elixir
+# config/config.exs
+config :ex_tauri, dmg_size_mb: "2500m"  # accepts "m"/"g" suffixes or plain MB
 ```
 
-The `size` is in KB. 2500000 KB = ~2.5 GB, which should be sufficient for most Burrito apps with full ERTS.
+or at build time:
+
+```bash
+DISK_IMAGE_SIZE=2500m mix ex_tauri build
+```
 
 **Alternative Solutions**:
 

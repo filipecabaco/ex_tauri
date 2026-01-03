@@ -567,11 +567,11 @@ defmodule ExampleDesktopWeb.CoreComponents do
       <.icon name="hero-arrow-path" class="ml-1 w-3 h-3 animate-spin" />
   """
   attr :name, :string, required: true
-  attr :class, :string, default: nil
+  attr :rest, :global, include: ~w(class)
 
   def icon(%{name: "hero-" <> _} = assigns) do
     ~H"""
-    <span class={[@name, @class]} />
+    <span class={[@name, @rest[:class]]} {@rest} />
     """
   end
 

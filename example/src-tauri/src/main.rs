@@ -46,9 +46,8 @@ fn kill_sidecar(app: &tauri::AppHandle) {
 
                         while start.elapsed() < timeout {
                             // Check if process is still running
-                            let status = Command::new("kill")
-                                .args(["-0", &pid.to_string()])
-                                .output();
+                            let status =
+                                Command::new("kill").args(["-0", &pid.to_string()]).output();
 
                             if let Ok(output) = status {
                                 if !output.status.success() {
@@ -124,7 +123,7 @@ fn main() {
                 println!("ExitRequested event received, shutting down...");
                 kill_sidecar(app_handle);
                 api.prevent_exit(); // Prevent exit until we've cleaned up
-                // Allow exit after cleanup
+                                    // Allow exit after cleanup
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(500));
                     std::process::exit(0);

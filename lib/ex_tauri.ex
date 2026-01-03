@@ -312,7 +312,6 @@ defmodule ExTauri do
     tauri = { version = "#{major_version}", features = [] }
     tauri-plugin-shell = "#{major_version}"
     tauri-plugin-log = "#{major_version}"
-    reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 
     [features]
     # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
@@ -507,18 +506,33 @@ defmodule ExTauri do
         println!("Starting heartbeat to Phoenix sidecar...");
 
         std::thread::spawn(|| {
-            let client = reqwest::blocking::Client::new();
-            let heartbeat_url = "http://#{host}:#{port}/_tauri/heartbeat";
+            use std::io::Write;
+            use std::os::unix::net::UnixStream;
+
+            let socket_path = "/tmp/tauri_heartbeat.sock";
             let interval = Duration::from_millis(100);
 
+            // Wait for socket to be ready
+            let mut stream = loop {
+                match UnixStream::connect(socket_path) {
+                    Ok(s) => break s,
+                    Err(_) => {
+                        // Socket not ready yet, wait and retry
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                }
+            };
+
+            println!("Connected to heartbeat socket");
+
             loop {
-                match client.get(heartbeat_url).send() {
+                match stream.write_all(b"h") {
                     Ok(_) => {
                         // Heartbeat sent successfully
                     }
                     Err(_) => {
-                        // Sidecar may not be ready yet, or may have shut down
-                        // Silent failure is fine here
+                        // Connection lost, sidecar likely shut down
+                        break;
                     }
                 }
 

@@ -100,33 +100,7 @@ def start(_type, _args) do
 end
 ```
 
-6. **Add heartbeat endpoint:**
-
-```elixir
-# lib/my_app_web/router.ex
-pipeline :api do
-  plug :accepts, ["json"]
-end
-
-scope "/_tauri" do
-  pipe_through :api
-  get "/heartbeat", MyAppWeb.TauriController, :heartbeat
-end
-```
-
-```elixir
-# lib/my_app_web/controllers/tauri_controller.ex
-defmodule MyAppWeb.TauriController do
-  use MyAppWeb, :controller
-
-  def heartbeat(conn, _params) do
-    ExTauri.ShutdownManager.heartbeat()
-    json(conn, %{status: "ok"})
-  end
-end
-```
-
-7. **Install Tauri:**
+6. **Install Tauri:**
 
 ```bash
 mix deps.get
@@ -151,12 +125,15 @@ Your app bundle will be at `src-tauri/target/release/bundle/macos/YourApp.app` (
 
 ### Heartbeat-Based Shutdown
 
-ExTauri uses a robust heartbeat mechanism to ensure the Phoenix sidecar shuts down gracefully when the desktop app exits:
+ExTauri uses a robust Unix domain socket heartbeat mechanism to ensure the Phoenix sidecar shuts down gracefully when the desktop app exits:
 
-1. Rust sends HTTP heartbeat to `/_tauri/heartbeat` every 100ms
-2. Elixir monitors heartbeats and checks every 100ms
-3. If no heartbeat for 300ms (3 missed beats), graceful shutdown is initiated
-4. Phoenix closes database connections, flushes logs, and exits cleanly
+1. Elixir creates a Unix domain socket at `/tmp/tauri_heartbeat.sock`
+2. Rust connects and sends a byte every 100ms
+3. Elixir monitors heartbeats and checks every 100ms
+4. If no heartbeat for 300ms (3 missed beats), graceful shutdown is initiated
+5. Phoenix closes database connections, flushes logs, and exits cleanly
+
+**Zero HTTP overhead** - Uses native Unix sockets (stdlib only, no dependencies!)
 
 This works even when:
 - The app is force-quit (CMD+Q on macOS)
@@ -170,11 +147,13 @@ This works even when:
 │  Tauri Window   │  ← Native UI (Rust)
 │  (WebView)      │
 └────────┬────────┘
-         │ HTTP
+         │ HTTP (for UI)
+         │ Unix Socket (for heartbeat)
          ↓
 ┌─────────────────┐
 │ Phoenix Server  │  ← Your Elixir App
 │  (Sidecar)      │     (Burrito-wrapped)
+│                 │     /tmp/tauri_heartbeat.sock
 └─────────────────┘
 ```
 

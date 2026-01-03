@@ -3,9 +3,9 @@ defmodule ExTauri.ShutdownManager do
   Manages graceful shutdown of the Phoenix application when running as a Tauri sidecar.
 
   This GenServer implements a heartbeat-based mechanism to detect when the Tauri
-  frontend exits. The Rust frontend sends heartbeat signals every 100ms, and if
-  the Phoenix sidecar doesn't receive a heartbeat within 300ms, it initiates
-  graceful shutdown.
+  frontend exits. The Rust frontend sends heartbeat signals every 100ms via Unix
+  domain socket, and if the Phoenix sidecar doesn't receive a heartbeat within 300ms,
+  it initiates graceful shutdown.
 
   ## Usage
 
@@ -24,10 +24,11 @@ defmodule ExTauri.ShutdownManager do
   ## How it works
 
   The heartbeat mechanism provides robust shutdown detection:
-  1. Rust frontend sends HTTP heartbeat to `/_tauri_heartbeat` every 100ms
-  2. ShutdownManager tracks the last heartbeat timestamp
-  3. Every 100ms, ShutdownManager checks if a heartbeat was received recently
-  4. If no heartbeat for 300ms (3 missed beats), initiates graceful shutdown
+  1. ShutdownManager creates a Unix domain socket at `/tmp/tauri_heartbeat.sock`
+  2. Rust frontend connects and sends a byte every 100ms
+  3. ShutdownManager tracks the last heartbeat timestamp
+  4. Every 100ms, ShutdownManager checks if a heartbeat was received recently
+  5. If no heartbeat for 300ms (3 missed beats), initiates graceful shutdown
 
   This works even if:
   - The Tauri app is force-quit (CMD+Q)
@@ -47,17 +48,10 @@ defmodule ExTauri.ShutdownManager do
 
   @heartbeat_interval 100
   @heartbeat_timeout 300
+  @socket_path "/tmp/tauri_heartbeat.sock"
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  @doc """
-  Records a heartbeat from the Tauri frontend.
-  Called by the heartbeat endpoint when Rust sends a ping.
-  """
-  def heartbeat do
-    GenServer.cast(__MODULE__, :heartbeat)
   end
 
   @impl true
@@ -65,13 +59,28 @@ defmodule ExTauri.ShutdownManager do
     # Trap exits so we can perform graceful shutdown
     Process.flag(:trap_exit, true)
 
+    # Clean up old socket file if it exists
+    File.rm(@socket_path)
+
+    # Start Unix domain socket server
+    {:ok, listen_socket} = :gen_tcp.listen(0, [
+      :binary,
+      {:ifaddr, {:local, @socket_path}},
+      {:active, false},
+      {:reuseaddr, true}
+    ])
+
+    # Spawn acceptor process
+    spawn_link(fn -> accept_loop(listen_socket) end)
+
     # Schedule the first heartbeat check
     schedule_heartbeat_check()
 
-    Logger.info("[ExTauri.ShutdownManager] Started - heartbeat monitoring active")
+    Logger.info("[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{@socket_path}")
 
     {:ok,
      %{
+       listen_socket: listen_socket,
        last_heartbeat: System.monotonic_time(:millisecond),
        shutdown_initiated: false
      }}
@@ -120,13 +129,45 @@ defmodule ExTauri.ShutdownManager do
   end
 
   @impl true
-  def terminate(reason, _state) do
+  def terminate(reason, state) do
     Logger.info("[ExTauri.ShutdownManager] Terminating: #{inspect(reason)}")
+    :gen_tcp.close(state.listen_socket)
+    File.rm(@socket_path)
     :ok
   end
 
   defp schedule_heartbeat_check do
     Process.send_after(self(), :check_heartbeat, @heartbeat_interval)
+  end
+
+  defp accept_loop(listen_socket) do
+    case :gen_tcp.accept(listen_socket) do
+      {:ok, client_socket} ->
+        # Spawn a process to handle this client
+        spawn(fn -> handle_client(client_socket) end)
+        # Continue accepting more connections
+        accept_loop(listen_socket)
+
+      {:error, reason} ->
+        Logger.error("[ExTauri.ShutdownManager] Accept error: #{inspect(reason)}")
+    end
+  end
+
+  defp handle_client(client_socket) do
+    case :gen_tcp.recv(client_socket, 0) do
+      {:ok, _data} ->
+        # Received heartbeat, notify the GenServer
+        GenServer.cast(__MODULE__, :heartbeat)
+        # Continue receiving
+        handle_client(client_socket)
+
+      {:error, :closed} ->
+        :gen_tcp.close(client_socket)
+
+      {:error, reason} ->
+        Logger.debug("[ExTauri.ShutdownManager] Client error: #{inspect(reason)}")
+        :gen_tcp.close(client_socket)
+    end
   end
 
   defp initiate_shutdown(%{shutdown_initiated: true} = state) do

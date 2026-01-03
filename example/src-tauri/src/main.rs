@@ -22,6 +22,18 @@ impl Drop for SidecarProcess {
     }
 }
 
+fn kill_sidecar(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Ok(mut guard) = state.sidecar_child.lock() {
+            if let Some(mut process) = guard.take() {
+                if let Some(child) = process.child.take() {
+                    let _ = child.kill();
+                }
+            }
+        }
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(
@@ -42,19 +54,23 @@ fn main() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Kill the sidecar when the window closes
-                if let Some(state) = window.try_state::<AppState>() {
-                    if let Ok(mut guard) = state.sidecar_child.lock() {
-                        if let Some(mut process) = guard.take() {
-                            if let Some(child) = process.child.take() {
-                                let _ = child.kill();
-                            }
-                        }
-                    }
-                }
+                kill_sidecar(&window.app_handle());
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                // Kill the sidecar when the app is exiting (e.g., CMD+Q)
+                kill_sidecar(app_handle);
+                api.prevent_exit(); // Prevent exit until we've cleaned up
+                // Allow exit after cleanup
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    std::process::exit(0);
+                });
+            }
+        });
 }
 
 fn start_server(app: &tauri::AppHandle) {

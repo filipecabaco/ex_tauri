@@ -6,6 +6,9 @@ defmodule ExampleDesktop.MixProject do
       app: :example_desktop,
       version: "0.1.0",
       elixir: "~> 1.14",
+      # Limited to OTP 27 due to Burrito pre-compiled ERTS availability
+      # OTP 28 doesn't have universal macOS binaries available yet
+      otp_release: "~> 27.0",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -47,7 +50,7 @@ defmodule ExampleDesktop.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:plug_cowboy, "~> 2.5"},
-      {:ex_tauri, git: "https://github.com/filipecabaco/ex_tauri.git"}
+      {:ex_tauri, path: "../"}
     ]
   end
 
@@ -79,7 +82,9 @@ defmodule ExampleDesktop.MixProject do
         steps: [:assemble, &Burrito.wrap/1],
         burrito: [
           targets: [
-            "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64]
+            # Use OTP-27 which has pre-compiled binaries available
+            # OTP-28 doesn't have universal macOS binaries yet
+            "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64, erts_version: "27.2"]
           ]
         ]
       ]

@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@tauri-apps/plugin-log": "^2.7.1",
+    "@tauri-apps/plugin-shell": "^2.3.3"
+  }
+}

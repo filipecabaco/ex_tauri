@@ -187,23 +187,23 @@ fn check_server_started() {
 fn start_heartbeat() {
     println!("Starting heartbeat to Phoenix sidecar...");
 
-    tauri::async_runtime::spawn(async {
-        let client = reqwest::Client::new();
+    std::thread::spawn(|| {
+        let client = reqwest::blocking::Client::new();
         let heartbeat_url = "http://localhost:4000/_tauri/heartbeat";
         let interval = Duration::from_millis(100);
 
         loop {
-            match client.get(heartbeat_url).send().await {
+            match client.get(heartbeat_url).send() {
                 Ok(_) => {
                     // Heartbeat sent successfully
                 }
-                Err(e) => {
+                Err(_) => {
                     // Sidecar may not be ready yet, or may have shut down
-                    eprintln!("Heartbeat failed: {}", e);
+                    // Silent failure is fine here
                 }
             }
 
-            tokio::time::sleep(interval).await;
+            std::thread::sleep(interval);
         }
     });
 }

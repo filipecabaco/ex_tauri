@@ -312,7 +312,7 @@ defmodule ExTauri do
     tauri = { version = "#{major_version}", features = [] }
     tauri-plugin-shell = "#{major_version}"
     tauri-plugin-log = "#{major_version}"
-    reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+    reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 
     [features]
     # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
@@ -506,23 +506,23 @@ defmodule ExTauri do
     fn start_heartbeat() {
         println!("Starting heartbeat to Phoenix sidecar...");
 
-        tauri::async_runtime::spawn(async {
-            let client = reqwest::Client::new();
+        std::thread::spawn(|| {
+            let client = reqwest::blocking::Client::new();
             let heartbeat_url = "http://#{host}:#{port}/_tauri/heartbeat";
             let interval = Duration::from_millis(100);
 
             loop {
-                match client.get(heartbeat_url).send().await {
+                match client.get(heartbeat_url).send() {
                     Ok(_) => {
                         // Heartbeat sent successfully
                     }
-                    Err(e) => {
+                    Err(_) => {
                         // Sidecar may not be ready yet, or may have shut down
-                        eprintln!("Heartbeat failed: {}", e);
+                        // Silent failure is fine here
                     }
                 }
 
-                tokio::time::sleep(interval).await;
+                std::thread::sleep(interval);
             }
         });
     }

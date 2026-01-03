@@ -67,7 +67,7 @@ defmodule ExTauri.ShutdownManager do
     socket_path = "/tmp/tauri_heartbeat_#{socket_name}.sock"
 
     # Clean up old socket file if it exists
-    File.rm(socket_path)
+    cleanup_socket(socket_path)
 
     # Start Unix domain socket server
     {:ok, listen_socket} = :gen_tcp.listen(0, [
@@ -77,8 +77,8 @@ defmodule ExTauri.ShutdownManager do
       {:reuseaddr, true}
     ])
 
-    # Spawn acceptor process
-    spawn_link(fn -> accept_loop(listen_socket) end)
+    # Spawn acceptor process with link for proper supervision
+    Task.start_link(fn -> accept_loop(listen_socket) end)
 
     # Schedule the first heartbeat check
     schedule_heartbeat_check()
@@ -119,15 +119,10 @@ defmodule ExTauri.ShutdownManager do
   end
 
   @impl true
-  def handle_info({:signal, :sigterm}, state) do
-    Logger.info("[ExTauri.ShutdownManager] Received SIGTERM - initiating graceful shutdown")
-    initiate_shutdown(state)
-  end
-
-  @impl true
-  def handle_info({:EXIT, _pid, reason}, state) do
-    Logger.info("[ExTauri.ShutdownManager] Received EXIT signal: #{inspect(reason)}")
-    initiate_shutdown(state)
+  def handle_info(:execute_shutdown, state) do
+    Logger.info("[ExTauri.ShutdownManager] Stopping application...")
+    System.stop(0)
+    {:noreply, state}
   end
 
   @impl true
@@ -140,7 +135,7 @@ defmodule ExTauri.ShutdownManager do
   def terminate(reason, state) do
     Logger.info("[ExTauri.ShutdownManager] Terminating: #{inspect(reason)}")
     :gen_tcp.close(state.listen_socket)
-    File.rm(state.socket_path)
+    cleanup_socket(state.socket_path)
     :ok
   end
 
@@ -148,13 +143,26 @@ defmodule ExTauri.ShutdownManager do
     Process.send_after(self(), :check_heartbeat, @heartbeat_interval)
   end
 
+  defp cleanup_socket(socket_path) do
+    File.rm(socket_path)
+  rescue
+    _ -> :ok
+  end
+
   defp accept_loop(listen_socket) do
-    case :gen_tcp.accept(listen_socket) do
+    case :gen_tcp.accept(listen_socket, 1000) do
       {:ok, client_socket} ->
-        # Spawn a process to handle this client
-        spawn(fn -> handle_client(client_socket) end)
+        # Spawn a linked process to handle this client
+        Task.start_link(fn -> handle_client(client_socket) end)
         # Continue accepting more connections
         accept_loop(listen_socket)
+
+      {:error, :timeout} ->
+        # Normal timeout, just continue
+        accept_loop(listen_socket)
+
+      {:error, :closed} ->
+        Logger.info("[ExTauri.ShutdownManager] Listen socket closed, stopping accept loop")
 
       {:error, reason} ->
         Logger.error("[ExTauri.ShutdownManager] Accept error: #{inspect(reason)}")
@@ -162,18 +170,26 @@ defmodule ExTauri.ShutdownManager do
   end
 
   defp handle_client(client_socket) do
+    do_handle_client(client_socket)
+  rescue
+    e ->
+      Logger.debug("[ExTauri.ShutdownManager] Client error: #{inspect(e)}")
+      :gen_tcp.close(client_socket)
+  end
+
+  defp do_handle_client(client_socket) do
     case :gen_tcp.recv(client_socket, 0) do
       {:ok, _data} ->
         # Received heartbeat, notify the GenServer
         GenServer.cast(__MODULE__, :heartbeat)
         # Continue receiving
-        handle_client(client_socket)
+        do_handle_client(client_socket)
 
       {:error, :closed} ->
         :gen_tcp.close(client_socket)
 
       {:error, reason} ->
-        Logger.debug("[ExTauri.ShutdownManager] Client error: #{inspect(reason)}")
+        Logger.debug("[ExTauri.ShutdownManager] Client recv error: #{inspect(reason)}")
         :gen_tcp.close(client_socket)
     end
   end
@@ -190,14 +206,9 @@ defmodule ExTauri.ShutdownManager do
     # For example, you could broadcast a shutdown event to LiveView clients
     # Phoenix.PubSub.broadcast(MyApp.PubSub, "system", {:shutdown, :graceful})
 
-    # Give the system a moment to clean up
-    Process.sleep(100)
-
-    # Initiate system shutdown
-    Task.start(fn ->
-      Logger.info("[ExTauri.ShutdownManager] Stopping application...")
-      System.stop(0)
-    end)
+    # Schedule shutdown to give the system a moment to clean up
+    # Without blocking the GenServer
+    Process.send_after(self(), :execute_shutdown, 100)
 
     {:noreply, %{state | shutdown_initiated: true}}
   end

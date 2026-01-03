@@ -95,6 +95,7 @@ fn main() {
         .setup(|app| {
             start_server(app.handle());
             check_server_started();
+            start_heartbeat();
             Ok(())
         })
         // Intercept menu events (especially CMD+Q on macOS)
@@ -181,4 +182,28 @@ fn check_server_started() {
         }
         std::thread::sleep(sleep_interval);
     }
+}
+
+fn start_heartbeat() {
+    println!("Starting heartbeat to Phoenix sidecar...");
+
+    tauri::async_runtime::spawn(async {
+        let client = reqwest::Client::new();
+        let heartbeat_url = "http://localhost:4000/_tauri/heartbeat";
+        let interval = Duration::from_millis(100);
+
+        loop {
+            match client.get(heartbeat_url).send().await {
+                Ok(_) => {
+                    // Heartbeat sent successfully
+                }
+                Err(e) => {
+                    // Sidecar may not be ready yet, or may have shut down
+                    eprintln!("Heartbeat failed: {}", e);
+                }
+            }
+
+            tokio::time::sleep(interval).await;
+        }
+    });
 }

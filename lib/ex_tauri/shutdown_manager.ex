@@ -2,8 +2,10 @@ defmodule ExTauri.ShutdownManager do
   @moduledoc """
   Manages graceful shutdown of the Phoenix application when running as a Tauri sidecar.
 
-  This GenServer should be added to your application's supervision tree to ensure
-  the Phoenix app shuts down gracefully when the Tauri app exits (e.g., via CMD+Q).
+  This GenServer implements a heartbeat-based mechanism to detect when the Tauri
+  frontend exits. The Rust frontend sends heartbeat signals every 100ms, and if
+  the Phoenix sidecar doesn't receive a heartbeat within 300ms, it initiates
+  graceful shutdown.
 
   ## Usage
 
@@ -21,24 +23,41 @@ defmodule ExTauri.ShutdownManager do
 
   ## How it works
 
-  When running as a Tauri sidecar, the Rust frontend will send SIGTERM to this
-  process when the app is exiting. This GenServer traps exits and performs
-  graceful shutdown, allowing the application to:
-  - Close database connections
-  - Flush logs
-  - Complete in-flight requests
-  - Perform any other cleanup needed
+  The heartbeat mechanism provides robust shutdown detection:
+  1. Rust frontend sends HTTP heartbeat to `/_tauri_heartbeat` every 100ms
+  2. ShutdownManager tracks the last heartbeat timestamp
+  3. Every 100ms, ShutdownManager checks if a heartbeat was received recently
+  4. If no heartbeat for 300ms (3 missed beats), initiates graceful shutdown
 
-  After cleanup, it initiates a graceful shutdown of the entire application.
+  This works even if:
+  - The Tauri app is force-quit (CMD+Q)
+  - The Tauri app crashes
+  - The process is killed unexpectedly
+
+  After detecting heartbeat failure, the Phoenix app:
+  - Closes database connections
+  - Flushes logs
+  - Completes in-flight requests
+  - Performs any other cleanup needed
+  - Exits gracefully
   """
 
   use GenServer
   require Logger
 
-  @shutdown_timeout 5_000
+  @heartbeat_interval 100
+  @heartbeat_timeout 300
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @doc """
+  Records a heartbeat from the Tauri frontend.
+  Called by the heartbeat endpoint when Rust sends a ping.
+  """
+  def heartbeat do
+    GenServer.cast(__MODULE__, :heartbeat)
   end
 
   @impl true
@@ -46,13 +65,40 @@ defmodule ExTauri.ShutdownManager do
     # Trap exits so we can perform graceful shutdown
     Process.flag(:trap_exit, true)
 
-    # Register this process to handle SIGTERM
-    # This allows the Rust side to send SIGTERM for graceful shutdown
-    :os.set_signal(:sigterm, :handle)
+    # Schedule the first heartbeat check
+    schedule_heartbeat_check()
 
-    Logger.info("[ExTauri.ShutdownManager] Started - ready for graceful shutdown")
+    Logger.info("[ExTauri.ShutdownManager] Started - heartbeat monitoring active")
 
-    {:ok, %{shutdown_initiated: false}}
+    {:ok,
+     %{
+       last_heartbeat: System.monotonic_time(:millisecond),
+       shutdown_initiated: false
+     }}
+  end
+
+  @impl true
+  def handle_cast(:heartbeat, state) do
+    # Update the last heartbeat timestamp
+    {:noreply, %{state | last_heartbeat: System.monotonic_time(:millisecond)}}
+  end
+
+  @impl true
+  def handle_info(:check_heartbeat, state) do
+    current_time = System.monotonic_time(:millisecond)
+    time_since_last_heartbeat = current_time - state.last_heartbeat
+
+    if time_since_last_heartbeat > @heartbeat_timeout do
+      Logger.warning(
+        "[ExTauri.ShutdownManager] Heartbeat timeout (#{time_since_last_heartbeat}ms) - Tauri frontend appears to have exited"
+      )
+
+      initiate_shutdown(state)
+    else
+      # Still receiving heartbeats, schedule next check
+      schedule_heartbeat_check()
+      {:noreply, state}
+    end
   end
 
   @impl true
@@ -77,6 +123,10 @@ defmodule ExTauri.ShutdownManager do
   def terminate(reason, _state) do
     Logger.info("[ExTauri.ShutdownManager] Terminating: #{inspect(reason)}")
     :ok
+  end
+
+  defp schedule_heartbeat_check do
+    Process.send_after(self(), :check_heartbeat, @heartbeat_interval)
   end
 
   defp initiate_shutdown(%{shutdown_initiated: true} = state) do

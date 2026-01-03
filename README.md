@@ -172,7 +172,7 @@ config :ex_tauri,
   width: 800,                 # Window width
   height: 600,                # Window height
   resize: true,               # Allow window resize
-  dmg_size_mb: "500m"        # DMG size for macOS (if needed)
+  dmg_size_mb: "500"          # DMG size in MB for macOS (default: "500")
 ```
 
 ## Common Issues
@@ -208,7 +208,7 @@ Remove or comment out `cache_static_manifest` in `config/prod.exs`:
 If building a DMG on macOS fails due to size, increase the disk image size:
 
 ```elixir
-config :ex_tauri, dmg_size_mb: "2000m"
+config :ex_tauri, dmg_size_mb: "2000"  # Size in MB (without "m" suffix)
 ```
 
 ## Examples

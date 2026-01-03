@@ -269,13 +269,14 @@ defmodule ExTauri do
   end
 
   # Always set a DMG size for create-dmg to avoid under-sized images.
-  # Defaults to 500m, but can be overridden via config :dmg_size_mb or env DISK_IMAGE_SIZE.
+  # Defaults to 500 (MB), but can be overridden via config :dmg_size_mb or env DISK_IMAGE_SIZE.
+  # Note: The value should be a number only (e.g., "500" not "500m") as the create-dmg script adds the "m" suffix.
   defp maybe_set_dmg_size_env do
     # Respect an explicit env override if set
     if System.get_env("DISK_IMAGE_SIZE") do
       :ok
     else
-      size_mb = Application.get_env(:ex_tauri, :dmg_size_mb, "500m")
+      size_mb = Application.get_env(:ex_tauri, :dmg_size_mb, "500")
 
       System.put_env("DISK_IMAGE_SIZE", size_mb)
     end

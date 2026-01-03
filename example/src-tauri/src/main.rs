@@ -1,11 +1,25 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use tauri::Manager;
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
+
 use std::sync::Mutex;
 
 struct AppState {
-    sidecar_child: Mutex<Option<tauri_plugin_shell::process::CommandChild>>,
+    sidecar_child: Mutex<Option<SidecarProcess>>,
+}
+
+struct SidecarProcess {
+    child: Option<tauri_plugin_shell::process::CommandChild>,
+}
+
+impl Drop for SidecarProcess {
+    fn drop(&mut self) {
+        if let Some(child) = self.child.take() {
+            let _ = child.kill();
+        }
+    }
 }
 
 fn main() {
@@ -29,9 +43,11 @@ fn main() {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Kill the sidecar when the window closes
                 if let Some(state) = window.try_state::<AppState>() {
-                    if let Ok(mut child) = state.sidecar_child.lock() {
-                        if let Some(mut process) = child.take() {
-                            let _ = process.kill();
+                    if let Ok(mut guard) = state.sidecar_child.lock() {
+                        if let Some(mut process) = guard.take() {
+                            if let Some(child) = process.child.take() {
+                                let _ = child.kill();
+                            }
                         }
                     }
                 }
@@ -54,7 +70,7 @@ fn start_server(app: &tauri::AppHandle) {
     // Store the child process handle so we can kill it on exit
     if let Some(state) = app.try_state::<AppState>() {
         if let Ok(mut guard) = state.sidecar_child.lock() {
-            *guard = Some(child);
+            *guard = Some(SidecarProcess { child: Some(child) });
         }
     }
 

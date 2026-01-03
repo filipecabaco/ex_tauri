@@ -10,7 +10,8 @@ defmodule ExampleDesktop.Application do
     children = [
       Repo,
       {Phoenix.PubSub, name: ExampleDesktop.PubSub},
-      ExampleDesktopWeb.Endpoint
+      ExampleDesktopWeb.Endpoint,
+      ExTauri.ShutdownManager
     ]
 
     opts = [strategy: :one_for_one, name: ExampleDesktop.Supervisor]

@@ -1,50 +1,33 @@
 # ExTauri
 
-> Warning: Still a Proof of Concept with a lot of bad code!
-> Wrapper around Tauri to enable the development of Phoenix Desktop applications
+**Build native desktop applications with Phoenix and Elixir.**
+
+ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications to run as native desktop apps on macOS, Windows, and Linux.
 
 ![example.gif](example.gif)
 
-## Acknowledgements
+## Features
 
-- [Tauri App](tauri.app) for building it and providing a ton of support to find the right way to build the PoC
-- [Digit / Doawoo](https://twitter.com/doawoo) for [Burrito](https://github.com/burrito-elixir/burrito) which enables us to build the binary to be used as a sidecar
-- [Kevin Pan / Feng19](https://twitter.com/kevin52069370) for their example that heavily inspired the approach taken with their [phx_new_desktop](https://github.com/feng19/phx_new_desktop) repository
-- [yos](https://twitter.com/r8code) for a [great discussion](https://twitter.com/r8code/status/1692573451767394313?s=20) and bringing Feng19 example into the mix (no pun intended)
-- [Phoenix Framework Tailwind](https://github.com/phoenixframework/tailwind) which was a big inspiration on the approach to be taken when it came to install an outside package and use it within an Elixir project
+- 🚀 **Phoenix LiveView as Desktop Apps** - Turn your Phoenix app into a native desktop application
+- 📦 **Single Binary Distribution** - Uses [Burrito](https://github.com/burrito-elixir/burrito) to bundle everything into one executable
+- 🔄 **Hot Reload in Dev Mode** - Full Phoenix development experience with live reload
+- 🎯 **Graceful Shutdown** - Heartbeat-based mechanism ensures clean shutdown on CMD+Q, crashes, or force-quit
+- 🌍 **Cross-Platform** - Build for macOS, Windows, and Linux
 
-## How it works
+## Quick Start
 
-### Tauri.install
+### Prerequisites
 
-- Using Rusts cargo install, installs [Tauri](tauri.app) in your local dependencies
-- Runs `tauri init` with the given configuration to create your `src-tauri` folder in your project root
-- Overrides `Cargo.toml` since original [Tauri](tauri.app) depends on installation folders which made it trickier
-- Moves `build.rs` into `src-tauri/src` due to an error during development
-- Setups the required sidecars in `src-tauri/tauri.conf.json`
+- [Rust](https://www.rust-lang.org/tools/install)
+- [Zig 0.10.0](https://ziglang.org/download/)
+- Elixir 1.14+
 
-### Tauri.run
+### Installation
 
-- Turns off `TAURI_SKIP_DEVSERVER_CHECK` which was blocking the [Tauri](tauri.app) code from running `main.rs`
-- Checks if the project has a [Burrito](https://github.com/burrito-elixir/burrito) release configured
-- Wraps the Phoenix application using [Burrito](https://github.com/burrito-elixir/burrito)
-- Renames the output from [Burrito](https://github.com/burrito-elixir/burrito) to be compatible with Tauri's way of calling a sidecar
-- Runs `tauri` and passes the arguments into [Tauri](tauri.app)
-
-## Installation
-
-### Requirements
-
-- Zig (0.10.0)
-- Rust
-
-### Getting your application ready
-
-For reference please check the [example](/example) folder in this repository
-
-- Add dependency
+1. **Add ExTauri to your Phoenix project:**
 
 ```elixir
+# mix.exs
 def deps do
   [
     {:ex_tauri, git: "https://github.com/filipecabaco/ex_tauri.git"}
@@ -52,190 +35,216 @@ def deps do
 end
 ```
 
-- Add configuration
+2. **Configure ExTauri:**
 
 ```elixir
-# The version can be any 2.x version - the library automatically extracts
-# the major version for CLI and plugin installations to avoid version mismatches
-# DMG size defaults to 500m, override if your payload is larger.
+# config/config.exs
 config :ex_tauri,
   version: "2.5.1",
-  app_name: "Example Desktop",
+  app_name: "My Desktop App",
   host: "localhost",
-  port: 4000,
-  dmg_size_mb: 12000
+  port: 4000
 ```
 
-- Add burrito release
+3. **Add Burrito release:**
 
 ```elixir
-  def project do
-    [
-      app: :example_desktop,
-      version: "0.1.0",
-      elixir: "~> 1.14",
-      elixirc_paths: elixirc_paths(Mix.env()),
-      start_permanent: Mix.env() == :prod,
-      aliases: aliases(),
-      deps: deps(),
-      releases: releases()
-    ]
-  end
-  # ...
-  defp releases do
-    [
-      desktop: [
-        steps: [:assemble, &Burrito.wrap/1],
-        burrito: [
-          targets: [
-            # At the moment we still need this really specific names
-            "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64]
-           ]
+# mix.exs
+def project do
+  [
+    # ... existing config
+    releases: releases()
+  ]
+end
+
+defp releases do
+  [
+    desktop: [
+      steps: [:assemble, &Burrito.wrap/1],
+      burrito: [
+        targets: [
+          "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64]
         ]
       ]
     ]
-  end
+  ]
+end
 ```
 
-- Add `:inets` and other `extra_applications` you might need since burrito needs to be aware of them
+4. **Add required applications:**
 
 ```elixir
-  def application do
-    [
-      mod: {ExampleDesktop.Application, []},
-      extra_applications: [:logger, :runtime_tools, :inets]
-    ]
-  end
+# mix.exs
+def application do
+  [
+    mod: {MyApp.Application, []},
+    extra_applications: [:logger, :runtime_tools, :inets]
+  ]
+end
 ```
 
-- Extra: Have a way to start up your repos during startup:
+5. **Add ExTauri.ShutdownManager to your supervision tree:**
 
 ```elixir
-defmodule ExampleDesktop.Starter do
-  alias ExampleDesktop.Repo
+# lib/my_app/application.ex
+def start(_type, _args) do
+  children = [
+    ExTauri.ShutdownManager,  # Add this at the top
+    MyApp.Repo,
+    {Phoenix.PubSub, name: MyApp.PubSub},
+    MyAppWeb.Endpoint
+  ]
 
-  def run() do
-    Application.ensure_all_started(:ecto_sql)
+  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+  Supervisor.start_link(children, opts)
+end
+```
 
-    Repo.__adapter__().storage_up(Repo.config())
-    Ecto.Migrator.run(Repo, :up, all: true)
+6. **Add heartbeat endpoint:**
+
+```elixir
+# lib/my_app_web/router.ex
+pipeline :api do
+  plug :accepts, ["json"]
+end
+
+scope "/_tauri" do
+  pipe_through :api
+  get "/heartbeat", MyAppWeb.TauriController, :heartbeat
+end
+```
+
+```elixir
+# lib/my_app_web/controllers/tauri_controller.ex
+defmodule MyAppWeb.TauriController do
+  use MyAppWeb, :controller
+
+  def heartbeat(conn, _params) do
+    ExTauri.ShutdownManager.heartbeat()
+    json(conn, %{status: "ok"})
   end
 end
 ```
 
-- Check your runtime.exs, there's a lot of environment variables that you might need to build your server
+7. **Install Tauri:**
 
-- Setup tauri by running `mix ex_tauri.install`
-
-## Running
-
-### Development Mode (Recommended)
-Run your app in development mode with hot reloading:
 ```bash
-cd your_project
+mix deps.get
+mix ex_tauri.install
+```
+
+### Usage
+
+**Development** (with hot reload):
+```bash
 mix ex_tauri dev
 ```
 
-### Building for Distribution
-Build a distributable package (creates both `.app` and `.dmg` on macOS):
+**Build for distribution**:
 ```bash
-cd your_project
 mix ex_tauri build
 ```
 
-**Note**: DMG creation requires Xcode Command Line Tools. If you encounter DMG build errors, see the troubleshooting section below.
+Your app bundle will be at `src-tauri/target/release/bundle/macos/YourApp.app` (macOS) or equivalent for your platform.
 
-## Troubleshooting
+## How It Works
 
-### Build Error: "failed to bundle project error running bundle_dmg.sh"
+### Heartbeat-Based Shutdown
 
-**Problem**: When running `mix ex_tauri build`, you get errors like:
-- "No space left on device" (even though you have disk space)
-- DMG creation fails
+ExTauri uses a robust heartbeat mechanism to ensure the Phoenix sidecar shuts down gracefully when the desktop app exits:
 
-**Root Cause**: Burrito-wrapped Phoenix apps are very large (include entire Erlang runtime), and the default DMG size is too small.
+1. Rust sends HTTP heartbeat to `/_tauri/heartbeat` every 100ms
+2. Elixir monitors heartbeats and checks every 100ms
+3. If no heartbeat for 300ms (3 missed beats), graceful shutdown is initiated
+4. Phoenix closes database connections, flushes logs, and exits cleanly
 
-**Solution**: We now set `DISK_IMAGE_SIZE` automatically to at least `500m`. Override it via config or env if you need more:
+This works even when:
+- The app is force-quit (CMD+Q on macOS)
+- The app crashes unexpectedly
+- The process is killed without cleanup
 
-```elixir
-# config/config.exs
-config :ex_tauri, dmg_size_mb: "2500m"  # accepts "m"/"g" suffixes or plain MB
+### Architecture
+
+```
+┌─────────────────┐
+│  Tauri Window   │  ← Native UI (Rust)
+│  (WebView)      │
+└────────┬────────┘
+         │ HTTP
+         ↓
+┌─────────────────┐
+│ Phoenix Server  │  ← Your Elixir App
+│  (Sidecar)      │     (Burrito-wrapped)
+└─────────────────┘
 ```
 
-or at build time:
-
-```bash
-DISK_IMAGE_SIZE=2500m mix ex_tauri build
-```
-
-**Alternative Solutions**:
-
-1. **Build without DMG** (only create .app bundle):
-   ```json
-   {
-     "bundle": {
-       "targets": ["app"]
-     }
-   }
-   ```
-
-2. **Check actual app size** to set appropriate DMG size:
-   ```bash
-   du -sh src-tauri/target/release/bundle/macos/*.app
-   # Set dmg.size to at least 1.5x the app size (in KB)
-   ```
-
-The `.app` bundle is created successfully at `src-tauri/target/release/bundle/macos/YourApp.app` even if DMG creation fails.
-
-**Reference**: See [Tauri v2 DMG Documentation](https://v2.tauri.app/distribute/dmg/) for more configuration options.
-
-### Build Error: "Could not write configuration file because it has invalid terms"
-
-**Problem**: This error occurs when Burrito tries to serialize development configuration that contains regexes (like Phoenix's `live_reload` patterns). Regexes cannot be serialized in Elixir releases.
-
-**Solution**: The library now automatically builds releases with `MIX_ENV=prod`, which excludes development configuration. No action needed on your part.
-
-**How it works**: When you run `mix ex_tauri build`, the library:
-1. Sets `MIX_ENV=prod` before creating the release
-2. This ensures `config/dev.exs` is not included in the release
-3. Only `config/prod.exs` and `config/runtime.exs` are used
-4. After the release is created, the original MIX_ENV is restored
-
-### Installation Error: "could not find tauri-cli in registry"
-
-This has been fixed in version 2.x. The library now automatically uses semver ranges for all Tauri dependencies. Make sure you're using the latest version.
-
-### Runtime Error: "You must provide a :database to the database"
-
-**Problem**: When running `mix ex_tauri dev`, you get Exqlite connection errors about missing database configuration.
-
-**Solution**: Add database configuration to your `config/runtime.exs`:
+## Configuration Options
 
 ```elixir
-# Configure the database at runtime
+config :ex_tauri,
+  version: "2.5.1",           # Tauri version
+  app_name: "My App",         # Application name
+  host: "localhost",          # Phoenix host
+  port: 4000,                 # Phoenix port
+  window_title: "My Window",  # Window title (defaults to app_name)
+  fullscreen: false,          # Start in fullscreen
+  width: 800,                 # Window width
+  height: 600,                # Window height
+  resize: true,               # Allow window resize
+  dmg_size_mb: "500m"        # DMG size for macOS (if needed)
+```
+
+## Common Issues
+
+### Database Configuration
+
+For desktop apps, configure your database in `config/runtime.exs`:
+
+```elixir
 database_path =
   System.get_env("DATABASE_PATH") ||
-    Path.join([System.user_home!(), ".your_app", "your_app.db"])
+    Path.join([System.user_home!(), ".my_app", "my_app.db"])
 
-database_path |> Path.dirname() |> File.mkdir_p!()
+File.mkdir_p!(Path.dirname(database_path))
 
-config :your_app, YourApp.Repo,
+config :my_app, MyApp.Repo,
   database: database_path,
-  pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
+  pool_size: 5
 ```
 
-**Why**: Burrito-wrapped apps use production environment even in dev mode, so dev.exs database configs aren't loaded. Runtime configuration ensures the database path works in any environment.
+### Static Assets
 
-### Runtime Error: "could not warm up static assets"
-
-**Problem**: Error about missing `cache_manifest.json` when running the app.
-
-**Solution**: Comment out or remove the `cache_static_manifest` configuration in your `config/prod.exs`:
+Remove or comment out `cache_static_manifest` in `config/prod.exs`:
 
 ```elixir
-# Comment this out:
-# config :your_app, YourAppWeb.Endpoint,
+# Not needed for desktop apps:
+# config :my_app, MyAppWeb.Endpoint,
 #   cache_static_manifest: "priv/static/cache_manifest.json"
 ```
 
-**Why**: The cache manifest is only needed for production deployments where assets are pre-compiled. In development and desktop apps, it's not required.
+### Large DMG Size
+
+If building a DMG on macOS fails due to size, increase the disk image size:
+
+```elixir
+config :ex_tauri, dmg_size_mb: "2000m"
+```
+
+## Examples
+
+Check the [example](/example) directory for a complete working Phoenix desktop application with:
+- SQLite database (Ecto + Exqlite)
+- Phoenix LiveView
+- Tailwind CSS
+- Notes CRUD interface
+
+## Acknowledgements
+
+- [Tauri App](https://tauri.app) - For the amazing framework and support
+- [Burrito](https://github.com/burrito-elixir/burrito) by Digit/Doawoo - For enabling single-binary Elixir apps
+- [phx_new_desktop](https://github.com/feng19/phx_new_desktop) by Kevin Pan/Feng19 - For inspiration
+- [Phoenix Tailwind](https://github.com/phoenixframework/tailwind) - For the package installation approach
+
+## License
+
+MIT

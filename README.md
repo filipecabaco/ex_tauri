@@ -89,10 +89,10 @@ end
 # lib/my_app/application.ex
 def start(_type, _args) do
   children = [
-    ExTauri.ShutdownManager,  # Add this at the top
     MyApp.Repo,
     {Phoenix.PubSub, name: MyApp.PubSub},
-    MyAppWeb.Endpoint
+    MyAppWeb.Endpoint,
+    ExTauri.ShutdownManager  # Add this at the bottom of the children list
   ]
 
   opts = [strategy: :one_for_one, name: MyApp.Supervisor]

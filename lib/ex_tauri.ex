@@ -98,7 +98,8 @@ defmodule ExTauri do
 
     # Override main.rs to set proper startup sequence
     path = Path.join([File.cwd!(), "src-tauri", "src", "main.rs"])
-    File.write!(path, main_src(host, port))
+    socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
+    File.write!(path, main_src(host, port, socket_name))
 
     # TODO remove this when possible, for some reason it's failing at the moment
     File.cp!(
@@ -321,7 +322,8 @@ defmodule ExTauri do
     """
   end
 
-  defp main_src(host, port) do
+  defp main_src(host, port, socket_name) do
+
     """
     // Prevents additional console window on Windows in release, DO NOT REMOVE!!
     #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -509,7 +511,7 @@ defmodule ExTauri do
             use std::io::Write;
             use std::os::unix::net::UnixStream;
 
-            let socket_path = "/tmp/tauri_heartbeat_#{app_name |> String.replace(" ", "_") |> String.downcase()}.sock";
+            let socket_path = "/tmp/tauri_heartbeat_#{socket_name}.sock";
             let interval = Duration::from_millis(100);
 
             // Wait for socket to be ready
@@ -585,7 +587,7 @@ defmodule ExTauri do
     def __test_cargo_toml__(app_name, tauri_version), do: cargo_toml(app_name, tauri_version)
 
     @doc false
-    def __test_main_src__(host, port), do: main_src(host, port)
+    def __test_main_src__(host, port, socket_name \\ "app"), do: main_src(host, port, socket_name)
 
     @doc false
     def __test_capabilities_json__(), do: capabilities_json()

@@ -8,6 +8,8 @@ defmodule ExampleDesktop.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      # ExTauri.ShutdownManager handles graceful shutdown when running as Tauri sidecar
+      ExTauri.ShutdownManager,
       Repo,
       {Phoenix.PubSub, name: ExampleDesktop.PubSub},
       ExampleDesktopWeb.Endpoint

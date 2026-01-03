@@ -330,6 +330,7 @@ defmodule ExTauri do
     use tauri::Manager;
 
     use std::sync::Mutex;
+    use std::time::Duration;
 
     struct AppState {
         sidecar_child: Mutex<Option<SidecarProcess>>,
@@ -337,6 +338,7 @@ defmodule ExTauri do
 
     struct SidecarProcess {
         child: Option<tauri_plugin_shell::process::CommandChild>,
+        pid: Option<u32>,
     }
 
     impl Drop for SidecarProcess {
@@ -351,7 +353,51 @@ defmodule ExTauri do
         if let Some(state) = app.try_state::<AppState>() {
             if let Ok(mut guard) = state.sidecar_child.lock() {
                 if let Some(mut process) = guard.take() {
+                    // Try graceful shutdown first with SIGTERM
+                    if let Some(pid) = process.pid {
+                        println!("Attempting graceful shutdown of sidecar (PID: {})...", pid);
+
+                        // Send SIGTERM for graceful shutdown
+                        #[cfg(unix)]
+                        {
+                            use std::process::Command;
+                            let _ = Command::new("kill")
+                                .args(["-TERM", &pid.to_string()])
+                                .output();
+
+                            // Wait up to 2 seconds for graceful shutdown
+                            let timeout = Duration::from_millis(2000);
+                            let start = std::time::Instant::now();
+
+                            while start.elapsed() < timeout {
+                                // Check if process is still running
+                                let status = Command::new("kill")
+                                    .args(["-0", &pid.to_string()])
+                                    .output();
+
+                                if let Ok(output) = status {
+                                    if !output.status.success() {
+                                        println!("Sidecar shut down gracefully");
+                                        return;
+                                    }
+                                }
+
+                                std::thread::sleep(Duration::from_millis(100));
+                            }
+
+                            println!("Graceful shutdown timeout, forcing kill...");
+                        }
+
+                        #[cfg(windows)]
+                        {
+                            // On Windows, wait a bit for graceful shutdown
+                            std::thread::sleep(Duration::from_millis(2000));
+                        }
+                    }
+
+                    // Fallback to SIGKILL if graceful shutdown didn't work
                     if let Some(child) = process.child.take() {
+                        println!("Sending SIGKILL to sidecar...");
                         let _ = child.kill();
                     }
                 }
@@ -401,10 +447,17 @@ defmodule ExTauri do
             .spawn()
             .expect("Failed to spawn desktop sidecar");
 
+        // Get the PID for graceful shutdown
+        let pid = child.pid();
+        println!("Sidecar process started with PID: {}", pid);
+
         // Store the child process handle so we can kill it on exit
         if let Some(state) = app.try_state::<AppState>() {
             if let Ok(mut guard) = state.sidecar_child.lock() {
-                *guard = Some(SidecarProcess { child: Some(child) });
+                *guard = Some(SidecarProcess {
+                    child: Some(child),
+                    pid: Some(pid),
+                });
             }
         }
 

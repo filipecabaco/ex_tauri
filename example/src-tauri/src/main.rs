@@ -97,6 +97,18 @@ fn main() {
             check_server_started();
             Ok(())
         })
+        // Intercept menu events (especially CMD+Q on macOS)
+        .on_menu_event(|app, event| {
+            println!("Menu event received: {:?}", event.id());
+            // On macOS, the default menu includes a "quit" item
+            // Intercept it to perform graceful shutdown
+            if event.id().as_ref() == "quit" || event.id().as_ref().contains("quit") {
+                println!("Quit menu item clicked (CMD+Q), shutting down gracefully...");
+                kill_sidecar(app);
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                std::process::exit(0);
+            }
+        })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Kill the sidecar when the window closes
@@ -107,12 +119,13 @@ fn main() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                // Kill the sidecar when the app is exiting (e.g., CMD+Q)
+                // Kill the sidecar when the app is exiting (fallback for non-menu exits)
+                println!("ExitRequested event received, shutting down...");
                 kill_sidecar(app_handle);
                 api.prevent_exit(); // Prevent exit until we've cleaned up
                 // Allow exit after cleanup
                 std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    std::thread::sleep(std::time::Duration::from_millis(500));
                     std::process::exit(0);
                 });
             }

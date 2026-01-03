@@ -14,10 +14,11 @@ The fix implements a two-tier graceful shutdown approach:
 
 **Rust Side (Tauri Frontend):**
 1. Captures sidecar process PID on startup for signal handling
-2. On app quit (CMD+Q, window close, etc.), sends SIGTERM for graceful shutdown
-3. Waits up to 2 seconds for the Phoenix process to exit gracefully
-4. Falls back to SIGKILL if graceful shutdown times out
-5. Handles both window close events and app-level exit events
+2. Intercepts macOS menu events (CMD+Q) via `on_menu_event` handler
+3. On app quit (CMD+Q, window close, etc.), sends SIGTERM for graceful shutdown
+4. Waits up to 2 seconds for the Phoenix process to exit gracefully
+5. Falls back to SIGKILL if graceful shutdown times out
+6. Handles menu events, window close events, and app-level exit events
 
 **Elixir Side (Phoenix Sidecar):**
 1. `ExTauri.ShutdownManager` GenServer traps exits and handles SIGTERM

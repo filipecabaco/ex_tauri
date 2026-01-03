@@ -190,7 +190,7 @@ fn start_heartbeat() {
         use std::io::Write;
         use std::os::unix::net::UnixStream;
 
-        let socket_path = "/tmp/tauri_heartbeat.sock";
+        let socket_path = "/tmp/tauri_heartbeat_example_desktop.sock";
         let interval = Duration::from_millis(100);
 
         // Wait for socket to be ready

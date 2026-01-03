@@ -24,11 +24,14 @@ defmodule ExTauri.ShutdownManager do
   ## How it works
 
   The heartbeat mechanism provides robust shutdown detection:
-  1. ShutdownManager creates a Unix domain socket at `/tmp/tauri_heartbeat.sock`
+  1. ShutdownManager creates a Unix domain socket at `/tmp/tauri_heartbeat_<app_name>.sock`
   2. Rust frontend connects and sends a byte every 100ms
   3. ShutdownManager tracks the last heartbeat timestamp
   4. Every 100ms, ShutdownManager checks if a heartbeat was received recently
   5. If no heartbeat for 300ms (3 missed beats), initiates graceful shutdown
+
+  The socket path is unique per application (based on :app_name config) to prevent
+  collisions when multiple ExTauri applications run simultaneously.
 
   This works even if:
   - The Tauri app is force-quit (CMD+Q)
@@ -48,7 +51,6 @@ defmodule ExTauri.ShutdownManager do
 
   @heartbeat_interval 100
   @heartbeat_timeout 300
-  @socket_path "/tmp/tauri_heartbeat.sock"
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -59,13 +61,18 @@ defmodule ExTauri.ShutdownManager do
     # Trap exits so we can perform graceful shutdown
     Process.flag(:trap_exit, true)
 
+    # Create socket path using app name to prevent collisions
+    app_name = Application.get_env(:ex_tauri, :app_name, "ex_tauri_app")
+    socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
+    socket_path = "/tmp/tauri_heartbeat_#{socket_name}.sock"
+
     # Clean up old socket file if it exists
-    File.rm(@socket_path)
+    File.rm(socket_path)
 
     # Start Unix domain socket server
     {:ok, listen_socket} = :gen_tcp.listen(0, [
       :binary,
-      {:ifaddr, {:local, @socket_path}},
+      {:ifaddr, {:local, socket_path}},
       {:active, false},
       {:reuseaddr, true}
     ])
@@ -76,11 +83,12 @@ defmodule ExTauri.ShutdownManager do
     # Schedule the first heartbeat check
     schedule_heartbeat_check()
 
-    Logger.info("[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{@socket_path}")
+    Logger.info("[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{socket_path}")
 
     {:ok,
      %{
        listen_socket: listen_socket,
+       socket_path: socket_path,
        last_heartbeat: System.monotonic_time(:millisecond),
        shutdown_initiated: false
      }}
@@ -132,7 +140,7 @@ defmodule ExTauri.ShutdownManager do
   def terminate(reason, state) do
     Logger.info("[ExTauri.ShutdownManager] Terminating: #{inspect(reason)}")
     :gen_tcp.close(state.listen_socket)
-    File.rm(@socket_path)
+    File.rm(state.socket_path)
     :ok
   end
 

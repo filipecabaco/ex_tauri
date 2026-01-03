@@ -127,13 +127,15 @@ Your app bundle will be at `src-tauri/target/release/bundle/macos/YourApp.app` (
 
 ExTauri uses a robust Unix domain socket heartbeat mechanism to ensure the Phoenix sidecar shuts down gracefully when the desktop app exits:
 
-1. Elixir creates a Unix domain socket at `/tmp/tauri_heartbeat.sock`
+1. Elixir creates a Unix domain socket at `/tmp/tauri_heartbeat_<app_name>.sock`
 2. Rust connects and sends a byte every 100ms
 3. Elixir monitors heartbeats and checks every 100ms
 4. If no heartbeat for 300ms (3 missed beats), graceful shutdown is initiated
 5. Phoenix closes database connections, flushes logs, and exits cleanly
 
 **Zero HTTP overhead** - Uses native Unix sockets (stdlib only, no dependencies!)
+
+The socket path is unique per application (based on `:app_name` config) to prevent collisions when running multiple ExTauri apps simultaneously.
 
 This works even when:
 - The app is force-quit (CMD+Q on macOS)
@@ -153,7 +155,7 @@ This works even when:
 ┌─────────────────┐
 │ Phoenix Server  │  ← Your Elixir App
 │  (Sidecar)      │     (Burrito-wrapped)
-│                 │     /tmp/tauri_heartbeat.sock
+│                 │     /tmp/tauri_heartbeat_<app>.sock
 └─────────────────┘
 ```
 

@@ -211,36 +211,21 @@ When building DMGs on macOS, you may encounter an AppleScript permission error:
 execution error: Not authorised to send Apple events to Finder. (-1743)
 ```
 
-**This error prevents the DMG from being created** - the creation script tries to use AppleScript to make the DMG look pretty (backgrounds, icon positions), but lacks Finder automation permissions and exits before compressing the final DMG.
+**This error prevents the DMG from being created** - the creation script uses AppleScript to configure the DMG appearance (backgrounds, icon positions), but requires Finder automation permissions.
 
-**Solutions:**
+**Solution: Grant Automation Permissions**
 
-1. **Recommended (Automatic):** ExTauri automatically sets `CI=true`, which tells Tauri's bundler to pass `--skip-jenkins` to skip the AppleScript step. The DMG will be created successfully without custom layouts.
+1. Open **System Settings** → **Privacy & Security** → **Automation**
+2. Find your development environment (Terminal, iTerm2, VS Code, etc.)
+3. Enable **Finder** access
 
-   **Build through ExTauri:**
-   ```bash
-   cd example
-   mix ex_tauri build
-   ```
+After granting permissions, build normally:
+```bash
+cd example
+mix ex_tauri build
+```
 
-2. **If you still see the error:**
-
-   a. **Grant automation permissions** (best for local development):
-      - System Settings → Privacy & Security → Automation
-      - Enable Finder access for your Terminal app
-
-   b. **Manual CI flag** (for testing):
-      ```bash
-      export CI=true
-      cd example
-      mix ex_tauri build
-      ```
-
-**Important:** Don't run `bundle_dmg.sh` directly - it bypasses Tauri's flag processing. Always use `mix ex_tauri build`.
-
-**References:**
-- [Tauri Issue #2567](https://github.com/tauri-apps/tauri/issues/2567) - Documents CI=true requirement
-- [Tauri Issue #1731](https://github.com/tauri-apps/tauri/issues/1731) - DMG creation on CI/CD
+**Note:** For CI/CD environments where you can't grant permissions, ExTauri automatically sets `CI=true` which tells Tauri to skip the AppleScript step (DMG will build without custom layouts).
 
 ### DMG Size Issues
 

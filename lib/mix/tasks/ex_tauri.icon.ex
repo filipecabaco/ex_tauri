@@ -76,7 +76,7 @@ defmodule Mix.Tasks.ExTauri.Icon do
     )
 
     tauri_args = build_tauri_args(opts, positional_args)
-    ExTauri.run(["icon" | tauri_args])
+    ExTauri.run_simple(["icon" | tauri_args])
   end
 
   defp build_tauri_args(opts, positional_args) do

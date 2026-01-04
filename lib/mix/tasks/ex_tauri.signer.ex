@@ -92,6 +92,6 @@ defmodule Mix.Tasks.ExTauri.Signer do
   @impl true
   def run(args) do
     # The signer command has subcommands, so we pass everything through
-    ExTauri.run(["signer" | args])
+    ExTauri.run_simple(["signer" | args])
   end
 end

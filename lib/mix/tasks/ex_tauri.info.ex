@@ -66,7 +66,7 @@ defmodule Mix.Tasks.ExTauri.Info do
     )
 
     tauri_args = build_tauri_args(opts, extra_args)
-    ExTauri.run(["info" | tauri_args])
+    ExTauri.run_simple(["info" | tauri_args])
   end
 
   defp build_tauri_args(opts, extra_args) do

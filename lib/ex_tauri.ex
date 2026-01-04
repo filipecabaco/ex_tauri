@@ -199,11 +199,6 @@ defmodule ExTauri do
 
     wrap()
 
-    # Set proper environment variables for tauri
-    System.put_env("TAURI_SKIP_DEVSERVER_CHECK", "true")
-    # Tauri v2 rename
-    System.put_env("TAURI_CLI_NO_DEV_SERVER_WAIT", "true")
-
     opts = [
       into: IO.stream(:stdio, :line),
       stderr_to_stdout: true,

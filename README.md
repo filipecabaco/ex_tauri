@@ -111,15 +111,38 @@ mix ex_tauri.install
 
 **Development** (with hot reload):
 ```bash
-mix ex_tauri dev
+mix ex_tauri.dev
 ```
 
 **Build for distribution**:
 ```bash
-mix ex_tauri build
+mix ex_tauri.build
 ```
 
 Your app bundle will be at `src-tauri/target/release/bundle/macos/YourApp.app` (macOS) or equivalent for your platform.
+
+### Available Mix Tasks
+
+ExTauri provides dedicated Mix tasks for common operations:
+
+- **`mix ex_tauri.install`** - Install and configure Tauri in your project
+- **`mix ex_tauri.dev`** - Run in development mode with hot-reload
+- **`mix ex_tauri.build`** - Build for production and create distributable packages
+- **`mix ex_tauri.info`** - Show information about your Tauri project and environment
+- **`mix ex_tauri.icon`** - Generate application icons from a source image
+- **`mix ex_tauri.signer`** - Manage code signing for application updates
+
+Each task provides detailed help and options:
+```bash
+mix help ex_tauri.dev
+mix help ex_tauri.build
+# etc.
+```
+
+For advanced usage or commands without dedicated tasks, use:
+```bash
+mix ex_tauri <command> [args...]
+```
 
 ## How It Works
 
@@ -221,7 +244,7 @@ execution error: Not authorised to send Apple events to Finder. (-1743)
 After granting permissions, build normally:
 ```bash
 cd example
-mix ex_tauri build
+mix ex_tauri.build
 ```
 
 ## Examples

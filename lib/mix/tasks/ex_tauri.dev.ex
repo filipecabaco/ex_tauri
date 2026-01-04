@@ -5,6 +5,9 @@ defmodule Mix.Tasks.ExTauri.Dev do
   This task builds your Elixir release and starts the Tauri development server,
   which will open your application in a native window with hot-reload capabilities.
 
+  The Phoenix dev server runs as a sidecar process managed by Tauri, so this command
+  automatically skips waiting for the dev server (passes --no-dev-server-wait).
+
   ## Usage
 
       $ mix ex_tauri.dev [OPTIONS]
@@ -19,7 +22,6 @@ defmodule Mix.Tasks.ExTauri.Dev do
     * `--no-watch` - Disable file watching for hot-reload
     * `--features <FEATURES>` - Space or comma-separated list of features to activate
     * `--exit-on-panic` - Exit on panic
-    * `--no-dev-server-wait` - Skip waiting for the dev server to start
 
   ## Examples
 
@@ -61,8 +63,7 @@ defmodule Mix.Tasks.ExTauri.Dev do
         port: :integer,
         no_watch: :boolean,
         features: :string,
-        exit_on_panic: :boolean,
-        no_dev_server_wait: :boolean
+        exit_on_panic: :boolean
       ],
       aliases: [
         r: :release
@@ -74,7 +75,8 @@ defmodule Mix.Tasks.ExTauri.Dev do
   end
 
   defp build_tauri_args(opts, extra_args) do
-    args = []
+    # Always skip waiting for dev server since Phoenix runs as a sidecar
+    args = ["--no-dev-server-wait"]
 
     args = if opts[:release], do: args ++ ["--release"], else: args
     args = if opts[:target], do: args ++ ["--target", opts[:target]], else: args
@@ -84,7 +86,6 @@ defmodule Mix.Tasks.ExTauri.Dev do
     args = if opts[:no_watch], do: args ++ ["--no-watch"], else: args
     args = if opts[:features], do: args ++ ["--features", opts[:features]], else: args
     args = if opts[:exit_on_panic], do: args ++ ["--exit-on-panic"], else: args
-    args = if opts[:no_dev_server_wait], do: args ++ ["--no-dev-server-wait"], else: args
 
     args ++ extra_args
   end

@@ -199,12 +199,6 @@ defmodule ExTauri do
 
     wrap()
 
-    # Set proper environment variables for tauri
-    System.put_env("TAURI_SKIP_DEVSERVER_CHECK", "true")
-    # Tauri v2 rename
-    System.put_env("TAURI_CLI_NO_DEV_SERVER_WAIT", "true")
-    maybe_set_dmg_size_env()
-
     opts = [
       into: IO.stream(:stdio, :line),
       stderr_to_stdout: true,
@@ -264,21 +258,6 @@ defmodule ExTauri do
       "burrito_out/desktop_#{triplet}",
       "burrito_out/desktop-#{triplet}"
     )
-
-    :ok
-  end
-
-  # Always set a DMG size for create-dmg to avoid under-sized images.
-  # Defaults to 500m, but can be overridden via config :dmg_size_mb or env DISK_IMAGE_SIZE.
-  defp maybe_set_dmg_size_env do
-    # Respect an explicit env override if set
-    if System.get_env("DISK_IMAGE_SIZE") do
-      :ok
-    else
-      size_mb = Application.get_env(:ex_tauri, :dmg_size_mb, "500m")
-
-      System.put_env("DISK_IMAGE_SIZE", size_mb)
-    end
 
     :ok
   end

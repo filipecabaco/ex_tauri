@@ -171,8 +171,7 @@ config :ex_tauri,
   fullscreen: false,          # Start in fullscreen
   width: 800,                 # Window width
   height: 600,                # Window height
-  resize: true,               # Allow window resize
-  dmg_size_mb: "500m"        # DMG size for macOS (if needed)
+  resize: true                # Allow window resize
 ```
 
 ## Common Issues
@@ -203,12 +202,26 @@ Remove or comment out `cache_static_manifest` in `config/prod.exs`:
 #   cache_static_manifest: "priv/static/cache_manifest.json"
 ```
 
-### Large DMG Size
+### DMG Build Permission Issues (macOS)
 
-If building a DMG on macOS fails due to size, increase the disk image size:
+When building DMGs on macOS, you may encounter an AppleScript permission error:
 
-```elixir
-config :ex_tauri, dmg_size_mb: "2000m"
+```
+execution error: Not authorised to send Apple events to Finder. (-1743)
+```
+
+**This error prevents the DMG from being created** - the creation script uses AppleScript to configure the DMG appearance (backgrounds, icon positions), but requires Finder automation permissions.
+
+**Solution: Grant Automation Permissions**
+
+1. Open **System Settings** → **Privacy & Security** → **Automation**
+2. Find your development environment (Terminal, iTerm2, VS Code, etc.)
+3. Enable **Finder** access
+
+After granting permissions, build normally:
+```bash
+cd example
+mix ex_tauri build
 ```
 
 ## Examples

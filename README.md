@@ -203,6 +203,30 @@ Remove or comment out `cache_static_manifest` in `config/prod.exs`:
 #   cache_static_manifest: "priv/static/cache_manifest.json"
 ```
 
+### DMG Build Permission Issues (macOS)
+
+When building DMGs on macOS, you may encounter an AppleScript permission error:
+
+```
+execution error: Not authorised to send Apple events to Finder. (-1743)
+```
+
+**This is cosmetic only** - the error occurs because the DMG creation script tries to make the DMG look pretty (backgrounds, icon positions), but lacks permission to control Finder.
+
+**Solutions:**
+
+1. **Recommended:** ExTauri automatically sets `CI=true` to skip the cosmetic setup. If you still see this error, you can:
+
+   a. **Grant automation permissions** (macOS): System Settings → Privacy & Security → Automation → Enable for your Terminal app
+
+   b. **Or ignore it** - the DMG will build successfully, just without custom backgrounds/layouts
+
+2. **Manual override:** Set the environment variable before building:
+   ```bash
+   export CI=true
+   mix ex_tauri build
+   ```
+
 ### DMG Size Issues
 
 By default, `hdiutil` auto-calculates the required DMG size based on your app bundle size. This is the recommended approach.

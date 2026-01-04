@@ -203,7 +203,6 @@ defmodule ExTauri do
     System.put_env("TAURI_SKIP_DEVSERVER_CHECK", "true")
     # Tauri v2 rename
     System.put_env("TAURI_CLI_NO_DEV_SERVER_WAIT", "true")
-    maybe_set_dmg_size_env()
 
     opts = [
       into: IO.stream(:stdio, :line),
@@ -264,25 +263,6 @@ defmodule ExTauri do
       "burrito_out/desktop_#{triplet}",
       "burrito_out/desktop-#{triplet}"
     )
-
-    :ok
-  end
-
-  # Only set DMG size if explicitly configured.
-  # If not set, hdiutil will auto-calculate the required size.
-  # Note: The value should be a number only (e.g., "500" not "500m") as the create-dmg script adds the "m" suffix.
-  defp maybe_set_dmg_size_env do
-    # Respect an explicit env override if set
-    if System.get_env("DISK_IMAGE_SIZE") do
-      :ok
-    else
-      # Only set if explicitly configured (no default)
-      # This allows hdiutil to auto-calculate the size, which is more reliable
-      case Application.get_env(:ex_tauri, :dmg_size_mb) do
-        nil -> :ok
-        size_mb -> System.put_env("DISK_IMAGE_SIZE", size_mb)
-      end
-    end
 
     :ok
   end

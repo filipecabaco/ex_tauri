@@ -172,7 +172,6 @@ config :ex_tauri,
   width: 800,                 # Window width
   height: 600,                # Window height
   resize: true                # Allow window resize
-  # dmg_size_mb: "500"        # Optional: Override DMG size in MB for macOS (auto-calculated by default)
 ```
 
 ## Common Issues
@@ -224,18 +223,6 @@ After granting permissions, build normally:
 cd example
 mix ex_tauri build
 ```
-
-### DMG Size Issues
-
-By default, `hdiutil` auto-calculates the required DMG size based on your app bundle size. This is the recommended approach.
-
-However, if you need to override the size (e.g., for future app growth or to ensure consistent sizing), you can set:
-
-```elixir
-config :ex_tauri, dmg_size_mb: "2000"  # Size in MB (without "m" suffix)
-```
-
-**Note:** Only set this if you have a specific reason to override auto-sizing. Setting a size too small will cause build failures, while auto-sizing adapts to your bundle size.
 
 ## Examples
 

@@ -139,11 +139,6 @@ mix help ex_tauri.build
 # etc.
 ```
 
-For advanced usage or commands without dedicated tasks, use:
-```bash
-mix ex_tauri <command> [args...]
-```
-
 ## How It Works
 
 ### Heartbeat-Based Shutdown

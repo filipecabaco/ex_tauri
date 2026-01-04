@@ -203,9 +203,6 @@ defmodule ExTauri do
     System.put_env("TAURI_SKIP_DEVSERVER_CHECK", "true")
     # Tauri v2 rename
     System.put_env("TAURI_CLI_NO_DEV_SERVER_WAIT", "true")
-    # Set CI flag to skip AppleScript in DMG creation (avoids Finder automation permission errors)
-    # This tells create-dmg to use --skip-jenkins which skips cosmetic DMG setup
-    System.put_env("CI", "true")
     maybe_set_dmg_size_env()
 
     opts = [

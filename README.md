@@ -225,8 +225,6 @@ cd example
 mix ex_tauri build
 ```
 
-**Note:** For CI/CD environments where you can't grant permissions, ExTauri automatically sets `CI=true` which tells Tauri to skip the AppleScript step (DMG will build without custom layouts).
-
 ### DMG Size Issues
 
 By default, `hdiutil` auto-calculates the required DMG size based on your app bundle size. This is the recommended approach.

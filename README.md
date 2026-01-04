@@ -211,21 +211,36 @@ When building DMGs on macOS, you may encounter an AppleScript permission error:
 execution error: Not authorised to send Apple events to Finder. (-1743)
 ```
 
-**This is cosmetic only** - the error occurs because the DMG creation script tries to make the DMG look pretty (backgrounds, icon positions), but lacks permission to control Finder.
+**This error prevents the DMG from being created** - the creation script tries to use AppleScript to make the DMG look pretty (backgrounds, icon positions), but lacks Finder automation permissions and exits before compressing the final DMG.
 
 **Solutions:**
 
-1. **Recommended:** ExTauri automatically sets `CI=true` to skip the cosmetic setup. If you still see this error, you can:
+1. **Recommended (Automatic):** ExTauri automatically sets `CI=true`, which tells Tauri's bundler to pass `--skip-jenkins` to skip the AppleScript step. The DMG will be created successfully without custom layouts.
 
-   a. **Grant automation permissions** (macOS): System Settings → Privacy & Security → Automation → Enable for your Terminal app
-
-   b. **Or ignore it** - the DMG will build successfully, just without custom backgrounds/layouts
-
-2. **Manual override:** Set the environment variable before building:
+   **Build through ExTauri:**
    ```bash
-   export CI=true
+   cd example
    mix ex_tauri build
    ```
+
+2. **If you still see the error:**
+
+   a. **Grant automation permissions** (best for local development):
+      - System Settings → Privacy & Security → Automation
+      - Enable Finder access for your Terminal app
+
+   b. **Manual CI flag** (for testing):
+      ```bash
+      export CI=true
+      cd example
+      mix ex_tauri build
+      ```
+
+**Important:** Don't run `bundle_dmg.sh` directly - it bypasses Tauri's flag processing. Always use `mix ex_tauri build`.
+
+**References:**
+- [Tauri Issue #2567](https://github.com/tauri-apps/tauri/issues/2567) - Documents CI=true requirement
+- [Tauri Issue #1731](https://github.com/tauri-apps/tauri/issues/1731) - DMG creation on CI/CD
 
 ### DMG Size Issues
 

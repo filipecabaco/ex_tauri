@@ -202,7 +202,8 @@ defmodule Mix.Tasks.ExTauri.Install do
 
   # Private helper functions
 
-  defp cargo_toml(app_name, tauri_version) do
+  @doc false
+  def cargo_toml(app_name, tauri_version) do
     app_name = app_name |> String.replace("\s", "") |> Macro.underscore()
 
     # Extract major version for plugins (they have independent versioning)
@@ -241,7 +242,8 @@ defmodule Mix.Tasks.ExTauri.Install do
     """
   end
 
-  defp main_src(host, port, socket_name) do
+  @doc false
+  def main_src(host, port, socket_name) do
     """
     // Prevents additional console window on Windows in release, DO NOT REMOVE!!
     #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -464,7 +466,8 @@ defmodule Mix.Tasks.ExTauri.Install do
     """
   end
 
-  defp capabilities_json do
+  @doc false
+  def capabilities_json do
     """
     {
       "$schema": "../gen/schemas/desktop-schema.json",
@@ -488,14 +491,16 @@ defmodule Mix.Tasks.ExTauri.Install do
     """
   end
 
-  defp extract_cli_version(tauri_version) do
+  @doc false
+  def extract_cli_version(tauri_version) do
     case Version.parse(String.replace(tauri_version, ~r/^[^\d]+/, "")) do
       {:ok, v} -> to_string(v.major)
       :error -> tauri_version
     end
   end
 
-  defp build_cli_install_args(tauri_version) do
+  @doc false
+  def build_cli_install_args(tauri_version) do
     cli_version = extract_cli_version(tauri_version)
     ["install", "tauri-cli", "--version", "^#{cli_version}", "--root", "."]
   end

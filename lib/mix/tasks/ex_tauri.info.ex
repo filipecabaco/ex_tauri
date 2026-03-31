@@ -69,7 +69,8 @@ defmodule Mix.Tasks.ExTauri.Info do
     ExTauri.run_simple(["info" | tauri_args])
   end
 
-  defp build_tauri_args(opts, extra_args) do
+  @doc false
+  def build_tauri_args(opts, extra_args) do
     args = []
 
     args = if opts[:interactive], do: args ++ ["--interactive"], else: args

@@ -74,7 +74,8 @@ defmodule Mix.Tasks.ExTauri.Dev do
     ExTauri.run(["dev" | tauri_args])
   end
 
-  defp build_tauri_args(opts, extra_args) do
+  @doc false
+  def build_tauri_args(opts, extra_args) do
     # Always skip waiting for dev server since Phoenix runs as a sidecar
     args = ["--no-dev-server-wait"]
 

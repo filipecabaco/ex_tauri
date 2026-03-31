@@ -93,6 +93,8 @@ defmodule ExTauri.Hook do
       # Invoke a custom Tauri command
       push_command(socket, "invoke", %{cmd: "my_custom_command", args: %{key: "value"}})
   """
+  @compile {:no_warn_undefined, Phoenix.LiveView}
+
   def push_command(socket, command, payload \\ %{}) do
     ref = System.unique_integer([:positive]) |> to_string()
 

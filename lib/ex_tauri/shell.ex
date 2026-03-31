@@ -47,7 +47,14 @@ defmodule ExTauri.Shell do
       ExTauri.Shell.open_url(socket, "https://example.com")
       ExTauri.Shell.open_url(socket, "/path/to/document.pdf")
   """
-  def open_url(socket, url) do
+  def open_url(socket, url) when is_binary(url) do
+    uri = URI.parse(url)
+
+    unless uri.scheme in ["http", "https", "mailto"] do
+      raise ArgumentError,
+            "open_url only allows http, https, and mailto schemes, got: #{inspect(uri.scheme)}"
+    end
+
     ExTauri.Hook.push_command(socket, "shell_open", %{url: url})
   end
 

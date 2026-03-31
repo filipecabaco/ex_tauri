@@ -187,4 +187,37 @@ defmodule ExTauri.PathsTest do
       end
     end
   end
+
+  describe "sanitize_name/1" do
+    test "strips path traversal sequences" do
+      assert Paths.sanitize_name("../../etc/evil") == "etcevil"
+      assert Paths.sanitize_name("app/../secret") == "appsecret"
+    end
+
+    test "strips path separators" do
+      assert Paths.sanitize_name("path/to/app") == "pathtoapp"
+      assert Paths.sanitize_name("path\\to\\app") == "pathtoapp"
+    end
+
+    test "replaces spaces with underscores" do
+      assert Paths.sanitize_name("My App") == "my_app"
+    end
+
+    test "removes special characters" do
+      assert Paths.sanitize_name("app@name!#$%") == "appname"
+    end
+
+    test "lowercases the result" do
+      assert Paths.sanitize_name("MyApp") == "myapp"
+    end
+
+    test "allows hyphens and underscores" do
+      assert Paths.sanitize_name("my-app_name") == "my-app_name"
+    end
+
+    test "falls back to default for empty result" do
+      assert Paths.sanitize_name("../..") == "ex_tauri_app"
+      assert Paths.sanitize_name("///") == "ex_tauri_app"
+    end
+  end
 end

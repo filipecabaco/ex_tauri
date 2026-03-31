@@ -113,7 +113,7 @@ defmodule Mix.Tasks.ExTauri.Install do
       [
         "init",
         "--app-name",
-        app_name |> String.replace("\s", "") |> Macro.underscore(),
+        ExTauri.Paths.sanitize_name(app_name),
         "--window-title",
         window_title,
         @arg_names.dev_url,
@@ -151,7 +151,7 @@ defmodule Mix.Tasks.ExTauri.Install do
 
     # Override main.rs to set proper startup sequence
     path = Path.join([File.cwd!(), "src-tauri", "src", "main.rs"])
-    socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
+    socket_name = ExTauri.Paths.sanitize_name(app_name)
     File.write!(path, main_src(host, port, socket_name))
 
     # TODO remove this when possible, for some reason it's failing at the moment
@@ -170,7 +170,7 @@ defmodule Mix.Tasks.ExTauri.Install do
       |> put_in(@config_keys.externalBin, ["../burrito_out/desktop"])
       |> put_in(
         @config_keys.identifier,
-        "you.app.#{app_name |> String.replace("\s", "") |> Macro.underscore() |> String.replace("_", "-")}"
+        "you.app.#{app_name |> ExTauri.Paths.sanitize_name() |> String.replace("_", "-")}"
       )
       |> put_in(@config_keys.windows, [
         %{
@@ -239,7 +239,7 @@ defmodule Mix.Tasks.ExTauri.Install do
 
   @doc false
   def cargo_toml(app_name, tauri_version) do
-    app_name = app_name |> String.replace("\s", "") |> Macro.underscore()
+    app_name = ExTauri.Paths.sanitize_name(app_name)
 
     # Extract major version for plugins (they have independent versioning)
     # e.g., "2.5.1" -> "2", "2.0.0-rc.1" -> "2"
@@ -281,6 +281,21 @@ defmodule Mix.Tasks.ExTauri.Install do
 
   @doc false
   def main_src(host, port, socket_name) do
+    # Validate inputs to prevent Rust code injection via string interpolation
+    unless host =~ ~r/\A[a-zA-Z0-9\.\-]+\z/ do
+      raise ArgumentError, "host contains invalid characters: #{inspect(host)}"
+    end
+
+    port_str = to_string(port)
+
+    unless port_str =~ ~r/\A\d+\z/ do
+      raise ArgumentError, "port must be numeric, got: #{inspect(port)}"
+    end
+
+    unless socket_name =~ ~r/\A[a-zA-Z0-9_\-]+\z/ do
+      raise ArgumentError, "socket_name contains invalid characters: #{inspect(socket_name)}"
+    end
+
     """
     // Prevents additional console window on Windows in release, DO NOT REMOVE!!
     #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -516,8 +531,6 @@ defmodule Mix.Tasks.ExTauri.Install do
       "description": "Capability for the main application window",
       "windows": ["main"],
       "permissions": [
-        "shell:allow-execute",
-        "shell:allow-spawn",
         "notification:default",
         {
           "identifier": "shell:allow-execute",

@@ -3,7 +3,7 @@ defmodule ExTauri.ShutdownManagerTest do
 
   alias ExTauri.ShutdownManager
 
-  @heartbeat_interval 100
+  @heartbeat_interval 500
 
   setup do
     # Use a unique app name per test to avoid socket collisions
@@ -101,8 +101,8 @@ defmodule ExTauri.ShutdownManagerTest do
       # Suspend the process so :execute_shutdown won't fire System.stop/0
       # while we inspect state. We use :sys.suspend to freeze message processing.
       # First wait for the heartbeat timeout to trigger initiate_shutdown.
-      # Timeline: 300ms timeout + 100ms check interval = ~400ms.
-      Process.sleep(450)
+      # Timeline: 1500ms timeout + 500ms check interval = ~2000ms.
+      Process.sleep(2200)
 
       :sys.suspend(pid)
       state = :sys.get_state(pid)

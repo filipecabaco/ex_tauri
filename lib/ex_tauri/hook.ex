@@ -133,9 +133,22 @@ defmodule ExTauri.Hook do
       return window.__TAURI__ !== undefined;
     }
 
+    // Allowlist of valid commands to prevent arbitrary command injection
+    const ALLOWED_COMMANDS = new Set([
+      "notification", "clipboard_write", "clipboard_read",
+      "dialog_open", "dialog_save", "dialog_message",
+      "os_info", "fs_read", "fs_write", "fs_exists",
+      "fs_readdir", "fs_remove", "fs_mkdir",
+      "shell_open", "shell_exec", "invoke"
+    ]);
+
     async function execCommand(command, payload) {
       if (!isTauri()) {
         throw new Error("Not running in Tauri — commands are only available in the desktop app");
+      }
+
+      if (!ALLOWED_COMMANDS.has(command)) {
+        throw new Error(`Blocked unknown Tauri command: ${command}`);
       }
 
       switch (command) {

@@ -27,8 +27,8 @@ defmodule ExTauri.ShutdownManager do
   1. ShutdownManager creates a Unix domain socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
   2. Rust frontend connects and sends a byte every 100ms
   3. ShutdownManager tracks the last heartbeat timestamp
-  4. Every 100ms, ShutdownManager checks if a heartbeat was received recently
-  5. If no heartbeat for 300ms (3 missed beats), initiates graceful shutdown
+  4. Every 500ms, ShutdownManager checks if a heartbeat was received recently
+  5. If no heartbeat for 1500ms (missed beats), initiates graceful shutdown
 
   The socket path is unique per application (based on :app_name config) to prevent
   collisions when multiple ExTauri applications run simultaneously.
@@ -49,8 +49,8 @@ defmodule ExTauri.ShutdownManager do
   use GenServer
   require Logger
 
-  @heartbeat_interval 100
-  @heartbeat_timeout 300
+  @heartbeat_interval 500
+  @heartbeat_timeout 1500
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -63,7 +63,7 @@ defmodule ExTauri.ShutdownManager do
 
     # Create socket path using app name to prevent collisions
     app_name = Application.get_env(:ex_tauri, :app_name, "ex_tauri_app")
-    socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
+    socket_name = ExTauri.Paths.sanitize_name(app_name)
     socket_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
 
     # Clean up old socket file if it exists
@@ -76,6 +76,9 @@ defmodule ExTauri.ShutdownManager do
       {:active, false},
       {:reuseaddr, true}
     ])
+
+    # Restrict socket to owner-only access (prevents local privilege escalation)
+    File.chmod(socket_path, 0o600)
 
     # Spawn acceptor process with link for proper supervision
     Task.start_link(fn -> accept_loop(listen_socket) end)

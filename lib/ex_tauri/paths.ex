@@ -77,8 +77,27 @@ defmodule ExTauri.Paths do
   """
   def app_identifier do
     Application.get_env(:ex_tauri, :app_name, "ex_tauri_app")
+    |> sanitize_name()
+  end
+
+  @doc """
+  Sanitizes a name for safe use in filesystem paths.
+
+  Strips path separators and traversal sequences, replaces spaces with
+  underscores, removes any characters that aren't alphanumeric, underscores,
+  or hyphens, and lowercases the result.
+  """
+  def sanitize_name(name) when is_binary(name) do
+    name
+    |> String.replace(~r/[\/\\]/, "")
+    |> String.replace("..", "")
     |> String.replace(" ", "_")
+    |> String.replace(~r/[^a-zA-Z0-9_\-]/, "")
     |> String.downcase()
+    |> case do
+      "" -> "ex_tauri_app"
+      sanitized -> sanitized
+    end
   end
 
   # Platform-specific path resolution
@@ -133,7 +152,15 @@ defmodule ExTauri.Paths do
   end
 
   defp ensure_dir(path) do
-    File.mkdir_p!(path)
+    # Cache created directories in the process dictionary to avoid
+    # repeated mkdir_p! syscalls on every access
+    cache_key = {:ex_tauri_dir_created, path}
+
+    unless Process.get(cache_key) do
+      File.mkdir_p!(path)
+      Process.put(cache_key, true)
+    end
+
     path
   end
 end

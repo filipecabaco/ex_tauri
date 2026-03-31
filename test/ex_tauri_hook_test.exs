@@ -16,6 +16,12 @@ defmodule ExTauri.HookTest do
       assert source =~ "mounted()"
     end
 
+    test "includes command allowlist for security" do
+      source = Hook.js_source()
+      assert source =~ "ALLOWED_COMMANDS"
+      assert source =~ "Blocked unknown Tauri command"
+    end
+
     test "handles tauri_command events" do
       source = Hook.js_source()
       assert source =~ ~s(this.handleEvent("tauri_command")

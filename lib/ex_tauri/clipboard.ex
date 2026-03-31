@@ -1,0 +1,56 @@
+defmodule ExTauri.Clipboard do
+  @moduledoc """
+  Read and write the system clipboard from your LiveView.
+
+  Bridges to `tauri-plugin-clipboard-manager` via the LiveView hook.
+
+  ## Requirements
+
+  - `tauri-plugin-clipboard-manager` must be installed
+  - The `TauriHook` must be mounted in your LiveView (see `ExTauri.Hook`)
+
+  ## Examples
+
+      # Write to clipboard
+      def handle_event("copy", %{"text" => text}, socket) do
+        socket = ExTauri.Clipboard.write(socket, text)
+        {:noreply, socket}
+      end
+
+      # Read from clipboard
+      def handle_event("paste", _params, socket) do
+        socket = ExTauri.Clipboard.read(socket)
+        {:noreply, socket}
+      end
+
+      # Handle the response
+      def handle_event("tauri_response", %{"command" => "clipboard_read", "text" => text}, socket) do
+        {:noreply, assign(socket, :clipboard_text, text)}
+      end
+  """
+
+  @doc """
+  Writes text to the system clipboard.
+
+  ## Examples
+
+      ExTauri.Clipboard.write(socket, "Hello, clipboard!")
+  """
+  def write(socket, text) do
+    ExTauri.Hook.push_command(socket, "clipboard_write", %{text: text})
+  end
+
+  @doc """
+  Reads text from the system clipboard.
+
+  The result will be sent back as a `"tauri_response"` event with
+  `%{"command" => "clipboard_read", "text" => "..."}`.
+
+  ## Examples
+
+      ExTauri.Clipboard.read(socket)
+  """
+  def read(socket) do
+    ExTauri.Hook.push_command(socket, "clipboard_read", %{})
+  end
+end

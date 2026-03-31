@@ -58,6 +58,14 @@ defmodule ExTauri.Hook do
   | `dialog_save`   | `tauri-plugin-dialog`            | Save file dialog               |
   | `dialog_message`| `tauri-plugin-dialog`            | Message dialog (alert/confirm) |
   | `os_info`       | `tauri-plugin-os`                | Get OS information             |
+  | `fs_read`       | `tauri-plugin-fs`                | Read a file                    |
+  | `fs_write`      | `tauri-plugin-fs`                | Write a file                   |
+  | `fs_exists`     | `tauri-plugin-fs`                | Check if path exists           |
+  | `fs_readdir`    | `tauri-plugin-fs`                | List directory entries          |
+  | `fs_remove`     | `tauri-plugin-fs`                | Remove a file                  |
+  | `fs_mkdir`      | `tauri-plugin-fs`                | Create a directory             |
+  | `shell_open`    | `tauri-plugin-shell`             | Open URL/path in default app   |
+  | `shell_exec`    | `tauri-plugin-shell`             | Execute a scoped command       |
 
   Custom Tauri commands registered via `#[tauri::command]` can also be invoked
   by using `"invoke"` as the command type with a `cmd` field in the payload.
@@ -194,6 +202,68 @@ defmodule ExTauri.Hook do
             os_type: osType(),
             locale: await locale(),
           };
+        }
+
+        case "fs_read": {
+          const { readTextFile } = await import("@tauri-apps/plugin-fs");
+          const opts = {};
+          if (payload.baseDir) opts.baseDir = payload.baseDir;
+          const contents = await readTextFile(payload.path, opts);
+          return { contents };
+        }
+
+        case "fs_write": {
+          const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+          const opts = {};
+          if (payload.baseDir) opts.baseDir = payload.baseDir;
+          if (payload.append) opts.append = true;
+          await writeTextFile(payload.path, payload.contents, opts);
+          return { status: "ok" };
+        }
+
+        case "fs_exists": {
+          const { exists } = await import("@tauri-apps/plugin-fs");
+          const opts = {};
+          if (payload.baseDir) opts.baseDir = payload.baseDir;
+          const result = await exists(payload.path, opts);
+          return { exists: result };
+        }
+
+        case "fs_readdir": {
+          const { readDir } = await import("@tauri-apps/plugin-fs");
+          const opts = {};
+          if (payload.baseDir) opts.baseDir = payload.baseDir;
+          const entries = await readDir(payload.path, opts);
+          return { entries };
+        }
+
+        case "fs_remove": {
+          const { remove } = await import("@tauri-apps/plugin-fs");
+          const opts = {};
+          if (payload.baseDir) opts.baseDir = payload.baseDir;
+          await remove(payload.path, opts);
+          return { status: "ok" };
+        }
+
+        case "fs_mkdir": {
+          const { mkdir } = await import("@tauri-apps/plugin-fs");
+          const opts = { recursive: payload.recursive !== false };
+          if (payload.baseDir) opts.baseDir = payload.baseDir;
+          await mkdir(payload.path, opts);
+          return { status: "ok" };
+        }
+
+        case "shell_open": {
+          const { open } = await import("@tauri-apps/plugin-shell");
+          await open(payload.url);
+          return { status: "ok" };
+        }
+
+        case "shell_exec": {
+          const { Command } = await import("@tauri-apps/plugin-shell");
+          const cmd = Command.create(payload.program, payload.args || []);
+          const output = await cmd.execute();
+          return { stdout: output.stdout, stderr: output.stderr, code: output.code };
         }
 
         case "invoke": {

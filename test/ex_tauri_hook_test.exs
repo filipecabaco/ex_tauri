@@ -72,12 +72,33 @@ defmodule ExTauri.HookTest do
       assert source =~ "isTauri()"
     end
 
+    test "supports filesystem commands" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "fs_read")
+      assert source =~ ~s(case "fs_write")
+      assert source =~ ~s(case "fs_exists")
+      assert source =~ ~s(case "fs_readdir")
+      assert source =~ ~s(case "fs_remove")
+      assert source =~ ~s(case "fs_mkdir")
+      assert source =~ "readTextFile"
+      assert source =~ "writeTextFile"
+    end
+
+    test "supports shell commands" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "shell_open")
+      assert source =~ ~s(case "shell_exec")
+      assert source =~ "Command.create"
+    end
+
     test "imports from @tauri-apps plugin packages" do
       source = Hook.js_source()
       assert source =~ "@tauri-apps/plugin-notification"
       assert source =~ "@tauri-apps/plugin-clipboard-manager"
       assert source =~ "@tauri-apps/plugin-dialog"
       assert source =~ "@tauri-apps/plugin-os"
+      assert source =~ "@tauri-apps/plugin-fs"
+      assert source =~ "@tauri-apps/plugin-shell"
       assert source =~ "@tauri-apps/api/core"
     end
   end

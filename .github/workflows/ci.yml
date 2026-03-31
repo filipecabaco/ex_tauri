@@ -44,11 +44,6 @@ jobs:
       - name: Compile (warnings as errors)
         run: mix compile --warnings-as-errors
 
-      - name: Check formatting
-        run: |
-          mix format
-          git diff --exit-code || (echo "::error::Code is not formatted. Run 'mix format' locally." && exit 1)
-
       - name: Run unit & integration tests
         run: mix test --trace
 

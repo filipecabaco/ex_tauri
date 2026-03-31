@@ -49,29 +49,33 @@ defmodule ExTauri.E2ETest do
       }
       """
 
-      tauri_conf = Jason.encode!(%{
-        "productName" => @app_name,
-        "version" => "0.1.0",
-        "identifier" => "you.app.test-e2e-app",
-        "build" => %{
-          "devUrl" => "http://#{@host}:#{@port}",
-          "frontendDist" => "http://#{@host}:#{@port}"
-        },
-        "app" => %{
-          "windows" => [
-            %{
-              "title" => @app_name,
-              "width" => 800,
-              "height" => 600,
-              "resizable" => true,
-              "fullscreen" => false
+      tauri_conf =
+        Jason.encode!(
+          %{
+            "productName" => @app_name,
+            "version" => "0.1.0",
+            "identifier" => "you.app.test-e2e-app",
+            "build" => %{
+              "devUrl" => "http://#{@host}:#{@port}",
+              "frontendDist" => "http://#{@host}:#{@port}"
+            },
+            "app" => %{
+              "windows" => [
+                %{
+                  "title" => @app_name,
+                  "width" => 800,
+                  "height" => 600,
+                  "resizable" => true,
+                  "fullscreen" => false
+                }
+              ]
+            },
+            "bundle" => %{
+              "externalBin" => ["../burrito_out/desktop"]
             }
-          ]
-        },
-        "bundle" => %{
-          "externalBin" => ["../burrito_out/desktop"]
-        }
-      }, pretty: true)
+          },
+          pretty: true
+        )
 
       # Write all generated files
       File.write!(Path.join(src_tauri, "Cargo.toml"), cargo_toml)

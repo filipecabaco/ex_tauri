@@ -109,7 +109,7 @@ defmodule ExTauri do
     do: Mix.Tasks.ExTauri.Install.main_src(host, port, "test_app")
 
   @doc false
-  def __test_capabilities_json__,
+  def __test_capabilities_json__(),
     do: Mix.Tasks.ExTauri.Install.capabilities_json()
 
   @doc false

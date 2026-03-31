@@ -4,7 +4,6 @@ defmodule ExTauri.ShutdownManagerTest do
   alias ExTauri.ShutdownManager
 
   @heartbeat_interval 100
-  @heartbeat_timeout 300
 
   setup do
     # Use a unique app name per test to avoid socket collisions
@@ -95,20 +94,25 @@ defmodule ExTauri.ShutdownManagerTest do
   end
 
   describe "shutdown detection" do
-    test "initiates shutdown when heartbeats stop" do
-      # Override the shutdown to send us a message instead of calling System.stop
-      test_pid = self()
-
+    test "detects heartbeat timeout and transitions to shutdown state" do
       {:ok, pid} = ShutdownManager.start_link()
       Process.sleep(50)
 
-      # Monitor the manager process
-      ref = Process.monitor(pid)
+      # Suspend the process so :execute_shutdown won't fire System.stop/0
+      # while we inspect state. We use :sys.suspend to freeze message processing.
+      # First wait for the heartbeat timeout to trigger initiate_shutdown.
+      # Timeline: 300ms timeout + 100ms check interval = ~400ms.
+      Process.sleep(450)
 
-      # Don't send any heartbeats — the manager should detect timeout
-      # and call System.stop(0). We monitor for the process going down.
-      # The timeout is 300ms + check interval 100ms, so ~400ms max.
-      assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 2000
+      :sys.suspend(pid)
+      state = :sys.get_state(pid)
+
+      # Kill the process immediately (don't resume, as :execute_shutdown
+      # would call System.stop/0 and kill the test runner)
+      Process.exit(pid, :kill)
+
+      assert state.shutdown_initiated,
+             "ShutdownManager should have set shutdown_initiated after heartbeat timeout"
     end
 
     test "does not shut down immediately if heartbeats are being sent", %{socket_path: socket_path} do

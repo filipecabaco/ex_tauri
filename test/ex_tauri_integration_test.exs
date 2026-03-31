@@ -37,6 +37,7 @@ defmodule ExTauriIntegrationTest do
       # This is critical because plugins have independent versioning
       assert cargo_toml =~ ~r/tauri-plugin-shell = "2"/
       assert cargo_toml =~ ~r/tauri-plugin-log = "2"/
+      assert cargo_toml =~ ~r/tauri-plugin-notification = "2"/
 
       # Ensure exact version is NOT used for plugins
       refute cargo_toml =~ ~r/tauri-plugin-shell = "#{tauri_version}"/
@@ -114,6 +115,7 @@ defmodule ExTauriIntegrationTest do
       # Verify plugin initialization
       assert main_src =~ ~r/\.plugin\(tauri_plugin_shell::init\(\)\)/
       assert main_src =~ ~r/\.plugin\(tauri_plugin_log::Builder::new\(\)\.build\(\)\)/
+      assert main_src =~ ~r/\.plugin\(tauri_plugin_notification::init\(\)\)/
 
       # Verify setup function signature (V2 uses AppHandle reference)
       assert main_src =~ ~r/fn start_server\(app: &tauri::AppHandle\)/
@@ -182,6 +184,9 @@ defmodule ExTauriIntegrationTest do
       # Verify shell permissions
       assert "shell:allow-execute" in permissions
       assert "shell:allow-spawn" in permissions
+
+      # Verify notification permissions
+      assert "notification:default" in permissions
 
       # Verify sidecar permission configuration
       sidecar_permission =

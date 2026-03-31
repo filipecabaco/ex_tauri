@@ -145,7 +145,7 @@ mix help ex_tauri.build
 
 ExTauri uses a robust Unix domain socket heartbeat mechanism to ensure the Phoenix sidecar shuts down gracefully when the desktop app exits:
 
-1. Elixir creates a Unix domain socket at `/tmp/tauri_heartbeat_<app_name>.sock`
+1. Elixir creates a Unix domain socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
 2. Rust connects and sends a byte every 100ms
 3. Elixir monitors heartbeats and checks every 100ms
 4. If no heartbeat for 300ms (3 missed beats), graceful shutdown is initiated
@@ -173,7 +173,7 @@ This works even when:
 ┌─────────────────┐
 │ Phoenix Server  │  ← Your Elixir App
 │  (Sidecar)      │     (Burrito-wrapped)
-│                 │     /tmp/tauri_heartbeat_<app>.sock
+│                 │     <tmpdir>/tauri_heartbeat_<app>.sock
 └─────────────────┘
 ```
 

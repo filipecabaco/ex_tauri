@@ -1,4 +1,4 @@
-defmodule Desktop.MixProject do
+defmodule ExTauri.MixProject do
   use Mix.Project
 
   def project do
@@ -16,6 +16,7 @@ defmodule Desktop.MixProject do
 
   def application do
     [
+      mod: {ExTauri, []},
       extra_applications: [:logger, inets: :optional, ssl: :optional],
       env: [default: []]
     ]

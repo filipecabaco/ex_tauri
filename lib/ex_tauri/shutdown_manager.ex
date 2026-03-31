@@ -24,7 +24,7 @@ defmodule ExTauri.ShutdownManager do
   ## How it works
 
   The heartbeat mechanism provides robust shutdown detection:
-  1. ShutdownManager creates a Unix domain socket at `/tmp/tauri_heartbeat_<app_name>.sock`
+  1. ShutdownManager creates a Unix domain socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
   2. Rust frontend connects and sends a byte every 100ms
   3. ShutdownManager tracks the last heartbeat timestamp
   4. Every 100ms, ShutdownManager checks if a heartbeat was received recently
@@ -64,7 +64,7 @@ defmodule ExTauri.ShutdownManager do
     # Create socket path using app name to prevent collisions
     app_name = Application.get_env(:ex_tauri, :app_name, "ex_tauri_app")
     socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
-    socket_path = "/tmp/tauri_heartbeat_#{socket_name}.sock"
+    socket_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
 
     # Clean up old socket file if it exists
     cleanup_socket(socket_path)

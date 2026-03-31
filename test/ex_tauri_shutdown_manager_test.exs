@@ -11,7 +11,7 @@ defmodule ExTauri.ShutdownManagerTest do
     Application.put_env(:ex_tauri, :app_name, app_name)
 
     socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
-    socket_path = "/tmp/tauri_heartbeat_#{socket_name}.sock"
+    socket_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
 
     on_exit(fn ->
       # Clean up: stop the manager if running, remove socket
@@ -154,7 +154,7 @@ defmodule ExTauri.ShutdownManagerTest do
       app_name = "my_custom_app_#{System.unique_integer([:positive])}"
       Application.put_env(:ex_tauri, :app_name, app_name)
       socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
-      expected_path = "/tmp/tauri_heartbeat_#{socket_name}.sock"
+      expected_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
 
       {:ok, pid} = ShutdownManager.start_link()
       Process.sleep(50)
@@ -167,7 +167,7 @@ defmodule ExTauri.ShutdownManagerTest do
 
     test "defaults app_name to ex_tauri_app when not configured" do
       Application.delete_env(:ex_tauri, :app_name)
-      expected_path = "/tmp/tauri_heartbeat_ex_tauri_app.sock"
+      expected_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_ex_tauri_app.sock")
 
       {:ok, pid} = ShutdownManager.start_link()
       Process.sleep(50)

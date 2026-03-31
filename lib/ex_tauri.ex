@@ -16,6 +16,11 @@ defmodule ExTauri do
 
   @doc false
   def start(_, _) do
+    validate_config()
+    Supervisor.start_link([], strategy: :one_for_one)
+  end
+
+  defp validate_config do
     unless Application.get_env(:ex_tauri, :version) do
       Logger.warning("""
       tauri version is not configured. Please set it in your config files:
@@ -24,7 +29,23 @@ defmodule ExTauri do
       """)
     end
 
-    Supervisor.start_link([], strategy: :one_for_one)
+    unless Application.get_env(:ex_tauri, :app_name) do
+      Logger.warning("""
+      :app_name is not configured. Please set it in your config files:
+
+          config :ex_tauri, :app_name, "My Desktop App"
+      """)
+    end
+
+    for key <- [:host, :port] do
+      unless Application.get_env(:ex_tauri, key) do
+        Logger.warning("""
+        :#{key} is not configured. This is required for ex_tauri.install and ex_tauri.dev.
+
+            config :ex_tauri, :#{key}, #{if key == :host, do: ~s("localhost"), else: "4000"}
+        """)
+      end
+    end
   end
 
   @doc """

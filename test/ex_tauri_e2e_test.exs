@@ -136,8 +136,9 @@ defmodule ExTauri.E2ETest do
       assert main_rs =~ ".setup("
       assert main_rs =~ ".build(tauri::generate_context!())"
 
-      # Verify heartbeat uses the correct socket path
-      assert main_rs =~ "/tmp/tauri_heartbeat_#{socket_name}.sock"
+      # Verify heartbeat uses the correct socket name
+      assert main_rs =~ "tauri_heartbeat_#{socket_name}.sock"
+      assert main_rs =~ "std::env::temp_dir()"
     end
 
     test "generated capabilities.json is valid JSON with required permissions" do
@@ -172,7 +173,7 @@ defmodule ExTauri.E2ETest do
       socket_name = "my test app" |> String.replace(" ", "_") |> String.downcase()
       main_rs = Mix.Tasks.ExTauri.Install.main_src(@host, @port, socket_name)
 
-      assert main_rs =~ "/tmp/tauri_heartbeat_my_test_app.sock"
+      assert main_rs =~ "tauri_heartbeat_my_test_app.sock"
     end
   end
 end

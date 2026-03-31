@@ -194,10 +194,45 @@ defmodule Mix.Tasks.ExTauri.Install do
       Path.join([installation_path, "bin", "cargo-tauri"])
       |> System.cmd(["add", "shell"], opts)
 
+    {_, 0} =
+      Path.join([installation_path, "bin", "cargo-tauri"])
+      |> System.cmd(["add", "notification"], opts)
+
+    {_, 0} =
+      Path.join([installation_path, "bin", "cargo-tauri"])
+      |> System.cmd(["add", "single-instance"], opts)
+
     # Create capabilities file for Tauri V2
     capabilities_dir = Path.join([File.cwd!(), "src-tauri", "capabilities"])
     File.mkdir_p!(capabilities_dir)
     File.write!(Path.join([capabilities_dir, "default.json"]), capabilities_json())
+
+    # Generate the JS hook for LiveView <-> Tauri bridge
+    vendor_dir = Path.join([File.cwd!(), "assets", "vendor"])
+    File.mkdir_p!(vendor_dir)
+    File.write!(Path.join([vendor_dir, "ex_tauri.js"]), ExTauri.Hook.js_source())
+
+    Mix.shell().info("""
+
+    ExTauri installed successfully!
+
+    Next steps:
+    1. Add the hook to your LiveView JS (assets/js/app.js):
+
+        import { TauriHook } from "../vendor/ex_tauri"
+
+        let liveSocket = new LiveSocket("/live", Socket, {
+          hooks: { TauriHook },
+        })
+
+    2. Add the hook element to your layout:
+
+        <div id="tauri-bridge" phx-hook="TauriHook"></div>
+
+    3. Add ExTauri.ShutdownManager to your supervision tree
+    4. Configure a Burrito release in mix.exs
+    5. Run: mix ex_tauri.dev
+    """)
   end
 
   # Private helper functions
@@ -233,6 +268,8 @@ defmodule Mix.Tasks.ExTauri.Install do
     tauri = { version = "#{major_version}", features = [] }
     tauri-plugin-shell = "#{major_version}"
     tauri-plugin-log = "#{major_version}"
+    tauri-plugin-notification = "#{major_version}"
+    tauri-plugin-single-instance = "#{major_version}"
 
     [features]
     # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
@@ -329,8 +366,12 @@ defmodule Mix.Tasks.ExTauri.Install do
 
     fn main() {
         tauri::Builder::default()
+            .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
+                // Focus the main window when a second instance is launched
+            }))
             .plugin(tauri_plugin_shell::init())
             .plugin(tauri_plugin_log::Builder::new().build())
+            .plugin(tauri_plugin_notification::init())
             .manage(AppState {
                 sidecar_child: Mutex::new(None),
             })
@@ -431,7 +472,7 @@ defmodule Mix.Tasks.ExTauri.Install do
             use std::io::Write;
             use std::os::unix::net::UnixStream;
 
-            let socket_path = "/tmp/tauri_heartbeat_#{socket_name}.sock";
+            let socket_path = std::env::temp_dir().join("tauri_heartbeat_#{socket_name}.sock");
             let interval = Duration::from_millis(100);
 
             // Wait for socket to be ready
@@ -477,6 +518,7 @@ defmodule Mix.Tasks.ExTauri.Install do
       "permissions": [
         "shell:allow-execute",
         "shell:allow-spawn",
+        "notification:default",
         {
           "identifier": "shell:allow-execute",
           "allow": [

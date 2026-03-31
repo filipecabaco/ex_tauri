@@ -82,7 +82,8 @@ defmodule Mix.Tasks.ExTauri.Install do
     productName: ["productName"],
     externalBin: ["bundle", "externalBin"],
     identifier: ["identifier"],
-    windows: ["app", "windows"]
+    windows: ["app", "windows"],
+    security: ["app", "security"]
   }
 
   @impl true
@@ -172,6 +173,9 @@ defmodule Mix.Tasks.ExTauri.Install do
         @config_keys.identifier,
         "you.app.#{app_name |> ExTauri.Paths.sanitize_name() |> String.replace("_", "-")}"
       )
+      |> put_in(@config_keys.security, %{
+          csp: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: tauri: ws: wss:; img-src 'self' data: asset: tauri:; font-src 'self' data:"
+        })
       |> put_in(@config_keys.windows, [
         %{
           title: window_title,

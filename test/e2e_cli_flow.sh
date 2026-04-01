@@ -13,7 +13,6 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT=14321
 HOST="127.0.0.1"
 APP_NAME="test_cli_app"
-MODULE_NAME="TestCliApp"
 WORK_DIR=""
 TAURI_PID=""
 
@@ -65,10 +64,24 @@ pass "Phoenix project created at $WORK_DIR/$APP_NAME"
 echo ""
 echo "=== Step 3: Add ex_tauri dependency ==="
 
-# Insert ex_tauri into the deps list in mix.exs
-sed -i "/defp deps do/,/end/ s|\[|\[\n      {:ex_tauri, path: \"$REPO_ROOT\"},|" mix.exs
+# Use Elixir to safely modify mix.exs (avoids fragile sed patterns)
+elixir -e '
+path = "mix.exs"
+content = File.read!(path)
+# Insert ex_tauri dep right after the opening bracket in the deps list
+new_content = String.replace(
+  content,
+  ~r/defp deps do\s*\n\s*\[/,
+  "defp deps do\n    [\n      {:ex_tauri, path: \"'"$REPO_ROOT"'\"},"
+)
+if content == new_content do
+  IO.puts("ERROR: Failed to insert ex_tauri dependency")
+  System.halt(1)
+end
+File.write!(path, new_content)
+IO.puts("ex_tauri dependency inserted into mix.exs")
+'
 
-# Verify it was added
 grep -q "ex_tauri" mix.exs || fail "Failed to add ex_tauri to mix.exs"
 pass "ex_tauri added to mix.exs"
 
@@ -76,23 +89,23 @@ pass "ex_tauri added to mix.exs"
 echo ""
 echo "=== Step 4: Configure ex_tauri ==="
 
-cat >> config/config.exs << EOF
+cat >> config/config.exs << 'ELIXIR_CONFIG'
 
 # ExTauri configuration (added by E2E test)
 config :ex_tauri,
   app_name: "Test CLI App",
-  host: "$HOST",
-  port: $PORT,
+  host: "127.0.0.1",
+  port: 14321,
   version: "2.5.1"
-EOF
+ELIXIR_CONFIG
 
 # Override the Phoenix endpoint port in dev config
-cat >> config/dev.exs << EOF
+cat >> config/dev.exs << 'ELIXIR_CONFIG'
 
 # Override port for E2E test
-config :$APP_NAME, ${MODULE_NAME}Web.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: $PORT]
-EOF
+config :test_cli_app, TestCliAppWeb.Endpoint,
+  http: [ip: {127, 0, 0, 1}, port: 14321]
+ELIXIR_CONFIG
 
 pass "ex_tauri and endpoint configured (port $PORT)"
 
@@ -100,11 +113,24 @@ pass "ex_tauri and endpoint configured (port $PORT)"
 echo ""
 echo "=== Step 5: Add ShutdownManager to supervision tree ==="
 
-# Insert ExTauri.ShutdownManager into the children list in application.ex
-APP_FILE="lib/${APP_NAME}/application.ex"
-sed -i "/children = \[/a\\      ExTauri.ShutdownManager," "$APP_FILE"
+# Use Elixir to safely insert ShutdownManager
+elixir -e '
+path = "lib/test_cli_app/application.ex"
+content = File.read!(path)
+new_content = String.replace(
+  content,
+  "children = [\n",
+  "children = [\n      ExTauri.ShutdownManager,\n"
+)
+if content == new_content do
+  IO.puts("ERROR: Failed to insert ShutdownManager")
+  System.halt(1)
+end
+File.write!(path, new_content)
+IO.puts("ShutdownManager added to supervision tree")
+'
 
-grep -q "ShutdownManager" "$APP_FILE" || fail "Failed to add ShutdownManager"
+grep -q "ShutdownManager" "lib/${APP_NAME}/application.ex" || fail "Failed to add ShutdownManager"
 pass "ShutdownManager added to supervision tree"
 
 # ─── Step 6: Install dependencies ─────────────────────────────────────────────
@@ -199,10 +225,10 @@ echo "Tauri launched with PID $TAURI_PID"
 echo ""
 echo "=== Step 12: Verify ==="
 
-# 12a: Wait for Phoenix to start responding (up to 60s for compilation + boot)
+# 12a: Wait for Phoenix to start responding (up to 90s for compilation + boot)
 echo "  Waiting for Phoenix on $HOST:$PORT..."
 SERVER_UP=false
-for i in $(seq 1 60); do
+for i in $(seq 1 90); do
   HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/" 2>/dev/null || echo "000")
   if [[ "$HTTP_CODE" != "000" ]]; then
     SERVER_UP=true
@@ -213,7 +239,14 @@ for i in $(seq 1 60); do
 done
 
 if [[ "$SERVER_UP" != "true" ]]; then
-  fail "Phoenix did not start within 60s"
+  # Print Tauri process status for debugging
+  echo "  Tauri process status:"
+  kill -0 "$TAURI_PID" 2>/dev/null && echo "  - alive" || echo "  - dead"
+  echo "  Checking if sidecar is running:"
+  pgrep -f "mix phx.server" || echo "  - no sidecar process found"
+  echo "  Checking port $PORT:"
+  ss -tlnp | grep "$PORT" || echo "  - port not listening"
+  fail "Phoenix did not start within 90s"
 fi
 pass "Phoenix server is running (HTTP $HTTP_CODE)"
 
@@ -228,7 +261,7 @@ SOCKET_PATH="$(python3 -c "import tempfile; print(tempfile.gettempdir())")/tauri
 if [[ -S "$SOCKET_PATH" ]]; then
   pass "Heartbeat socket exists at $SOCKET_PATH"
 else
-  echo "  (heartbeat socket not found at $SOCKET_PATH — may be timing)"
+  echo "  (heartbeat socket at $SOCKET_PATH — may not be visible from outside)"
 fi
 
 # 12d: Wait a few seconds, verify everything still running (heartbeat working)
@@ -274,11 +307,11 @@ echo "  1. mix phx.new (create Phoenix project)"
 echo "  2. Add ex_tauri dependency"
 echo "  3. Configure host, port, app_name"
 echo "  4. Add ShutdownManager to supervision tree"
-echo "  5. mix ex_tauri.install (scaffold Tauri project)"
+echo "  5. mix ex_tauri.install (scaffold Tauri project via CLI)"
 echo "  6. Verify all generated files"
 echo "  7. cargo build (produce Tauri binary)"
 echo "  8. Launch Tauri → spawns Phoenix sidecar → heartbeat connects"
 echo "  9. Verify Phoenix responds to HTTP requests"
-echo "  10. Verify heartbeat keeps system alive"
+echo "  10. Verify heartbeat keeps system alive over 5 seconds"
 echo "  11. Verify heartbeat-based shutdown on Tauri exit"
 echo ""

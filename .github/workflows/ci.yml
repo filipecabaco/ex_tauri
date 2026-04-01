@@ -83,7 +83,9 @@ jobs:
             patchelf \
             libssl-dev \
             libgtk-3-dev \
-            libayatana-appindicator3-dev
+            libayatana-appindicator3-dev \
+            xvfb \
+            python3
 
       - name: Cache Mix deps
         uses: actions/cache@v4
@@ -106,4 +108,4 @@ jobs:
 
       - name: Run E2E tests
         run: mix test --include e2e --trace
-        timeout-minutes: 15
+        timeout-minutes: 20

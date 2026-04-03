@@ -175,6 +175,16 @@ pass "All generated files verified"
 # ─── Step 9: Build Tauri binary ──────────────────────────────────────────────
 echo ""
 echo "=== Step 9: Build Tauri binary ==="
+
+# Debug: show generated files before building
+echo "  --- Generated Cargo.toml ---"
+cat src-tauri/Cargo.toml
+echo "  --- Generated main.rs (first 30 lines) ---"
+head -30 src-tauri/src/main.rs
+echo "  --- Generated tauri.conf.json ---"
+cat src-tauri/tauri.conf.json
+echo "  ---"
+
 cd src-tauri
 cargo build 2>&1
 cd ..

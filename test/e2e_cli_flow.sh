@@ -196,6 +196,8 @@ SIDECAR_PATH="burrito_out/desktop-$TRIPLE"
 cat > "$SIDECAR_PATH" << SIDECAR
 #!/bin/sh
 export SECRET_KEY_BASE="$SECRET"
+export PHX_SERVER=true
+export PORT=$PORT
 exec "$RELEASE_BIN" start
 SIDECAR
 chmod +x "$SIDECAR_PATH"

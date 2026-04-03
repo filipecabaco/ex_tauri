@@ -146,24 +146,6 @@ defmodule Mix.Tasks.ExTauri.Install do
       _ -> raise "tauri unable to install. exited with status #{res}"
     end
 
-    # Add plugins for Tauri V2 (run BEFORE overwriting files so `tauri add`
-    # modifies the scaffolded files, not our custom ones)
-    {_, 0} =
-      Path.join([installation_path, "bin", "cargo-tauri"])
-      |> System.cmd(["add", "log"], opts)
-
-    {_, 0} =
-      Path.join([installation_path, "bin", "cargo-tauri"])
-      |> System.cmd(["add", "shell"], opts)
-
-    {_, 0} =
-      Path.join([installation_path, "bin", "cargo-tauri"])
-      |> System.cmd(["add", "notification"], opts)
-
-    {_, 0} =
-      Path.join([installation_path, "bin", "cargo-tauri"])
-      |> System.cmd(["add", "single-instance"], opts)
-
     # Override Cargo.toml to use app_name and set proper crates so they are not dependent on folders
     path = Path.join([File.cwd!(), "src-tauri", "Cargo.toml"])
     File.write!(path, cargo_toml(app_name, version))

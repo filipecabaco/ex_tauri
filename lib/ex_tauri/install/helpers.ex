@@ -20,11 +20,21 @@ defmodule ExTauri.Install.Helpers do
   Installs the Tauri CLI via cargo and initializes the Tauri project structure.
   """
   def setup_tauri_project(args \\ []) do
+    validate_prerequisites!()
+
     app_name = Application.get_env(:ex_tauri, :app_name, "Phoenix Application")
     window_title = Application.get_env(:ex_tauri, :window_title, app_name)
     scheme = Application.get_env(:ex_tauri, :scheme) || "http"
-    host = Application.get_env(:ex_tauri, :host) || raise "Expected :host to be configured"
-    port = Application.get_env(:ex_tauri, :port) || raise "Expected :port to be configured"
+    host = Application.get_env(:ex_tauri, :host) || raise """
+    :host is not configured. Add to your config/config.exs:
+
+        config :ex_tauri, host: "localhost"
+    """
+    port = Application.get_env(:ex_tauri, :port) || raise """
+    :port is not configured. Add to your config/config.exs:
+
+        config :ex_tauri, port: 4000
+    """
     version = Application.get_env(:ex_tauri, :version) || ExTauri.latest_version()
     fullscreen = Application.get_env(:ex_tauri, :fullscreen, false)
     height = Application.get_env(:ex_tauri, :height, 600)
@@ -455,5 +465,27 @@ defmodule ExTauri.Install.Helpers do
   def build_cli_install_args(tauri_version) do
     cli_version = extract_cli_version(tauri_version)
     ["install", "tauri-cli", "--version", "^#{cli_version}", "--root", "."]
+  end
+
+  defp validate_prerequisites! do
+    unless System.find_executable("cargo") do
+      raise """
+      Rust/Cargo is not installed or not in your PATH.
+
+      Install Rust: https://www.rust-lang.org/tools/install
+
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+      Then restart your terminal and try again.
+      """
+    end
+
+    unless System.find_executable("rustc") do
+      raise """
+      rustc is not installed or not in your PATH.
+
+      Install Rust: https://www.rust-lang.org/tools/install
+      """
+    end
   end
 end

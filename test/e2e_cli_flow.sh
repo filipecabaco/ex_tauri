@@ -184,9 +184,31 @@ grep -q "ALLOWED_COMMANDS" assets/vendor/ex_tauri.js || fail "JS hook missing AL
 
 pass "All generated files verified"
 
-# ─── Step 9: Build Tauri binary ──────────────────────────────────────────────
+# ─── Step 9: Create sidecar placeholder (needed before cargo build) ─────────
 echo ""
-echo "=== Step 9: Build Tauri binary ==="
+echo "=== Step 9: Create sidecar (real Phoenix server) ==="
+
+TRIPLE=$(rustc -Vv | grep host | awk '{print $2}')
+PROJECT_DIR="$(pwd)"
+
+# tauri_build::build() validates that externalBin paths exist at compile time,
+# so the sidecar must exist BEFORE cargo build runs.
+# Tauri resolves "../burrito_out/desktop" relative to src-tauri/ and appends the triple.
+mkdir -p burrito_out
+SIDECAR_PATH="burrito_out/desktop-$TRIPLE"
+
+cat > "$SIDECAR_PATH" << SIDECAR
+#!/usr/bin/env bash
+cd "$PROJECT_DIR"
+exec elixir --no-halt -S mix phx.server
+SIDECAR
+chmod +x "$SIDECAR_PATH"
+
+pass "Sidecar created at $SIDECAR_PATH (starts mix phx.server)"
+
+# ─── Step 10: Build Tauri binary ─────────────────────────────────────────────
+echo ""
+echo "=== Step 10: Build Tauri binary ==="
 
 # Debug: show generated files before building
 echo "  --- Generated Cargo.toml ---"
@@ -210,27 +232,6 @@ BINARY="$CARGO_TARGET_DIR/debug/$CARGO_NAME"
 test -f "$BINARY" || fail "Binary not found at $BINARY"
 test -x "$BINARY" || fail "Binary not executable"
 pass "Tauri binary built: $BINARY"
-
-# ─── Step 10: Create sidecar that starts the real Phoenix server ─────────────
-echo ""
-echo "=== Step 10: Create sidecar (real Phoenix server) ==="
-
-TRIPLE=$(rustc -Vv | grep host | awk '{print $2}')
-PROJECT_DIR="$(pwd)"
-
-# Tauri debug builds resolve externalBin relative to the src-tauri dir,
-# so "../burrito_out/desktop" resolves to "$PROJECT_DIR/burrito_out/desktop-$TRIPLE"
-mkdir -p burrito_out
-SIDECAR_PATH="burrito_out/desktop-$TRIPLE"
-
-cat > "$SIDECAR_PATH" << SIDECAR
-#!/usr/bin/env bash
-cd "$PROJECT_DIR"
-exec elixir --no-halt -S mix phx.server
-SIDECAR
-chmod +x "$SIDECAR_PATH"
-
-pass "Sidecar created at $SIDECAR_PATH (starts mix phx.server)"
 
 # ─── Step 11: Launch Tauri app under xvfb ────────────────────────────────────
 echo ""
@@ -334,9 +335,10 @@ echo "  3. Configure host, port, app_name"
 echo "  4. Add ShutdownManager to supervision tree"
 echo "  5. mix ex_tauri.install (scaffold Tauri project via CLI)"
 echo "  6. Verify all generated files"
-echo "  7. cargo build (produce Tauri binary)"
-echo "  8. Launch Tauri → spawns Phoenix sidecar → heartbeat connects"
-echo "  9. Verify Phoenix responds to HTTP requests"
-echo "  10. Verify heartbeat keeps system alive over 5 seconds"
-echo "  11. Verify heartbeat-based shutdown on Tauri exit"
+echo "  7. Create sidecar script (needed before cargo build)"
+echo "  8. cargo build (produce Tauri binary)"
+echo "  9. Launch Tauri → spawns Phoenix sidecar → heartbeat connects"
+echo "  10. Verify Phoenix responds to HTTP requests"
+echo "  11. Verify heartbeat keeps system alive over 5 seconds"
+echo "  12. Verify heartbeat-based shutdown on Tauri exit"
 echo ""

@@ -112,7 +112,7 @@ IO.puts("mix.exs updated with ex_tauri dep and :desktop release")
 '
 
 grep -q "ex_tauri" mix.exs || fail "Failed to add ex_tauri to mix.exs"
-grep -q ":desktop" mix.exs || fail "Failed to add :desktop release to mix.exs"
+grep -q "desktop:" mix.exs || fail "Failed to add :desktop release to mix.exs"
 pass "ex_tauri + :desktop release added to mix.exs"
 
 # ─── Step 3: Configure ex_tauri ─────────────────────────────────────────────

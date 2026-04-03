@@ -44,9 +44,9 @@ defmodule ExTauri.E2ETest do
 
       socket_name = ExTauri.Paths.sanitize_name(@app_name)
 
-      cargo_toml = Mix.Tasks.ExTauri.Install.cargo_toml(@app_name, @tauri_version)
-      main_rs = Mix.Tasks.ExTauri.Install.main_src(@host, @port, socket_name)
-      capabilities = Mix.Tasks.ExTauri.Install.capabilities_json()
+      cargo_toml = ExTauri.Install.Helpers.cargo_toml(@app_name, @tauri_version)
+      main_rs = ExTauri.Install.Helpers.main_src(@host, @port, socket_name)
+      capabilities = ExTauri.Install.Helpers.capabilities_json()
 
       build_rs = """
       fn main() {
@@ -113,7 +113,7 @@ defmodule ExTauri.E2ETest do
     end
 
     test "generated Cargo.toml is valid TOML", %{tmp_dir: tmp_dir} do
-      cargo_toml = Mix.Tasks.ExTauri.Install.cargo_toml(@app_name, @tauri_version)
+      cargo_toml = ExTauri.Install.Helpers.cargo_toml(@app_name, @tauri_version)
       path = Path.join(tmp_dir, "Cargo.toml")
       File.write!(path, cargo_toml)
 
@@ -126,7 +126,7 @@ defmodule ExTauri.E2ETest do
 
     test "generated main.rs contains all required components" do
       socket_name = ExTauri.Paths.sanitize_name(@app_name)
-      main_rs = Mix.Tasks.ExTauri.Install.main_src(@host, @port, socket_name)
+      main_rs = ExTauri.Install.Helpers.main_src(@host, @port, socket_name)
 
       assert main_rs =~ "fn main()"
       assert main_rs =~ "fn start_server"
@@ -145,7 +145,7 @@ defmodule ExTauri.E2ETest do
     end
 
     test "generated capabilities.json is valid JSON with required permissions" do
-      json_str = Mix.Tasks.ExTauri.Install.capabilities_json()
+      json_str = ExTauri.Install.Helpers.capabilities_json()
       {:ok, parsed} = Jason.decode(json_str)
 
       assert parsed["identifier"] == "default"
@@ -169,7 +169,7 @@ defmodule ExTauri.E2ETest do
   describe "install task file generation" do
     test "generates correct files for a project with spaces in name" do
       app_name = "My Test App"
-      cargo_toml = Mix.Tasks.ExTauri.Install.cargo_toml(app_name, @tauri_version)
+      cargo_toml = ExTauri.Install.Helpers.cargo_toml(app_name, @tauri_version)
 
       assert cargo_toml =~ ~s(name = "my_test_app")
       assert cargo_toml =~ ~s(default-run = "my_test_app")
@@ -177,7 +177,7 @@ defmodule ExTauri.E2ETest do
 
     test "socket name handles special characters" do
       socket_name = "my_test_app"
-      main_rs = Mix.Tasks.ExTauri.Install.main_src(@host, @port, socket_name)
+      main_rs = ExTauri.Install.Helpers.main_src(@host, @port, socket_name)
 
       assert main_rs =~ "tauri_heartbeat_my_test_app.sock"
     end

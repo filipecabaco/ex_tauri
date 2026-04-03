@@ -123,23 +123,23 @@ defmodule ExTauri do
   # Test helpers — expose code generation functions for integration tests
   @doc false
   def __test_cargo_toml__(app_name, tauri_version),
-    do: Mix.Tasks.ExTauri.Install.cargo_toml(app_name, tauri_version)
+    do: ExTauri.Install.Helpers.cargo_toml(app_name, tauri_version)
 
   @doc false
   def __test_main_src__(host, port),
-    do: Mix.Tasks.ExTauri.Install.main_src(host, port, "test_app")
+    do: ExTauri.Install.Helpers.main_src(host, port, "test_app")
 
   @doc false
   def __test_capabilities_json__(),
-    do: Mix.Tasks.ExTauri.Install.capabilities_json()
+    do: ExTauri.Install.Helpers.capabilities_json()
 
   @doc false
   def __test_extract_cli_version__(tauri_version),
-    do: Mix.Tasks.ExTauri.Install.extract_cli_version(tauri_version)
+    do: ExTauri.Install.Helpers.extract_cli_version(tauri_version)
 
   @doc false
   def __test_build_cli_install_args__(tauri_version),
-    do: Mix.Tasks.ExTauri.Install.build_cli_install_args(tauri_version)
+    do: ExTauri.Install.Helpers.build_cli_install_args(tauri_version)
 
   # Private functions
 

@@ -26,7 +26,7 @@ defmodule ExTauri.MixProject do
     [
       {:ex_doc, ">= 0.0.0", only: :docs},
       {:burrito, "~> 1.5"},
-      {:igniter, "~> 0.7", optional: true},
+      {:igniter, "~> 0.7"},
       {:jason, "~> 1.4.0"}
     ]
   end

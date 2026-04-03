@@ -69,30 +69,29 @@ mix phx.new "$APP_NAME" \
 cd "$APP_NAME"
 pass "Phoenix project created at $WORK_DIR/$APP_NAME"
 
-# ─── Step 2: Add ex_tauri + igniter dependencies ────────────────────────────
+# ─── Step 2: Add ex_tauri dependency ─────────────────────────────────────────
 echo ""
-echo "=== Step 2: Add dependencies ==="
+echo "=== Step 2: Add ex_tauri dependency ==="
 
-# Add ex_tauri and igniter to deps (igniter enables automatic project setup)
+# Igniter is a required dep of ex_tauri, so it's pulled in transitively
 elixir -e '
 path = "mix.exs"
 content = File.read!(path)
 new_content = String.replace(
   content,
   ~r/defp deps do\s*\n\s*\[/,
-  "defp deps do\n    [\n      {:ex_tauri, path: \"'"$REPO_ROOT"'\"},\n      {:igniter, \"~> 0.7\"},"
+  "defp deps do\n    [\n      {:ex_tauri, path: \"'"$REPO_ROOT"'\"},"
 )
 if content == new_content do
-  IO.puts("ERROR: Failed to insert dependencies")
+  IO.puts("ERROR: Failed to insert ex_tauri dependency")
   System.halt(1)
 end
 File.write!(path, new_content)
-IO.puts("Dependencies added to mix.exs")
+IO.puts("ex_tauri dependency added to mix.exs")
 '
 
 grep -q "ex_tauri" mix.exs || fail "Failed to add ex_tauri to mix.exs"
-grep -q "igniter" mix.exs || fail "Failed to add igniter to mix.exs"
-pass "ex_tauri + igniter added to mix.exs"
+pass "ex_tauri added to mix.exs"
 
 # ─── Step 3: Configure ex_tauri ─────────────────────────────────────────────
 echo ""
@@ -304,7 +303,7 @@ echo "========================================="
 echo ""
 echo "Verified developer journey:"
 echo "  1. mix phx.new (create Phoenix project)"
-echo "  2. Add ex_tauri + igniter dependencies"
+echo "  2. Add ex_tauri dependency (igniter comes transitively)"
 echo "  3. Configure ex_tauri (app_name, host, port)"
 echo "  4. mix deps.get + mix compile"
 echo "  5. mix ex_tauri.install (Igniter: supervision tree + releases + Tauri)"

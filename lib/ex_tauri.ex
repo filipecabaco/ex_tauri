@@ -120,27 +120,6 @@ defmodule ExTauri do
     run_tauri_cli(args)
   end
 
-  # Test helpers — expose code generation functions for integration tests
-  @doc false
-  def __test_cargo_toml__(app_name, tauri_version),
-    do: ExTauri.Install.Helpers.cargo_toml(app_name, tauri_version)
-
-  @doc false
-  def __test_main_src__(host, port),
-    do: ExTauri.Install.Helpers.main_src(host, port, "test_app")
-
-  @doc false
-  def __test_capabilities_json__(),
-    do: ExTauri.Install.Helpers.capabilities_json()
-
-  @doc false
-  def __test_extract_cli_version__(tauri_version),
-    do: ExTauri.Install.Helpers.extract_cli_version(tauri_version)
-
-  @doc false
-  def __test_build_cli_install_args__(tauri_version),
-    do: ExTauri.Install.Helpers.build_cli_install_args(tauri_version)
-
   # Private functions
 
   defp run_tauri_cli(args) do
@@ -168,19 +147,24 @@ defmodule ExTauri do
   end
 
   defp wrap() do
-    File.rm_rf!(Path.join([Path.expand("~"), "Library", "Application Support", ".burrito"]))
+    # Clear Burrito's cached ERTS to force a fresh download (macOS-specific path)
+    burrito_cache = Path.join([Path.expand("~"), "Library", "Application Support", ".burrito"])
+
+    if File.dir?(burrito_cache) do
+      File.rm_rf!(burrito_cache)
+    end
 
     get_in(Mix.Project.config(), [:releases, :desktop]) ||
       raise "expected a burrito release configured for the app :desktop in your mix.exs"
 
-    # Run release with MIX_ENV=prod at shell level to avoid including dev config with regexes
-    # Dev config (like live_reload patterns) contains regexes that can't be serialized
-    # Must run as separate process so dependencies are loaded correctly for prod environment
+    # Run release with MIX_ENV=prod at shell level to avoid including dev config with regexes.
+    # Dev config (like live_reload patterns) contains regexes that can't be serialized.
+    # Must run as separate process so dependencies are loaded correctly for prod environment.
     case System.cmd("mix", ["release", "desktop", "--overwrite"],
-      env: [{"MIX_ENV", "prod"}],
-      into: IO.stream(:stdio, :line),
-      stderr_to_stdout: true
-    ) do
+           env: [{"MIX_ENV", "prod"}],
+           into: IO.stream(:stdio, :line),
+           stderr_to_stdout: true
+         ) do
       {_, 0} ->
         :ok
 
@@ -195,11 +179,15 @@ defmodule ExTauri do
         """
     end
 
+    # Burrito names output with underscores (desktop_x86_64-...) but Tauri expects
+    # hyphens (desktop-x86_64-...). Get the host triple from rustc and rename.
+    {rustc_output, 0} = System.cmd("rustc", ["-Vv"])
+
     triplet =
-      System.cmd("rustc", ["-Vv"])
-      |> elem(0)
-      |> then(&Regex.run(~r/host: (.*)/, &1))
-      |> Enum.at(1)
+      case Regex.run(~r/host: (.+)/, rustc_output) do
+        [_, host] -> String.trim(host)
+        _ -> raise "Could not determine host triple from `rustc -Vv`"
+      end
 
     File.cp!(
       "burrito_out/desktop_#{triplet}",

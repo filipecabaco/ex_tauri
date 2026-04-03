@@ -104,6 +104,8 @@ defmodule Mix.Tasks.ExTauri.Install do
       [:host],
       "localhost"
     )
+    # {:code, ...} emits `4000` as an integer literal in the config file,
+    # rather than a quoted string "4000"
     |> Igniter.Project.Config.configure_new(
       "config.exs",
       :ex_tauri,

@@ -4,8 +4,8 @@ defmodule ExTauri.ShutdownManager do
 
   This GenServer implements a heartbeat-based mechanism to detect when the Tauri
   frontend exits. The Rust frontend sends heartbeat signals every 100ms via Unix
-  domain socket, and if the Phoenix sidecar doesn't receive a heartbeat within 300ms,
-  it initiates graceful shutdown.
+  domain socket, and if the Phoenix sidecar doesn't receive a heartbeat within
+  1500ms (configurable), it initiates graceful shutdown.
 
   ## Usage
 
@@ -155,8 +155,7 @@ defmodule ExTauri.ShutdownManager do
 
   defp cleanup_socket(socket_path) do
     File.rm(socket_path)
-  rescue
-    _ -> :ok
+    :ok
   end
 
   defp accept_loop(listen_socket) do
@@ -180,20 +179,10 @@ defmodule ExTauri.ShutdownManager do
   end
 
   defp handle_client(client_socket) do
-    do_handle_client(client_socket)
-  rescue
-    e ->
-      Logger.debug("[ExTauri.ShutdownManager] Client error: #{inspect(e)}")
-      :gen_tcp.close(client_socket)
-  end
-
-  defp do_handle_client(client_socket) do
     case :gen_tcp.recv(client_socket, 0) do
       {:ok, _data} ->
-        # Received heartbeat, notify the GenServer
         GenServer.cast(__MODULE__, :heartbeat)
-        # Continue receiving
-        do_handle_client(client_socket)
+        handle_client(client_socket)
 
       {:error, :closed} ->
         :gen_tcp.close(client_socket)

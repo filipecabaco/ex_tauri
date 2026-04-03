@@ -1,20 +1,6 @@
 defmodule ExTauri.Install.Helpers do
   @moduledoc false
   # Shared helper functions for Tauri project setup.
-  # Used by both the Igniter-based and fallback install tasks.
-
-  @arg_names %{
-    dev_url: "--dev-url",
-    frontend_dist: "--frontend-dist"
-  }
-
-  @config_keys %{
-    productName: ["productName"],
-    externalBin: ["bundle", "externalBin"],
-    identifier: ["identifier"],
-    windows: ["app", "windows"],
-    security: ["app", "security"]
-  }
 
   @doc """
   Installs the Tauri CLI via cargo and initializes the Tauri project structure.
@@ -22,133 +8,168 @@ defmodule ExTauri.Install.Helpers do
   def setup_tauri_project(args \\ []) do
     validate_prerequisites!()
 
+    config = read_config!()
+
+    install_tauri_cli(config.version, config.installation_path)
+    init_tauri_project(config, args)
+    generate_rust_files(config)
+    configure_tauri_json(config)
+    generate_capabilities()
+    generate_js_hook()
+    inject_js_hook()
+    inject_layout_hook()
+
+    :ok
+  end
+
+  # ── Config reading ─────────────────────────────────────────────────────────
+
+  defp read_config! do
     app_name = Application.get_env(:ex_tauri, :app_name, "Phoenix Application")
-    window_title = Application.get_env(:ex_tauri, :window_title, app_name)
-    scheme = Application.get_env(:ex_tauri, :scheme) || "http"
-    host = Application.get_env(:ex_tauri, :host) || raise """
-    :host is not configured. Add to your config/config.exs:
 
-        config :ex_tauri, host: "localhost"
-    """
-    port = Application.get_env(:ex_tauri, :port) || raise """
-    :port is not configured. Add to your config/config.exs:
+    host =
+      Application.get_env(:ex_tauri, :host) ||
+        raise """
+        :host is not configured. Add to your config/config.exs:
 
-        config :ex_tauri, port: 4000
-    """
-    version = Application.get_env(:ex_tauri, :version) || ExTauri.latest_version()
-    fullscreen = Application.get_env(:ex_tauri, :fullscreen, false)
-    height = Application.get_env(:ex_tauri, :height, 600)
-    width = Application.get_env(:ex_tauri, :width, 800)
-    resize = Application.get_env(:ex_tauri, :resize, true)
-    installation_path = ExTauri.installation_path()
+            config :ex_tauri, host: "localhost"
+        """
+
+    port =
+      Application.get_env(:ex_tauri, :port) ||
+        raise """
+        :port is not configured. Add to your config/config.exs:
+
+            config :ex_tauri, port: 4000
+        """
+
+    %{
+      app_name: app_name,
+      sanitized_name: ExTauri.Paths.sanitize_name(app_name),
+      window_title: Application.get_env(:ex_tauri, :window_title, app_name),
+      scheme: Application.get_env(:ex_tauri, :scheme) || "http",
+      host: host,
+      port: port,
+      version: Application.get_env(:ex_tauri, :version) || ExTauri.latest_version(),
+      fullscreen: Application.get_env(:ex_tauri, :fullscreen, false),
+      height: Application.get_env(:ex_tauri, :height, 600),
+      width: Application.get_env(:ex_tauri, :width, 800),
+      resize: Application.get_env(:ex_tauri, :resize, true),
+      installation_path: ExTauri.installation_path()
+    }
+  end
+
+  # ── Tauri CLI installation ─────────────────────────────────────────────────
+
+  defp install_tauri_cli(version, installation_path) do
     File.mkdir_p!(installation_path)
 
-    opts = [
+    cmd_opts = [
       cd: installation_path,
       into: IO.stream(:stdio, :line),
       stderr_to_stdout: true
     ]
 
-    # Install tauri-cli using semver range to avoid version mismatch errors
-    System.cmd("cargo", build_cli_install_args(version), opts)
+    System.cmd("cargo", build_cli_install_args(version), cmd_opts)
+  end
+
+  defp init_tauri_project(config, extra_args) do
+    dev_url = "#{config.scheme}://#{config.host}:#{config.port}"
 
     tauri_args =
       [
         "init",
-        "--app-name",
-        ExTauri.Paths.sanitize_name(app_name),
-        "--window-title",
-        window_title,
-        @arg_names.dev_url,
-        "#{scheme}://#{host}:#{port}",
-        @arg_names.frontend_dist,
-        "#{scheme}://#{host}:#{port}",
-        "--directory",
-        File.cwd!(),
-        "--tauri-path",
-        File.cwd!(),
-        "--before-dev-command",
-        "",
-        "--before-build-command",
-        ""
-      ] ++ args
+        "--app-name", config.sanitized_name,
+        "--window-title", config.window_title,
+        "--dev-url", dev_url,
+        "--frontend-dist", dev_url,
+        "--directory", File.cwd!(),
+        "--tauri-path", File.cwd!(),
+        "--before-dev-command", "",
+        "--before-build-command", ""
+      ] ++ extra_args
 
-    opts = [
-      into: IO.stream(:stdio, :line),
-      stderr_to_stdout: true
-    ]
+    cmd_opts = [into: IO.stream(:stdio, :line), stderr_to_stdout: true]
 
-    res =
-      Path.join([installation_path, "bin", "cargo-tauri"])
-      |> System.cmd(tauri_args, opts)
-      |> elem(1)
+    {_output, exit_code} =
+      Path.join([config.installation_path, "bin", "cargo-tauri"])
+      |> System.cmd(tauri_args, cmd_opts)
 
-    case res do
-      0 -> :ok
-      _ -> raise "tauri unable to install. exited with status #{res}"
+    unless exit_code == 0 do
+      raise "tauri unable to install. exited with status #{exit_code}"
     end
+  end
 
-    # Override Cargo.toml to use app_name and set proper crates
-    path = Path.join([File.cwd!(), "src-tauri", "Cargo.toml"])
-    File.write!(path, cargo_toml(app_name, version))
+  # ── Rust file generation ───────────────────────────────────────────────────
 
-    # Override main.rs to set proper startup sequence
-    path = Path.join([File.cwd!(), "src-tauri", "src", "main.rs"])
-    socket_name = ExTauri.Paths.sanitize_name(app_name)
-    File.write!(path, main_src(host, port, socket_name))
+  defp generate_rust_files(config) do
+    src_tauri = Path.join(File.cwd!(), "src-tauri")
 
-    # TODO remove this when possible, for some reason it's failing at the moment
-    File.cp!(
-      Path.join([File.cwd!(), "src-tauri", "build.rs"]),
-      Path.join([File.cwd!(), "src-tauri", "src", "build.rs"])
+    File.write!(
+      Path.join(src_tauri, "Cargo.toml"),
+      cargo_toml(config.app_name, config.version)
     )
 
-    # Add side car and required configuration to tauri.conf.json
-    Path.join([File.cwd!(), "src-tauri", "tauri.conf.json"])
+    File.write!(
+      Path.join([src_tauri, "src", "main.rs"]),
+      main_src(config.host, config.port, config.sanitized_name)
+    )
+
+    # Workaround: tauri init places build.rs in src-tauri/ but it needs to be
+    # in src-tauri/src/ for the build to find it. See Cargo.toml build = "src/build.rs"
+    File.cp!(
+      Path.join(src_tauri, "build.rs"),
+      Path.join([src_tauri, "src", "build.rs"])
+    )
+  end
+
+  # ── Tauri JSON configuration ───────────────────────────────────────────────
+
+  defp configure_tauri_json(config) do
+    conf_path = Path.join([File.cwd!(), "src-tauri", "tauri.conf.json"])
+    identifier = config.sanitized_name |> String.replace("_", "-")
+
+    conf_path
     |> File.read!()
     |> Jason.decode!()
-    |> then(fn content ->
-      content
-      |> put_in(@config_keys.productName, app_name)
-      |> put_in(@config_keys.externalBin, ["../burrito_out/desktop"])
-      |> put_in(
-        @config_keys.identifier,
-        "you.app.#{app_name |> ExTauri.Paths.sanitize_name() |> String.replace("_", "-")}"
-      )
-      |> put_in(@config_keys.security, %{
-        csp:
-          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: tauri: ws: wss:; img-src 'self' data: asset: tauri:; font-src 'self' data:"
-      })
-      |> put_in(@config_keys.windows, [
-        %{
-          title: window_title,
-          fullscreen: fullscreen,
-          width: width,
-          height: height,
-          resizable: resize
-        }
-      ])
-    end)
+    |> Map.merge(%{
+      "productName" => config.app_name,
+      "identifier" => "you.app.#{identifier}"
+    })
+    |> put_in(["bundle", "externalBin"], ["../burrito_out/desktop"])
+    |> put_in(["app", "security"], %{
+      "csp" =>
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; " <>
+          "style-src 'self' 'unsafe-inline'; " <>
+          "connect-src 'self' ipc: tauri: ws: wss:; " <>
+          "img-src 'self' data: asset: tauri:; " <>
+          "font-src 'self' data:"
+    })
+    |> put_in(["app", "windows"], [
+      %{
+        title: config.window_title,
+        fullscreen: config.fullscreen,
+        width: config.width,
+        height: config.height,
+        resizable: config.resize
+      }
+    ])
     |> Jason.encode!(pretty: true)
-    |> then(&File.write!(Path.join([File.cwd!(), "src-tauri", "tauri.conf.json"]), &1))
+    |> then(&File.write!(conf_path, &1))
+  end
 
-    # Create capabilities file for Tauri V2
+  # ── Capabilities and JS hook generation ────────────────────────────────────
+
+  defp generate_capabilities do
     capabilities_dir = Path.join([File.cwd!(), "src-tauri", "capabilities"])
     File.mkdir_p!(capabilities_dir)
-    File.write!(Path.join([capabilities_dir, "default.json"]), capabilities_json())
+    File.write!(Path.join(capabilities_dir, "default.json"), capabilities_json())
+  end
 
-    # Generate the JS hook for LiveView <-> Tauri bridge
+  defp generate_js_hook do
     vendor_dir = Path.join([File.cwd!(), "assets", "vendor"])
     File.mkdir_p!(vendor_dir)
-    File.write!(Path.join([vendor_dir, "ex_tauri.js"]), ExTauri.Hook.js_source())
-
-    # Auto-inject hook import and registration into app.js
-    inject_js_hook()
-
-    # Auto-inject hook element into root layout
-    inject_layout_hook()
-
-    :ok
+    File.write!(Path.join(vendor_dir, "ex_tauri.js"), ExTauri.Hook.js_source())
   end
 
   # ── JS and layout auto-injection ───────────────────────────────────────────
@@ -163,8 +184,11 @@ defmodule ExTauri.Install.Helpers do
       if String.contains?(content, "TauriHook") do
         Mix.shell().info("TauriHook already present in app.js, skipping injection")
       else
-        content = inject_tauri_import(content)
-        content = inject_tauri_hooks(content)
+        content =
+          content
+          |> inject_tauri_import()
+          |> inject_tauri_hooks()
+
         File.write!(app_js_path, content)
         Mix.shell().info("Injected TauriHook into assets/js/app.js")
       end
@@ -185,14 +209,12 @@ defmodule ExTauri.Install.Helpers do
   defp inject_tauri_import(content) do
     import_line = ~s|import { TauriHook } from "../vendor/ex_tauri"\n|
 
-    # Insert after the last existing import statement
     case Regex.scan(~r/^import .+$/m, content, return: :index) do
       [] ->
-        # No imports found, prepend
         import_line <> content
 
       matches ->
-        {last_pos, last_len} = List.last(matches) |> List.first()
+        {last_pos, last_len} = matches |> List.last() |> List.first()
         insert_at = last_pos + last_len
 
         String.slice(content, 0, insert_at) <>
@@ -203,11 +225,9 @@ defmodule ExTauri.Install.Helpers do
 
   defp inject_tauri_hooks(content) do
     cond do
-      # Case 1: hooks object already exists — add TauriHook to it
       content =~ ~r/hooks:\s*\{/ ->
         Regex.replace(~r/(hooks:\s*\{)/, content, "\\1 TauriHook,", global: false)
 
-      # Case 2: LiveSocket constructor with options object — add hooks key
       content =~ ~r/new LiveSocket\([^)]*\{/ ->
         Regex.replace(
           ~r/(new LiveSocket\([^{]*\{)/,
@@ -216,7 +236,6 @@ defmodule ExTauri.Install.Helpers do
           global: false
         )
 
-      # Case 3: Can't find pattern — leave a comment for the user
       true ->
         Mix.shell().info("""
         Could not auto-register TauriHook in LiveSocket.
@@ -224,62 +243,67 @@ defmodule ExTauri.Install.Helpers do
 
             hooks: { TauriHook },
         """)
+
         content
     end
   end
 
   @doc false
   def inject_layout_hook do
-    # Try common root layout paths
-    layout_paths = [
+    layout_patterns = [
       Path.join([File.cwd!(), "lib", "*_web", "components", "layouts", "root.html.heex"]),
       Path.join([File.cwd!(), "lib", "*_web", "templates", "layout", "root.html.heex"])
     ]
 
     layout_path =
-      Enum.find_value(layout_paths, fn pattern ->
+      Enum.find_value(layout_patterns, fn pattern ->
         case Path.wildcard(pattern) do
           [path | _] -> path
           [] -> nil
         end
       end)
 
-    if layout_path do
-      content = File.read!(layout_path)
+    case layout_path do
+      nil ->
+        Mix.shell().info("""
+        Could not find root layout template — skipping hook element injection.
+        Add manually to your root.html.heex:
 
-      if String.contains?(content, "tauri-bridge") do
-        Mix.shell().info("tauri-bridge element already present in root layout, skipping")
-      else
-        # Insert after <body> tag
-        case Regex.run(~r/<body[^>]*>/, content, return: :index) do
-          [{pos, len}] ->
-            insert_at = pos + len
-            hook_element = "\n    <div id=\"tauri-bridge\" phx-hook=\"TauriHook\"></div>"
+            <div id="tauri-bridge" phx-hook="TauriHook"></div>
+        """)
 
-            new_content =
-              String.slice(content, 0, insert_at) <>
-                hook_element <>
-                String.slice(content, insert_at..-1//1)
+      path ->
+        inject_layout_hook_into(path)
+    end
+  end
 
-            File.write!(layout_path, new_content)
-            Mix.shell().info("Injected tauri-bridge element into #{Path.relative_to_cwd(layout_path)}")
+  defp inject_layout_hook_into(path) do
+    content = File.read!(path)
 
-          _ ->
-            Mix.shell().info("""
-            Could not find <body> tag in root layout.
-            Add manually to your root layout:
-
-                <div id="tauri-bridge" phx-hook="TauriHook"></div>
-            """)
-        end
-      end
+    if String.contains?(content, "tauri-bridge") do
+      Mix.shell().info("tauri-bridge element already present in root layout, skipping")
     else
-      Mix.shell().info("""
-      Could not find root layout template — skipping hook element injection.
-      Add manually to your root.html.heex:
+      case Regex.run(~r/<body[^>]*>/, content, return: :index) do
+        [{pos, len}] ->
+          insert_at = pos + len
+          hook_element = "\n    <div id=\"tauri-bridge\" phx-hook=\"TauriHook\"></div>"
 
-          <div id="tauri-bridge" phx-hook="TauriHook"></div>
-      """)
+          new_content =
+            String.slice(content, 0, insert_at) <>
+              hook_element <>
+              String.slice(content, insert_at..-1//1)
+
+          File.write!(path, new_content)
+          Mix.shell().info("Injected tauri-bridge element into #{Path.relative_to_cwd(path)}")
+
+        _ ->
+          Mix.shell().info("""
+          Could not find <body> tag in root layout.
+          Add manually to your root layout:
+
+              <div id="tauri-bridge" phx-hook="TauriHook"></div>
+          """)
+      end
     end
   end
 
@@ -287,35 +311,30 @@ defmodule ExTauri.Install.Helpers do
 
   @doc false
   def cargo_toml(app_name, tauri_version) do
-    app_name = ExTauri.Paths.sanitize_name(app_name)
-
-    major_version =
-      case Version.parse(String.replace(tauri_version, ~r/^[^\d]+/, "")) do
-        {:ok, version} -> to_string(version.major)
-        :error -> tauri_version
-      end
+    sanitized = ExTauri.Paths.sanitize_name(app_name)
+    major = extract_cli_version(tauri_version)
 
     """
     [package]
-    name = "#{app_name}"
+    name = "#{sanitized}"
     version = "0.1.0"
-    default-run = "#{app_name}"
+    default-run = "#{sanitized}"
     edition = "2021"
     build = "src/build.rs"
     description = ""
 
     [build-dependencies]
-    tauri-build = { version = "#{major_version}", features = [] }
+    tauri-build = { version = "#{major}", features = [] }
 
     [dependencies]
     log = "0.4"
     serde_json = "1.0"
     serde = { version = "1.0", features = ["derive"] }
-    tauri = { version = "#{major_version}", features = [] }
-    tauri-plugin-shell = "#{major_version}"
-    tauri-plugin-log = "#{major_version}"
-    tauri-plugin-notification = "#{major_version}"
-    tauri-plugin-single-instance = "#{major_version}"
+    tauri = { version = "#{major}", features = [] }
+    tauri-plugin-shell = "#{major}"
+    tauri-plugin-log = "#{major}"
+    tauri-plugin-notification = "#{major}"
+    tauri-plugin-single-instance = "#{major}"
 
     [features]
     # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
@@ -327,19 +346,8 @@ defmodule ExTauri.Install.Helpers do
 
   @doc false
   def main_src(host, port, socket_name) do
-    unless host =~ ~r/\A[a-zA-Z0-9\.\-]+\z/ do
-      raise ArgumentError, "host contains invalid characters: #{inspect(host)}"
-    end
-
+    validate_rust_interpolations!(host, port, socket_name)
     port_str = to_string(port)
-
-    unless port_str =~ ~r/\A\d+\z/ do
-      raise ArgumentError, "port must be numeric, got: #{inspect(port)}"
-    end
-
-    unless socket_name =~ ~r/\A[a-zA-Z0-9_\-]+\z/ do
-      raise ArgumentError, "socket_name contains invalid characters: #{inspect(socket_name)}"
-    end
 
     """
     // Prevents additional console window on Windows in release, DO NOT REMOVE!!
@@ -511,7 +519,7 @@ defmodule ExTauri.Install.Helpers do
     fn check_server_started() {
         let sleep_interval = std::time::Duration::from_millis(200);
         let host = "#{host}".to_string();
-        let port = "#{port}".to_string();
+        let port = "#{port_str}".to_string();
         let addr = format!("{}:{}", host, port);
         println!(
             "Waiting for your phoenix dev server to start on {}...",
@@ -530,41 +538,64 @@ defmodule ExTauri.Install.Helpers do
 
         std::thread::spawn(|| {
             use std::io::Write;
-            use std::os::unix::net::UnixStream;
 
             let socket_path = std::env::temp_dir().join("tauri_heartbeat_#{socket_name}.sock");
             let interval = Duration::from_millis(100);
 
-            // Wait for socket to be ready
-            let mut stream = loop {
-                match UnixStream::connect(socket_path) {
-                    Ok(s) => break s,
-                    Err(_) => {
-                        // Socket not ready yet, wait and retry
-                        std::thread::sleep(Duration::from_millis(100));
+            #[cfg(unix)]
+            {
+                use std::os::unix::net::UnixStream;
+
+                // Wait for socket to be ready
+                let mut stream = loop {
+                    match UnixStream::connect(&socket_path) {
+                        Ok(s) => break s,
+                        Err(_) => {
+                            // Socket not ready yet, wait and retry
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
                     }
+                };
+
+                println!("Connected to heartbeat socket");
+
+                loop {
+                    match stream.write_all(b"h") {
+                        Ok(_) => {}
+                        Err(_) => {
+                            // Connection lost, sidecar likely shut down
+                            break;
+                        }
+                    }
+
+                    std::thread::sleep(interval);
                 }
-            };
+            }
 
-            println!("Connected to heartbeat socket");
-
-            loop {
-                match stream.write_all(b"h") {
-                    Ok(_) => {
-                        // Heartbeat sent successfully
-                    }
-                    Err(_) => {
-                        // Connection lost, sidecar likely shut down
-                        break;
-                    }
-                }
-
-                std::thread::sleep(interval);
+            #[cfg(windows)]
+            {
+                // Windows: use named pipe or TCP fallback for heartbeat
+                // TODO: Implement Windows named pipe heartbeat
+                println!("Heartbeat not yet supported on Windows");
             }
         });
     }
 
     """
+  end
+
+  defp validate_rust_interpolations!(host, port, socket_name) do
+    unless to_string(host) =~ ~r/\A[a-zA-Z0-9\.\-]+\z/ do
+      raise ArgumentError, "host contains invalid characters: #{inspect(host)}"
+    end
+
+    unless to_string(port) =~ ~r/\A\d+\z/ do
+      raise ArgumentError, "port must be numeric, got: #{inspect(port)}"
+    end
+
+    unless to_string(socket_name) =~ ~r/\A[a-zA-Z0-9_\-]+\z/ do
+      raise ArgumentError, "socket_name contains invalid characters: #{inspect(socket_name)}"
+    end
   end
 
   @doc false

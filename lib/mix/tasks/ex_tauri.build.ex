@@ -75,49 +75,20 @@ defmodule Mix.Tasks.ExTauri.Build do
 
   use Mix.Task
 
+  @flag_specs [
+    debug: "--debug",
+    target: "--target",
+    runner: "--runner",
+    config: "--config",
+    bundles: "--bundles",
+    features: "--features",
+    ci: "--ci",
+    verbose: "--verbose"
+  ]
+
   @impl true
   def run(args) do
-    preflight_check!()
-
-    {opts, extra_args} = OptionParser.parse!(args,
-      strict: [
-        debug: :boolean,
-        target: :string,
-        runner: :string,
-        config: :string,
-        bundles: :string,
-        features: :string,
-        ci: :boolean,
-        verbose: :boolean
-      ],
-      aliases: [
-        d: :debug,
-        v: :verbose
-      ]
-    )
-
-    tauri_args = build_tauri_args(opts, extra_args)
-    ExTauri.run(["build" | tauri_args])
-  end
-
-  defp preflight_check! do
-    unless File.dir?("src-tauri") do
-      Mix.raise("""
-      Tauri project not found. Run this first:
-
-          mix ex_tauri.install
-      """)
-    end
-
-    unless System.find_executable("cargo") do
-      Mix.raise("""
-      Rust/Cargo is not installed or not in your PATH.
-
-      Install Rust: https://www.rust-lang.org/tools/install
-
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-      """)
-    end
+    ExTauri.TaskHelpers.preflight_check!()
 
     releases = Mix.Project.config()[:releases] || []
 
@@ -131,21 +102,23 @@ defmodule Mix.Tasks.ExTauri.Build do
           releases: [desktop: [steps: [:assemble]]]
       """)
     end
-  end
 
-  @doc false
-  def build_tauri_args(opts, extra_args) do
-    args = []
+    {opts, extra_args} =
+      OptionParser.parse!(args,
+        strict: [
+          debug: :boolean,
+          target: :string,
+          runner: :string,
+          config: :string,
+          bundles: :string,
+          features: :string,
+          ci: :boolean,
+          verbose: :boolean
+        ],
+        aliases: [d: :debug, v: :verbose]
+      )
 
-    args = if opts[:debug], do: args ++ ["--debug"], else: args
-    args = if opts[:target], do: args ++ ["--target", opts[:target]], else: args
-    args = if opts[:runner], do: args ++ ["--runner", opts[:runner]], else: args
-    args = if opts[:config], do: args ++ ["--config", opts[:config]], else: args
-    args = if opts[:bundles], do: args ++ ["--bundles", opts[:bundles]], else: args
-    args = if opts[:features], do: args ++ ["--features", opts[:features]], else: args
-    args = if opts[:ci], do: args ++ ["--ci"], else: args
-    args = if opts[:verbose], do: args ++ ["--verbose"], else: args
-
-    args ++ extra_args
+    tauri_args = ExTauri.TaskHelpers.build_tauri_args(@flag_specs, opts, extra_args)
+    ExTauri.run(["build" | tauri_args])
   end
 end

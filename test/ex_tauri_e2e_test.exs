@@ -166,7 +166,7 @@ defmodule ExTauri.E2ETest do
     end
   end
 
-  describe "install task file generation" do
+  describe "code generation" do
     test "generates correct files for a project with spaces in name" do
       app_name = "My Test App"
       cargo_toml = ExTauri.Install.Helpers.cargo_toml(app_name, @tauri_version)

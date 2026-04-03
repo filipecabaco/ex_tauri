@@ -17,7 +17,7 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 
 ## Prerequisites
 
-- **Elixir** >= 1.15 with OTP 27
+- **Elixir** >= 1.15 with **OTP 27** (OTP 28 not yet supported due to Burrito ERTS availability)
 - **Rust** — [Install via rustup](https://www.rust-lang.org/tools/install)
 - **Platform dependencies** — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
@@ -118,9 +118,6 @@ Your app bundle will be at `src-tauri/target/release/bundle/` with platform-spec
 | `mix ex_tauri.install` | Set up Tauri in your project (one-time) |
 | `mix ex_tauri.dev` | Run in development mode with hot-reload |
 | `mix ex_tauri.build` | Build for production |
-| `mix ex_tauri.info` | Show Tauri project and environment info |
-| `mix ex_tauri.icon` | Generate app icons from a source image |
-| `mix ex_tauri.signer` | Manage code signing for updates |
 
 Run `mix help ex_tauri.<task>` for detailed options.
 

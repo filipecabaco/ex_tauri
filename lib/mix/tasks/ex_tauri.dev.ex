@@ -52,64 +52,40 @@ defmodule Mix.Tasks.ExTauri.Dev do
 
   use Mix.Task
 
+  @flag_specs [
+    release: "--release",
+    target: "--target",
+    runner: "--runner",
+    config: "--config",
+    port: "--port",
+    no_watch: "--no-watch",
+    features: "--features",
+    exit_on_panic: "--exit-on-panic"
+  ]
+
   @impl true
   def run(args) do
-    preflight_check!()
+    ExTauri.TaskHelpers.preflight_check!()
 
-    {opts, extra_args} = OptionParser.parse!(args,
-      strict: [
-        release: :boolean,
-        target: :string,
-        runner: :string,
-        config: :string,
-        port: :integer,
-        no_watch: :boolean,
-        features: :string,
-        exit_on_panic: :boolean
-      ],
-      aliases: [
-        r: :release
-      ]
-    )
+    {opts, extra_args} =
+      OptionParser.parse!(args,
+        strict: [
+          release: :boolean,
+          target: :string,
+          runner: :string,
+          config: :string,
+          port: :integer,
+          no_watch: :boolean,
+          features: :string,
+          exit_on_panic: :boolean
+        ],
+        aliases: [r: :release]
+      )
 
-    tauri_args = build_tauri_args(opts, extra_args)
+    tauri_args =
+      ["--no-dev-server-wait"] ++
+        ExTauri.TaskHelpers.build_tauri_args(@flag_specs, opts, extra_args)
+
     ExTauri.run(["dev" | tauri_args])
-  end
-
-  defp preflight_check! do
-    unless File.dir?("src-tauri") do
-      Mix.raise("""
-      Tauri project not found. Run this first:
-
-          mix ex_tauri.install
-      """)
-    end
-
-    unless System.find_executable("cargo") do
-      Mix.raise("""
-      Rust/Cargo is not installed or not in your PATH.
-
-      Install Rust: https://www.rust-lang.org/tools/install
-
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-      """)
-    end
-  end
-
-  @doc false
-  def build_tauri_args(opts, extra_args) do
-    # Always skip waiting for dev server since Phoenix runs as a sidecar
-    args = ["--no-dev-server-wait"]
-
-    args = if opts[:release], do: args ++ ["--release"], else: args
-    args = if opts[:target], do: args ++ ["--target", opts[:target]], else: args
-    args = if opts[:runner], do: args ++ ["--runner", opts[:runner]], else: args
-    args = if opts[:config], do: args ++ ["--config", opts[:config]], else: args
-    args = if opts[:port], do: args ++ ["--port", to_string(opts[:port])], else: args
-    args = if opts[:no_watch], do: args ++ ["--no-watch"], else: args
-    args = if opts[:features], do: args ++ ["--features", opts[:features]], else: args
-    args = if opts[:exit_on_panic], do: args ++ ["--exit-on-panic"], else: args
-
-    args ++ extra_args
   end
 end

@@ -14,7 +14,7 @@ defmodule Mix.Tasks.ExTauri.Install do
 
   1. **Configures Elixir project** (via Igniter):
      - Adds `ExTauri.ShutdownManager` to your supervision tree
-     - Adds a `:desktop` Burrito release to your `mix.exs`
+     - Adds a `:desktop` release to your `mix.exs`
 
   2. **Installs Tauri CLI** - Downloads via Cargo
 
@@ -95,7 +95,11 @@ defmodule Mix.Tasks.ExTauri.Install do
 
         <div id="tauri-bridge" phx-hook="TauriHook"></div>
 
-    3. Run: mix ex_tauri.dev
+    3. Add Burrito wrapping to your :desktop release for production:
+
+        releases: [desktop: [steps: [:assemble, &Burrito.wrap/1], burrito: [...]]]
+
+    4. Run: mix ex_tauri.dev
     """)
   end
 
@@ -106,7 +110,9 @@ defmodule Mix.Tasks.ExTauri.Install do
       [:releases, :desktop, :steps],
       fn
         nil ->
-          {:ok, {:code, Sourceror.parse_string!("[:assemble, &Burrito.wrap/1]")}}
+          # Start with a standard release. Users add &Burrito.wrap/1 when ready
+          # for production: steps: [:assemble, &Burrito.wrap/1]
+          {:ok, {:code, Sourceror.parse_string!("[:assemble]")}}
 
         zipper ->
           # Already configured, don't overwrite

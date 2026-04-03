@@ -91,11 +91,13 @@ content = new_content
 # In production, users would add Burrito wrapping here:
 #   steps: [:assemble, &Burrito.wrap/1], burrito: [targets: [...]]
 # For this test, we use a standard release.
-# Use regex to match "deps: deps()" with optional trailing comma/whitespace
-new_content = String.replace(
+# Find the closing of def project do (first "    ]\n  end")
+# and insert releases: before it, adding comma to the last item
+new_content = Regex.replace(
+  ~r/(      \S[^\n]*[^,\s])\n(    \]\n  end)/,
   content,
-  ~r/(deps: deps\(\)),?\s*\n(\s*\])/,
-  "\\1,\n      releases: [desktop: [steps: [:assemble]]]\n\\2"
+  "\\1,\n      releases: [desktop: [steps: [:assemble]]]\n\\2",
+  global: false
 )
 if content == new_content do
   IO.puts("ERROR: Failed to insert :desktop release config")

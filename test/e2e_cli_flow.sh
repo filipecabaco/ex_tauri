@@ -9,6 +9,9 @@
 #
 set -euo pipefail
 
+# Trap ERR to report exactly which command failed
+trap 'echo ""; echo "!!! FAILED at line $LINENO with exit code $? !!!"; echo "!!! Command: $BASH_COMMAND !!!"' ERR
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT=14321
 HOST="127.0.0.1"
@@ -149,6 +152,9 @@ pass "Dependencies installed and compiled"
 # ─── Step 7: Run mix ex_tauri.install ─────────────────────────────────────────
 echo ""
 echo "=== Step 7: Run mix ex_tauri.install ==="
+echo "  CWD: $(pwd)"
+echo "  MIX_ENV: ${MIX_ENV:-not set}"
+echo "  CARGO_TARGET_DIR: ${CARGO_TARGET_DIR:-not set}"
 mix ex_tauri.install
 pass "mix ex_tauri.install completed"
 
@@ -191,8 +197,11 @@ echo "  --- Generated tauri.conf.json ---"
 cat src-tauri/tauri.conf.json
 echo "  ---"
 
+echo "  CARGO_TARGET_DIR=$CARGO_TARGET_DIR"
+echo "  Building in: $(pwd)/src-tauri"
 cd src-tauri
-cargo build 2>&1
+echo "  Cargo.toml name: $(grep '^name = ' Cargo.toml | head -1)"
+cargo build 2>&1 || { echo "!!! cargo build failed with exit code $? !!!"; exit 1; }
 cd ..
 
 # Find the binary (CARGO_TARGET_DIR overrides the default target location)

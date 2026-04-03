@@ -16,6 +16,12 @@ APP_NAME="test_cli_app"
 WORK_DIR=""
 TAURI_PID=""
 
+# Use a fixed CARGO_TARGET_DIR so compiled dependencies are cached between runs.
+# On CI this is set via env var; locally it defaults to a temp-stable path.
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/cargo-target-cli-flow}"
+mkdir -p "$CARGO_TARGET_DIR"
+echo "Using CARGO_TARGET_DIR=$CARGO_TARGET_DIR"
+
 cleanup() {
   echo ""
   echo "=== Cleanup ==="
@@ -189,9 +195,9 @@ cd src-tauri
 cargo build 2>&1
 cd ..
 
-# Find the binary (name is the sanitized app name from Cargo.toml)
+# Find the binary (CARGO_TARGET_DIR overrides the default target location)
 CARGO_NAME=$(grep '^name = ' src-tauri/Cargo.toml | head -1 | sed 's/name = "\(.*\)"/\1/')
-BINARY="src-tauri/target/debug/$CARGO_NAME"
+BINARY="$CARGO_TARGET_DIR/debug/$CARGO_NAME"
 test -f "$BINARY" || fail "Binary not found at $BINARY"
 test -x "$BINARY" || fail "Binary not executable"
 pass "Tauri binary built: $BINARY"
@@ -227,7 +233,7 @@ fi
 
 # Launch from project root so sidecar path resolves correctly
 xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
-  "./$BINARY" &
+  "$BINARY" &
 TAURI_PID=$!
 echo "Tauri launched with PID $TAURI_PID"
 

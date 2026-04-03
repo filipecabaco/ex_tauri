@@ -127,15 +127,17 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust dependencies
+      - name: Cache Rust dependencies and build artifacts
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-cli-flow-${{ hashFiles('**/Cargo.toml') }}
+            /tmp/cargo-target-cli-flow
+            /tmp/tauri-cli-cache
+          key: ${{ runner.os }}-cargo-cli-flow-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-registry-cli-flow-
+            ${{ runner.os }}-cargo-cli-flow-
             ${{ runner.os }}-cargo-registry-
 
       - name: Install system dependencies
@@ -162,3 +164,5 @@ jobs:
         timeout-minutes: 30
         env:
           MIX_ENV: dev
+          CARGO_TARGET_DIR: /tmp/cargo-target-cli-flow
+          TAURI_CLI_CACHE: /tmp/tauri-cli-cache

@@ -36,57 +36,32 @@ def deps do
 end
 ```
 
-### 2. Configure ExTauri
-
-```elixir
-# config/config.exs
-config :ex_tauri,
-  version: "2.5.1",
-  app_name: "My Desktop App",
-  host: "localhost",
-  port: 4000
-```
-
-### 3. Install and set up
+### 2. Install and set up
 
 ```bash
 mix deps.get
 mix ex_tauri.install
 ```
 
-`mix ex_tauri.install` automatically:
-- Installs the Tauri CLI via Cargo
-- Scaffolds the `src-tauri/` project structure (Rust, config, capabilities)
-- Adds `ExTauri.ShutdownManager` to your supervision tree
-- Adds a `:desktop` release to your `mix.exs`
-- Generates a LiveView JS hook for Tauri communication
+That's it! `mix ex_tauri.install` handles everything automatically:
 
-### 4. Wire up the LiveView hook
+- **Config** — Sets sensible defaults for `app_name`, `host`, `port`, and `version` in `config/config.exs`
+- **Tauri CLI** — Installs via Cargo
+- **Project structure** — Scaffolds `src-tauri/` with Rust code, config, and capabilities
+- **Supervision tree** — Adds `ExTauri.ShutdownManager` to your application (via Igniter)
+- **Release config** — Adds a `:desktop` release to `mix.exs` (via Igniter)
+- **JS hook** — Generates `assets/vendor/ex_tauri.js` and auto-injects the import and hook registration into `assets/js/app.js`
+- **Layout** — Auto-injects the `<div id="tauri-bridge">` element into your root layout
 
-Add the hook to your LiveView JS:
-
-```javascript
-// assets/js/app.js
-import { TauriHook } from "../vendor/ex_tauri"
-
-let liveSocket = new LiveSocket("/live", Socket, {
-  hooks: { TauriHook },
-})
-```
-
-Add the hook element to your root layout (e.g. `root.html.heex`):
-
-```html
-<div id="tauri-bridge" phx-hook="TauriHook"></div>
-```
-
-### 5. Run in development
+### 3. Run in development
 
 ```bash
 mix ex_tauri.dev
 ```
 
 This starts your Phoenix app as a native desktop window with full hot-reload support.
+
+> **Tip:** Review the generated config in `config/config.exs` to customize your app name, port, or window settings.
 
 ## Building for Production
 

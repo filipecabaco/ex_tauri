@@ -54,6 +54,8 @@ defmodule Mix.Tasks.ExTauri.Dev do
 
   @impl true
   def run(args) do
+    preflight_check!()
+
     {opts, extra_args} = OptionParser.parse!(args,
       strict: [
         release: :boolean,
@@ -72,6 +74,26 @@ defmodule Mix.Tasks.ExTauri.Dev do
 
     tauri_args = build_tauri_args(opts, extra_args)
     ExTauri.run(["dev" | tauri_args])
+  end
+
+  defp preflight_check! do
+    unless File.dir?("src-tauri") do
+      Mix.raise("""
+      Tauri project not found. Run this first:
+
+          mix ex_tauri.install
+      """)
+    end
+
+    unless System.find_executable("cargo") do
+      Mix.raise("""
+      Rust/Cargo is not installed or not in your PATH.
+
+      Install Rust: https://www.rust-lang.org/tools/install
+
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+      """)
+    end
   end
 
   @doc false

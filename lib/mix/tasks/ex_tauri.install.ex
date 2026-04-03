@@ -12,48 +12,35 @@ defmodule Mix.Tasks.ExTauri.Install do
 
   ## What It Does
 
-  1. **Configures Elixir project** (via Igniter):
+  1. **Sets default config** (via Igniter) — `app_name`, `host`, `port`, `version`
+     in `config/config.exs` (only if not already configured)
+
+  2. **Configures Elixir project** (via Igniter):
      - Adds `ExTauri.ShutdownManager` to your supervision tree
      - Adds a `:desktop` release to your `mix.exs`
 
-  2. **Installs Tauri CLI** - Downloads via Cargo
+  3. **Installs Tauri CLI** — Downloads via Cargo
 
-  3. **Initializes Tauri project** - Creates `src-tauri/` structure
+  4. **Initializes Tauri project** — Creates `src-tauri/` structure
 
-  4. **Generates integration code**:
+  5. **Generates integration code**:
      - Rust main.rs with heartbeat and graceful shutdown
      - Tauri V2 capabilities and permissions
      - LiveView JS hook for Tauri bridge
 
-  ## Configuration
-
-  Configure Tauri in your `config/config.exs`:
-
-  ```elixir
-  config :ex_tauri,
-    version: "#{ExTauri.latest_version()}",
-    app_name: "My Desktop App",
-    host: "localhost",
-    port: 4000
-  ```
+  6. **Auto-injects hooks**:
+     - Imports `TauriHook` in `assets/js/app.js`
+     - Registers the hook in the LiveSocket constructor
+     - Adds `<div id="tauri-bridge">` to the root layout
 
   ## Next Steps
 
-  After installation:
+  After installation, just run:
 
-  1. Add the hook to your LiveView JS (assets/js/app.js):
+      $ mix ex_tauri.dev
 
-      import { TauriHook } from "../vendor/ex_tauri"
-
-      let liveSocket = new LiveSocket("/live", Socket, {
-        hooks: { TauriHook },
-      })
-
-  2. Add the hook element to your layout:
-
-      <div id="tauri-bridge" phx-hook="TauriHook"></div>
-
-  3. Run `mix ex_tauri.dev` to start development
+  Review the generated config in `config/config.exs` to customize your
+  app name, port, or window settings.
 
   For more information, see: https://github.com/filipecabaco/ex_tauri
   """
@@ -72,10 +59,13 @@ defmodule Mix.Tasks.ExTauri.Install do
 
   @impl Igniter.Mix.Task
   def igniter(igniter) do
-    # Phase 1: Set up Tauri project (CLI install, Rust files, JSON, JS)
+    # Phase 1: Set default config values (only if not already set)
+    igniter = configure_defaults(igniter)
+
+    # Phase 2: Set up Tauri project (CLI install, Rust files, JSON, JS, auto-inject hooks)
     ExTauri.Install.Helpers.setup_tauri_project()
 
-    # Phase 2: Modify Elixir project with Igniter (AST-aware, safe)
+    # Phase 3: Modify Elixir project with Igniter (AST-aware, safe)
     igniter
     |> Igniter.Project.Application.add_new_child(ExTauri.ShutdownManager)
     |> add_desktop_release()
@@ -83,24 +73,49 @@ defmodule Mix.Tasks.ExTauri.Install do
     ExTauri installed successfully!
 
     Next steps:
-    1. Add the hook to your LiveView JS (assets/js/app.js):
+    1. Review the ExTauri config in config/config.exs (app_name, host, port)
 
-        import { TauriHook } from "../vendor/ex_tauri"
-
-        let liveSocket = new LiveSocket("/live", Socket, {
-          hooks: { TauriHook },
-        })
-
-    2. Add the hook element to your layout:
-
-        <div id="tauri-bridge" phx-hook="TauriHook"></div>
-
-    3. Add Burrito wrapping to your :desktop release for production:
+    2. Add Burrito wrapping to your :desktop release for production:
 
         releases: [desktop: [steps: [:assemble, &Burrito.wrap/1], burrito: [...]]]
 
-    4. Run: mix ex_tauri.dev
+    3. Run: mix ex_tauri.dev
     """)
+  end
+
+  defp configure_defaults(igniter) do
+    # Derive a human-readable app name from the Mix project atom
+    app_name =
+      Mix.Project.config()[:app]
+      |> to_string()
+      |> String.split("_")
+      |> Enum.map_join(" ", &String.capitalize/1)
+
+    igniter
+    |> Igniter.Project.Config.configure_new(
+      "config.exs",
+      :ex_tauri,
+      [:app_name],
+      app_name
+    )
+    |> Igniter.Project.Config.configure_new(
+      "config.exs",
+      :ex_tauri,
+      [:host],
+      "localhost"
+    )
+    |> Igniter.Project.Config.configure_new(
+      "config.exs",
+      :ex_tauri,
+      [:port],
+      {:code, Sourceror.parse_string!("4000")}
+    )
+    |> Igniter.Project.Config.configure_new(
+      "config.exs",
+      :ex_tauri,
+      [:version],
+      ExTauri.latest_version()
+    )
   end
 
   defp add_desktop_release(igniter) do

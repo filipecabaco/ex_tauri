@@ -97,6 +97,7 @@ pass "ex_tauri added to mix.exs"
 echo ""
 echo "=== Step 3: Configure ex_tauri ==="
 
+# Pre-set specific config values for testing (Igniter's configure_new will skip these)
 cat >> config/config.exs << 'ELIXIR_CONFIG'
 
 # ExTauri configuration
@@ -106,6 +107,23 @@ config :ex_tauri,
   port: 14321,
   version: "2.5.1"
 ELIXIR_CONFIG
+
+# Create a minimal app.js so the installer can auto-inject the TauriHook
+mkdir -p assets/js
+cat > assets/js/app.js << 'JS_CONFIG'
+import {Socket} from "phoenix"
+import {LiveSocket} from "phoenix_live_view"
+
+let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
+let liveSocket = new LiveSocket("/live", Socket, {
+  longPollFallbackMs: 2500,
+  params: {_csrf_token: csrfToken},
+})
+
+liveSocket.connect()
+
+window.liveSocket = liveSocket
+JS_CONFIG
 
 # Prod endpoint config (used by the Mix release sidecar)
 cat >> config/prod.exs << ELIXIR_CONFIG
@@ -136,10 +154,12 @@ pass "Dependencies installed and compiled"
 # ─── Step 5: Run mix ex_tauri.install ────────────────────────────────────────
 echo ""
 echo "=== Step 5: Run mix ex_tauri.install ==="
-# With Igniter available, this automatically:
+# With Igniter, this automatically:
+#   - Sets default config (app_name, host, port, version) if not already set
 #   - Adds ExTauri.ShutdownManager to the supervision tree
 #   - Adds :desktop release config to mix.exs
 #   - Sets up the entire Tauri project structure
+#   - Auto-injects TauriHook into app.js and root layout
 mix ex_tauri.install --yes
 pass "mix ex_tauri.install completed"
 
@@ -166,6 +186,20 @@ grep -q "let port = \"$PORT\"" src-tauri/src/main.rs || fail "main.rs missing po
 grep -q "tauri_heartbeat_test_cli_app" src-tauri/src/main.rs || fail "main.rs missing heartbeat socket"
 grep -q '"csp"' src-tauri/tauri.conf.json || fail "tauri.conf.json missing CSP"
 grep -q "TauriHook" assets/vendor/ex_tauri.js || fail "JS hook missing TauriHook"
+
+# Verify auto-injected JS hook in app.js
+grep -q 'import { TauriHook }' assets/js/app.js || fail "TauriHook import not injected into app.js"
+grep -q 'hooks:.*TauriHook' assets/js/app.js || fail "TauriHook not registered in LiveSocket hooks"
+pass "JS hook auto-injected into app.js"
+
+# Verify auto-injected layout hook element
+LAYOUT_FILE=$(find lib -name "root.html.heex" -type f | head -1)
+if [[ -n "$LAYOUT_FILE" ]]; then
+  grep -q "tauri-bridge" "$LAYOUT_FILE" || fail "tauri-bridge element not injected into root layout"
+  pass "tauri-bridge element auto-injected into root layout"
+else
+  echo "  (root layout not found — skipping layout injection check)"
+fi
 
 pass "All generated files verified"
 
@@ -305,11 +339,12 @@ echo "========================================="
 echo ""
 echo "Verified developer journey:"
 echo "  1. mix phx.new (create Phoenix project)"
-echo "  2. Add ex_tauri dependency (igniter comes transitively)"
+echo "  2. Add ex_tauri dependency"
 echo "  3. Configure ex_tauri (app_name, host, port)"
 echo "  4. mix deps.get + mix compile"
-echo "  5. mix ex_tauri.install (Igniter: supervision tree + releases + Tauri)"
-echo "  6. Verify all setup (Igniter changes + generated files)"
+echo "  5. mix ex_tauri.install (auto: config defaults, supervision tree,"
+echo "     releases, Tauri project, JS hook injection, layout injection)"
+echo "  6. Verify all setup (Igniter + generated files + auto-injections)"
 echo "  7. Build Elixir release as sidecar"
 echo "  8. cargo build (produce Tauri binary)"
 echo "  9. Launch Tauri → spawns sidecar release → heartbeat connects"

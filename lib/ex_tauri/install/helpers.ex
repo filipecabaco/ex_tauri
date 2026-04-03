@@ -142,7 +142,145 @@ defmodule ExTauri.Install.Helpers do
     File.mkdir_p!(vendor_dir)
     File.write!(Path.join([vendor_dir, "ex_tauri.js"]), ExTauri.Hook.js_source())
 
+    # Auto-inject hook import and registration into app.js
+    inject_js_hook()
+
+    # Auto-inject hook element into root layout
+    inject_layout_hook()
+
     :ok
+  end
+
+  # ── JS and layout auto-injection ───────────────────────────────────────────
+
+  @doc false
+  def inject_js_hook do
+    app_js_path = Path.join([File.cwd!(), "assets", "js", "app.js"])
+
+    if File.exists?(app_js_path) do
+      content = File.read!(app_js_path)
+
+      if String.contains?(content, "TauriHook") do
+        Mix.shell().info("TauriHook already present in app.js, skipping injection")
+      else
+        content = inject_tauri_import(content)
+        content = inject_tauri_hooks(content)
+        File.write!(app_js_path, content)
+        Mix.shell().info("Injected TauriHook into assets/js/app.js")
+      end
+    else
+      Mix.shell().info("""
+      Could not find assets/js/app.js — skipping JS hook injection.
+      Add manually:
+
+          import { TauriHook } from "../vendor/ex_tauri"
+
+          let liveSocket = new LiveSocket("/live", Socket, {
+            hooks: { TauriHook },
+          })
+      """)
+    end
+  end
+
+  defp inject_tauri_import(content) do
+    import_line = ~s|import { TauriHook } from "../vendor/ex_tauri"\n|
+
+    # Insert after the last existing import statement
+    case Regex.scan(~r/^import .+$/m, content, return: :index) do
+      [] ->
+        # No imports found, prepend
+        import_line <> content
+
+      matches ->
+        {last_pos, last_len} = List.last(matches) |> List.first()
+        insert_at = last_pos + last_len
+
+        String.slice(content, 0, insert_at) <>
+          "\n" <> import_line <>
+          String.slice(content, insert_at..-1//1)
+    end
+  end
+
+  defp inject_tauri_hooks(content) do
+    cond do
+      # Case 1: hooks object already exists — add TauriHook to it
+      content =~ ~r/hooks:\s*\{/ ->
+        Regex.replace(~r/(hooks:\s*\{)/, content, "\\1 TauriHook,", global: false)
+
+      # Case 2: LiveSocket constructor with options object — add hooks key
+      content =~ ~r/new LiveSocket\([^)]*\{/ ->
+        Regex.replace(
+          ~r/(new LiveSocket\([^{]*\{)/,
+          content,
+          "\\1\n  hooks: { TauriHook },",
+          global: false
+        )
+
+      # Case 3: Can't find pattern — leave a comment for the user
+      true ->
+        Mix.shell().info("""
+        Could not auto-register TauriHook in LiveSocket.
+        Add manually to your LiveSocket constructor:
+
+            hooks: { TauriHook },
+        """)
+        content
+    end
+  end
+
+  @doc false
+  def inject_layout_hook do
+    # Try common root layout paths
+    layout_paths = [
+      Path.join([File.cwd!(), "lib", "*_web", "components", "layouts", "root.html.heex"]),
+      Path.join([File.cwd!(), "lib", "*_web", "templates", "layout", "root.html.heex"])
+    ]
+
+    layout_path =
+      Enum.find_value(layout_paths, fn pattern ->
+        case Path.wildcard(pattern) do
+          [path | _] -> path
+          [] -> nil
+        end
+      end)
+
+    if layout_path do
+      content = File.read!(layout_path)
+
+      if String.contains?(content, "tauri-bridge") do
+        Mix.shell().info("tauri-bridge element already present in root layout, skipping")
+      else
+        # Insert after <body> tag
+        case Regex.run(~r/<body[^>]*>/, content, return: :index) do
+          [{pos, len}] ->
+            insert_at = pos + len
+            hook_element = "\n    <div id=\"tauri-bridge\" phx-hook=\"TauriHook\"></div>"
+
+            new_content =
+              String.slice(content, 0, insert_at) <>
+                hook_element <>
+                String.slice(content, insert_at..-1//1)
+
+            File.write!(layout_path, new_content)
+            Mix.shell().info("Injected tauri-bridge element into #{Path.relative_to_cwd(layout_path)}")
+
+          _ ->
+            Mix.shell().info("""
+            Could not find <body> tag in root layout.
+            Add manually to your root layout:
+
+                <div id="tauri-bridge" phx-hook="TauriHook"></div>
+            """)
+        end
+      end
+    else
+      Mix.shell().info("""
+      Could not find root layout template — skipping hook element injection.
+      Add manually to your root.html.heex:
+
+          <div id="tauri-bridge" phx-hook="TauriHook"></div>
+      """)
+    end
   end
 
   # ── Code generation functions ──────────────────────────────────────────────

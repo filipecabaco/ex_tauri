@@ -77,6 +77,8 @@ defmodule Mix.Tasks.ExTauri.Build do
 
   @impl true
   def run(args) do
+    preflight_check!()
+
     {opts, extra_args} = OptionParser.parse!(args,
       strict: [
         debug: :boolean,
@@ -96,6 +98,39 @@ defmodule Mix.Tasks.ExTauri.Build do
 
     tauri_args = build_tauri_args(opts, extra_args)
     ExTauri.run(["build" | tauri_args])
+  end
+
+  defp preflight_check! do
+    unless File.dir?("src-tauri") do
+      Mix.raise("""
+      Tauri project not found. Run this first:
+
+          mix ex_tauri.install
+      """)
+    end
+
+    unless System.find_executable("cargo") do
+      Mix.raise("""
+      Rust/Cargo is not installed or not in your PATH.
+
+      Install Rust: https://www.rust-lang.org/tools/install
+
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+      """)
+    end
+
+    releases = Mix.Project.config()[:releases] || []
+
+    unless releases[:desktop] do
+      Mix.raise("""
+      No :desktop release configured in mix.exs.
+
+      Run `mix ex_tauri.install` to set this up automatically,
+      or add manually to your mix.exs project/0:
+
+          releases: [desktop: [steps: [:assemble]]]
+      """)
+    end
   end
 
   @doc false

@@ -76,21 +76,34 @@ path = "mix.exs"
 content = File.read!(path)
 
 # Insert ex_tauri dep
-content = String.replace(
+new_content = String.replace(
   content,
   ~r/defp deps do\s*\n\s*\[/,
   "defp deps do\n    [\n      {:ex_tauri, path: \"'"$REPO_ROOT"'\"},"
 )
+if content == new_content do
+  IO.puts("ERROR: Failed to insert ex_tauri dependency")
+  System.halt(1)
+end
+content = new_content
 
 # Add :desktop release config to the project definition
 # In production, users would add Burrito wrapping here:
 #   steps: [:assemble, &Burrito.wrap/1], burrito: [targets: [...]]
 # For this test, we use a standard release.
-content = String.replace(
+# Use regex to match "deps: deps()" with optional trailing comma/whitespace
+new_content = String.replace(
   content,
-  "deps: deps()",
-  "deps: deps(),\n      releases: [desktop: [steps: [:assemble]]]"
+  ~r/(deps: deps\(\)),?\s*\n(\s*\])/,
+  "\\1,\n      releases: [desktop: [steps: [:assemble]]]\n\\2"
 )
+if content == new_content do
+  IO.puts("ERROR: Failed to insert :desktop release config")
+  IO.puts("Project keyword list content:")
+  IO.puts(content)
+  System.halt(1)
+end
+content = new_content
 
 File.write!(path, content)
 IO.puts("mix.exs updated with ex_tauri dep and :desktop release")

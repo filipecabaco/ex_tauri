@@ -121,6 +121,59 @@ Your app bundle will be at `src-tauri/target/release/bundle/` with platform-spec
 
 Run `mix help ex_tauri.<task>` for detailed options.
 
+## Using Desktop APIs
+
+ExTauri provides Elixir modules for common desktop features. Some are included
+by default, others require installing additional Tauri plugins.
+
+### Included by default
+
+These work out of the box after `mix ex_tauri.install`:
+
+- **`ExTauri.Notification`** — Native desktop notifications
+- **`ExTauri.Shell`** — Open URLs, execute scoped commands
+
+### Requires additional plugin setup
+
+These modules need a Tauri plugin added to your `src-tauri/` project.
+See each module's documentation for setup instructions.
+
+- **`ExTauri.Dialog`** — File open/save dialogs, message boxes
+- **`ExTauri.Clipboard`** — Read/write the system clipboard
+- **`ExTauri.Filesystem`** — Read/write files outside the web sandbox
+- **`ExTauri.OS`** — Query platform, architecture, locale
+
+### Example: sending a notification from LiveView
+
+```elixir
+def handle_event("notify", _params, socket) do
+  socket = ExTauri.Notification.send(socket, "Saved!", body: "Your file was saved.")
+  {:noreply, socket}
+end
+
+def handle_event("tauri_response", %{"command" => "notification", "status" => status}, socket) do
+  {:noreply, assign(socket, :notification_status, status)}
+end
+```
+
+### Example: opening a file dialog
+
+First, install `tauri-plugin-dialog` (see `ExTauri.Dialog` docs), then:
+
+```elixir
+def handle_event("open_file", _params, socket) do
+  socket = ExTauri.Dialog.open(socket,
+    title: "Select a file",
+    filters: [%{name: "Text", extensions: ["txt", "md"]}]
+  )
+  {:noreply, socket}
+end
+
+def handle_event("tauri_response", %{"command" => "dialog_open", "path" => path}, socket) do
+  {:noreply, assign(socket, :selected_file, path)}
+end
+```
+
 ## How It Works
 
 ### Architecture
@@ -209,13 +262,44 @@ Desktop apps need a local database path. Configure in `config/runtime.exs`:
 ```elixir
 database_path =
   System.get_env("DATABASE_PATH") ||
-    Path.join([System.user_home!(), ".my_app", "my_app.db"])
-
-File.mkdir_p!(Path.dirname(database_path))
+    Path.join([ExTauri.Paths.data_dir(), "my_app.db"])
 
 config :my_app, MyApp.Repo,
   database: database_path,
   pool_size: 5
+```
+
+### Running Ecto migrations in a desktop release
+
+Desktop releases don't run `mix ecto.migrate`. Add a release module that
+runs migrations on startup:
+
+```elixir
+# lib/my_app/release.ex
+defmodule MyApp.Release do
+  def migrate do
+    for repo <- repos() do
+      {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
+    end
+  end
+
+  defp repos, do: Application.fetch_env!(:my_app, :ecto_repos)
+end
+```
+
+Then call it early in your `application.ex` startup:
+
+```elixir
+def start(_type, _args) do
+  MyApp.Release.migrate()
+
+  children = [
+    MyApp.Repo,
+    ExTauri.ShutdownManager,
+    # ...
+  ]
+  # ...
+end
 ```
 
 ### Static assets in production

@@ -85,8 +85,8 @@ defmodule ExTauri.ShutdownManager do
     # Restrict socket to owner-only access (prevents local privilege escalation)
     File.chmod(socket_path, 0o600)
 
-    # Spawn acceptor process with link for proper supervision
-    Task.start_link(fn -> accept_loop(listen_socket) end)
+    # Spawn acceptor process under the ExTauri TaskSupervisor
+    Task.Supervisor.start_child(ExTauri.TaskSupervisor, fn -> accept_loop(listen_socket) end)
 
     # Schedule the first heartbeat check
     schedule_heartbeat_check(heartbeat_interval)
@@ -161,8 +161,8 @@ defmodule ExTauri.ShutdownManager do
   defp accept_loop(listen_socket) do
     case :gen_tcp.accept(listen_socket, 1000) do
       {:ok, client_socket} ->
-        # Spawn a linked process to handle this client
-        Task.start_link(fn -> handle_client(client_socket) end)
+        # Spawn client handler under the TaskSupervisor
+        Task.Supervisor.start_child(ExTauri.TaskSupervisor, fn -> handle_client(client_socket) end)
         # Continue accepting more connections
         accept_loop(listen_socket)
 

@@ -88,7 +88,7 @@ defmodule ExTauri.E2ETest do
 
       File.write!(Path.join(src_tauri, "Cargo.toml"), cargo_toml)
       File.write!(Path.join(src_dir, "main.rs"), main_rs)
-      File.write!(Path.join(src_dir, "build.rs"), build_rs)
+      File.write!(Path.join(src_tauri, "build.rs"), build_rs)
       File.write!(Path.join(src_tauri, "tauri.conf.json"), tauri_conf)
       File.write!(Path.join(capabilities_dir, "default.json"), capabilities)
 

@@ -17,7 +17,12 @@ defmodule ExTauri do
   @doc false
   def start(_, _) do
     validate_config()
-    Supervisor.start_link([], strategy: :one_for_one)
+
+    children = [
+      {Task.Supervisor, name: ExTauri.TaskSupervisor}
+    ]
+
+    Supervisor.start_link(children, strategy: :one_for_one, name: ExTauri.Supervisor)
   end
 
   defp validate_config do
@@ -147,13 +152,6 @@ defmodule ExTauri do
   end
 
   defp wrap() do
-    # Clear Burrito's cached ERTS to force a fresh download (macOS-specific path)
-    burrito_cache = Path.join([Path.expand("~"), "Library", "Application Support", ".burrito"])
-
-    if File.dir?(burrito_cache) do
-      File.rm_rf!(burrito_cache)
-    end
-
     get_in(Mix.Project.config(), [:releases, :desktop]) ||
       raise "expected a burrito release configured for the app :desktop in your mix.exs"
 

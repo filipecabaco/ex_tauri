@@ -7,9 +7,31 @@ defmodule ExTauri.Filesystem do
 
   ## Requirements
 
-  - `tauri-plugin-fs` must be installed
+  - `tauri-plugin-fs` must be installed (see Plugin Setup below)
   - The `TauriHook` must be mounted in your LiveView (see `ExTauri.Hook`)
   - Appropriate filesystem permissions must be configured in capabilities
+
+  ## Plugin Setup
+
+  Add the dependency to `src-tauri/Cargo.toml`:
+
+      [dependencies]
+      tauri-plugin-fs = "2"
+
+  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
+
+      .plugin(tauri_plugin_fs::init())
+
+  Add the capability to `src-tauri/capabilities/default.json`:
+
+      "permissions": ["fs:default"]
+
+  For broader access, use scoped permissions:
+
+      {
+        "identifier": "fs:allow-read-text-file",
+        "allow": [{"path": "$APPDATA/**"}]
+      }
 
   ## Examples
 

@@ -6,8 +6,23 @@ defmodule ExTauri.Clipboard do
 
   ## Requirements
 
-  - `tauri-plugin-clipboard-manager` must be installed
+  - `tauri-plugin-clipboard-manager` must be installed (see Plugin Setup below)
   - The `TauriHook` must be mounted in your LiveView (see `ExTauri.Hook`)
+
+  ## Plugin Setup
+
+  Add the dependency to `src-tauri/Cargo.toml`:
+
+      [dependencies]
+      tauri-plugin-clipboard-manager = "2"
+
+  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
+
+      .plugin(tauri_plugin_clipboard_manager::init())
+
+  Add the capability to `src-tauri/capabilities/default.json`:
+
+      "permissions": ["clipboard-manager:allow-write-text", "clipboard-manager:allow-read-text"]
 
   ## Examples
 

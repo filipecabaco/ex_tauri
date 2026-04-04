@@ -6,8 +6,23 @@ defmodule ExTauri.OS do
 
   ## Requirements
 
-  - `tauri-plugin-os` must be installed
+  - `tauri-plugin-os` must be installed (see Plugin Setup below)
   - The `TauriHook` must be mounted in your LiveView (see `ExTauri.Hook`)
+
+  ## Plugin Setup
+
+  Add the dependency to `src-tauri/Cargo.toml`:
+
+      [dependencies]
+      tauri-plugin-os = "2"
+
+  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
+
+      .plugin(tauri_plugin_os::init())
+
+  Add the capability to `src-tauri/capabilities/default.json`:
+
+      "permissions": ["os:default"]
 
   ## Examples
 

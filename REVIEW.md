@@ -38,6 +38,9 @@ The following issues from prior reviews have been addressed:
 | No ref-based response correlation | `ExTauri.Hook.push_command_tracked/4` for concurrent command disambiguation |
 | No migration guidance | README documents release migration pattern for Ecto apps |
 | No Windows paths | `ExTauri.Paths` handles `%APPDATA%` and `%LOCALAPPDATA%` |
+| Dev mode uses full Burrito build | `run_dev/1` builds standard release with shell wrapper sidecar |
+| TauriHook fragile on re-render | Added `reconnected()`, `destroyed()` lifecycle callbacks |
+| OTP version constraint hidden | `validate_config` and `preflight_check!` surface clear OTP warnings |
 
 ---
 
@@ -68,10 +71,10 @@ The following issues from prior reviews have been addressed:
 | Drag and drop | Tauri supports DnD events but no bridge to LiveView. |
 | Compile-time config validation | Catch missing `:host`/`:port` at compile time, not runtime. |
 
-### Architecture Considerations
+### Architecture Considerations (Resolved)
 
-1. **Dev mode builds full Burrito release** — `mix ex_tauri.dev` calls `wrap/0` which builds a production release every time. Consider a lighter dev path that skips Burrito wrapping and builds a standard release.
+1. ~~**Dev mode builds full Burrito release**~~ — Fixed. `mix ex_tauri.dev` now uses `run_dev/1` which builds a standard release and creates a shell wrapper script at the sidecar path. Burrito wrapping is only used by `mix ex_tauri.build` for production.
 
-2. **Single hook element bottleneck** — All Tauri commands flow through one `<div id="tauri-bridge">`. If re-rendered, the bridge disconnects. Consider documenting this constraint and potential mitigations.
+2. ~~**Single hook element bottleneck**~~ — Mitigated. `TauriHook` now implements `reconnected()` and `destroyed()` lifecycle callbacks. Commands in flight when the hook is destroyed are safely dropped. Reconnection re-attaches the event handler automatically.
 
-3. **OTP 27 hard constraint** — Burrito's pre-compiled ERTS limits OTP version. Document upgrade path and track Burrito's OTP 28 support.
+3. ~~**OTP 27 hard constraint**~~ — Surfaced. `validate_config/0` and `preflight_check!/0` both check the OTP version and emit clear warnings/errors explaining the Burrito ERTS constraint and how to install OTP 27.

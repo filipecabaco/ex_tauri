@@ -24,6 +24,38 @@ defmodule ExTauri.TaskHelpers do
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
       """)
     end
+
+    check_otp_version()
+  end
+
+  @doc """
+  Warns if the OTP version is not compatible with Burrito's ERTS availability.
+  """
+  def check_otp_version do
+    otp_release = :erlang.system_info(:otp_release) |> List.to_string()
+
+    case Integer.parse(otp_release) do
+      {major, _} when major < 27 ->
+        Mix.raise("""
+        ExTauri requires OTP 27 but you are running OTP #{otp_release}.
+        Burrito does not have pre-compiled ERTS available for other versions.
+
+        Install OTP 27 via your version manager:
+
+            asdf install erlang 27.2
+            mise install erlang 27.2
+        """)
+
+      {major, _} when major > 27 ->
+        Mix.shell().info("""
+        Warning: ExTauri targets OTP 27 but you are running OTP #{otp_release}.
+        Burrito may not have pre-compiled ERTS for OTP #{major} yet.
+        Development should work, but production builds may fail.
+        """)
+
+      _ ->
+        :ok
+    end
   end
 
   @doc """

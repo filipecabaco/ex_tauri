@@ -26,6 +26,30 @@ defmodule ExTauri do
   end
 
   defp validate_config do
+    otp_release = :erlang.system_info(:otp_release) |> List.to_string()
+
+    case Integer.parse(otp_release) do
+      {major, _} when major < 27 ->
+        Logger.warning("""
+        ExTauri requires OTP 27 but you are running OTP #{otp_release}.
+        Burrito does not have pre-compiled ERTS available for other OTP versions.
+
+        Install OTP 27 via asdf, mise, or kerl:
+
+            asdf install erlang 27.2
+        """)
+
+      {major, _} when major > 27 ->
+        Logger.warning("""
+        ExTauri currently targets OTP 27 but you are running OTP #{otp_release}.
+        Burrito may not have pre-compiled ERTS for OTP #{major} yet.
+        Production builds may fail. Development should work if Burrito is skipped.
+        """)
+
+      _ ->
+        :ok
+    end
+
     unless Application.get_env(:ex_tauri, :version) do
       Logger.warning("""
       tauri version is not configured. Please set it in your config files:
@@ -73,37 +97,43 @@ defmodule ExTauri do
   end
 
   @doc """
-  Runs a Tauri CLI command with the given arguments.
+  Runs a Tauri CLI command after building a full production release.
 
-  This function builds the Elixir release using Burrito, then executes
-  the Tauri CLI with the provided arguments. Use this for commands that
-  require a sidecar binary (dev, build).
+  This function builds the Elixir release (with Burrito wrapping), then
+  executes the Tauri CLI. Use this for production builds only.
 
-  For commands that don't need the release build, use `run_simple/1`.
+  For development, use `run_dev/1` which skips Burrito for faster iteration.
+  For commands that don't need a release at all, use `run_simple/1`.
 
   ## Examples
 
-      ExTauri.run(["dev"])
       ExTauri.run(["build", "--target", "x86_64-apple-darwin"])
 
   """
   def run(args) when is_list(args) do
-    # Verify we're in a directory with src-tauri before proceeding
-    unless File.dir?("src-tauri") do
-      raise """
-      Could not find src-tauri directory in the current path: #{File.cwd!()}
-
-      Make sure you:
-      1. Run this command from your project root (where mix.exs is located)
-      2. Have run 'mix ex_tauri.install' to set up the Tauri project structure
-
-      If you're in the ex_tauri repository root, try:
-        cd example
-        mix ex_tauri.build
-      """
-    end
-
+    check_src_tauri!()
     wrap()
+    run_tauri_cli(args)
+  end
+
+  @doc """
+  Runs a Tauri CLI command after building a lightweight development release.
+
+  Unlike `run/1`, this skips Burrito wrapping and builds a standard Elixir
+  release. This is significantly faster for development iteration since it
+  avoids downloading and packaging ERTS on every change.
+
+  The sidecar binary is placed at the same path Tauri expects, so the
+  native window works identically.
+
+  ## Examples
+
+      ExTauri.run_dev(["dev", "--no-dev-server-wait"])
+
+  """
+  def run_dev(args) when is_list(args) do
+    check_src_tauri!()
+    wrap_dev()
     run_tauri_cli(args)
   end
 
@@ -151,9 +181,25 @@ defmodule ExTauri do
     end
   end
 
+  defp check_src_tauri! do
+    unless File.dir?("src-tauri") do
+      raise """
+      Could not find src-tauri directory in the current path: #{File.cwd!()}
+
+      Make sure you:
+      1. Run this command from your project root (where mix.exs is located)
+      2. Have run 'mix ex_tauri.install' to set up the Tauri project structure
+
+      If you're in the ex_tauri repository root, try:
+        cd example
+        mix ex_tauri.build
+      """
+    end
+  end
+
   defp wrap() do
     get_in(Mix.Project.config(), [:releases, :desktop]) ||
-      raise "expected a burrito release configured for the app :desktop in your mix.exs"
+      raise "expected a :desktop release configured in your mix.exs"
 
     # Run release with MIX_ENV=prod at shell level to avoid including dev config with regexes.
     # Dev config (like live_reload patterns) contains regexes that can't be serialized.
@@ -179,19 +225,71 @@ defmodule ExTauri do
 
     # Burrito names output with underscores (desktop_x86_64-...) but Tauri expects
     # hyphens (desktop-x86_64-...). Get the host triple from rustc and rename.
+    rename_burrito_output()
+
+    :ok
+  end
+
+  defp wrap_dev() do
+    get_in(Mix.Project.config(), [:releases, :desktop]) ||
+      raise "expected a :desktop release configured in your mix.exs"
+
+    # Build a standard release without Burrito wrapping for faster dev iteration.
+    # Use MIX_ENV=prod to avoid serialization issues with dev config regexes.
+    case System.cmd("mix", ["release", "desktop", "--overwrite"],
+           env: [{"MIX_ENV", "prod"}, {"BURRITO_SKIP", "true"}],
+           into: IO.stream(:stdio, :line),
+           stderr_to_stdout: true
+         ) do
+      {_, 0} ->
+        :ok
+
+      {_, exit_code} ->
+        raise "Failed to build dev release with exit code #{exit_code}."
+    end
+
+    # Place the release binary where Tauri expects the sidecar.
+    # Tauri looks for burrito_out/desktop-<triplet>, so we create a
+    # wrapper script that launches the standard release.
+    ensure_dev_sidecar()
+
+    :ok
+  end
+
+  defp host_triplet do
     {rustc_output, 0} = System.cmd("rustc", ["-Vv"])
 
-    triplet =
-      case Regex.run(~r/host: (.+)/, rustc_output) do
-        [_, host] -> String.trim(host)
-        _ -> raise "Could not determine host triple from `rustc -Vv`"
-      end
+    case Regex.run(~r/host: (.+)/, rustc_output) do
+      [_, host] -> String.trim(host)
+      _ -> raise "Could not determine host triple from `rustc -Vv`"
+    end
+  end
+
+  defp rename_burrito_output do
+    triplet = host_triplet()
 
     File.cp!(
       "burrito_out/desktop_#{triplet}",
       "burrito_out/desktop-#{triplet}"
     )
+  end
 
-    :ok
+  defp ensure_dev_sidecar do
+    triplet = host_triplet()
+
+    File.mkdir_p!("burrito_out")
+
+    # Create a shell script that launches the standard release.
+    # The release binary is at _build/prod/rel/desktop/bin/desktop.
+    release_bin = Path.join([File.cwd!(), "_build", "prod", "rel", "desktop", "bin", "desktop"])
+    sidecar_path = "burrito_out/desktop-#{triplet}"
+
+    script = """
+    #!/bin/sh
+    exec "#{release_bin}" start "$@"
+    """
+
+    File.write!(sidecar_path, script)
+    File.chmod!(sidecar_path, 0o755)
   end
 end

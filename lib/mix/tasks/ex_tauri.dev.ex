@@ -86,6 +86,6 @@ defmodule Mix.Tasks.ExTauri.Dev do
       ["--no-dev-server-wait"] ++
         ExTauri.TaskHelpers.build_tauri_args(@flag_specs, opts, extra_args)
 
-    ExTauri.run(["dev" | tauri_args])
+    ExTauri.run_dev(["dev" | tauri_args])
   end
 end

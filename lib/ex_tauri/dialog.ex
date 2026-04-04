@@ -6,8 +6,23 @@ defmodule ExTauri.Dialog do
 
   ## Requirements
 
-  - `tauri-plugin-dialog` must be installed
+  - `tauri-plugin-dialog` must be installed (see Plugin Setup below)
   - The `TauriHook` must be mounted in your LiveView (see `ExTauri.Hook`)
+
+  ## Plugin Setup
+
+  Add the dependency to `src-tauri/Cargo.toml`:
+
+      [dependencies]
+      tauri-plugin-dialog = "2"
+
+  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
+
+      .plugin(tauri_plugin_dialog::init())
+
+  Add the capability to `src-tauri/capabilities/default.json`:
+
+      "permissions": ["dialog:default"]
 
   ## Examples
 

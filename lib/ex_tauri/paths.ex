@@ -8,12 +8,12 @@ defmodule ExTauri.Paths do
 
   ## Paths by Platform
 
-  | Function      | macOS                                    | Linux                              |
-  |---------------|------------------------------------------|------------------------------------|
-  | `data_dir/0`  | `~/Library/Application Support/<app>`    | `~/.local/share/<app>`             |
-  | `config_dir/0`| `~/Library/Application Support/<app>`    | `~/.config/<app>`                  |
-  | `cache_dir/0` | `~/Library/Caches/<app>`                 | `~/.cache/<app>`                   |
-  | `log_dir/0`   | `~/Library/Logs/<app>`                   | `~/.local/state/<app>/log`         |
+  | Function      | macOS                                    | Linux                              | Windows                            |
+  |---------------|------------------------------------------|------------------------------------|------------------------------------|
+  | `data_dir/0`  | `~/Library/Application Support/<app>`    | `~/.local/share/<app>`             | `%APPDATA%/<app>`                  |
+  | `config_dir/0`| `~/Library/Application Support/<app>`    | `~/.config/<app>`                  | `%APPDATA%/<app>`                  |
+  | `cache_dir/0` | `~/Library/Caches/<app>`                 | `~/.cache/<app>`                   | `%LOCALAPPDATA%/<app>/cache`       |
+  | `log_dir/0`   | `~/Library/Logs/<app>`                   | `~/.local/state/<app>/log`         | `%LOCALAPPDATA%/<app>/log`         |
 
   All directories are created automatically if they don't exist.
 
@@ -109,6 +109,10 @@ defmodule ExTauri.Paths do
 
       {:unix, _} ->
         xdg_or_default("XDG_DATA_HOME", ".local/share")
+
+      {:win32, _} ->
+        appdata = System.get_env("APPDATA") || Path.join(System.user_home!(), "AppData/Roaming")
+        Path.join(appdata, app_identifier())
     end
   end
 
@@ -119,6 +123,10 @@ defmodule ExTauri.Paths do
 
       {:unix, _} ->
         xdg_or_default("XDG_CONFIG_HOME", ".config")
+
+      {:win32, _} ->
+        appdata = System.get_env("APPDATA") || Path.join(System.user_home!(), "AppData/Roaming")
+        Path.join(appdata, app_identifier())
     end
   end
 
@@ -129,6 +137,10 @@ defmodule ExTauri.Paths do
 
       {:unix, _} ->
         xdg_or_default("XDG_CACHE_HOME", ".cache")
+
+      {:win32, _} ->
+        local = System.get_env("LOCALAPPDATA") || Path.join(System.user_home!(), "AppData/Local")
+        Path.join([local, app_identifier(), "cache"])
     end
   end
 
@@ -140,6 +152,10 @@ defmodule ExTauri.Paths do
       {:unix, _} ->
         xdg_or_default("XDG_STATE_HOME", ".local/state")
         |> Path.join("log")
+
+      {:win32, _} ->
+        local = System.get_env("LOCALAPPDATA") || Path.join(System.user_home!(), "AppData/Local")
+        Path.join([local, app_identifier(), "log"])
     end
   end
 

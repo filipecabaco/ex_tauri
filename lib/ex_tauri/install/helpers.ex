@@ -2,6 +2,9 @@ defmodule ExTauri.Install.Helpers do
   @moduledoc false
   # Shared helper functions for Tauri project setup.
 
+  @main_rs_template Path.join(:code.priv_dir(:ex_tauri), "templates/main.rs.eex")
+  @external_resource @main_rs_template
+
   @doc """
   Installs the Tauri CLI via cargo and initializes the Tauri project structure.
   """
@@ -114,13 +117,6 @@ defmodule ExTauri.Install.Helpers do
       Path.join([src_tauri, "src", "main.rs"]),
       main_src(config.host, config.port, config.sanitized_name)
     )
-
-    # Workaround: tauri init places build.rs in src-tauri/ but it needs to be
-    # in src-tauri/src/ for the build to find it. See Cargo.toml build = "src/build.rs"
-    File.cp!(
-      Path.join(src_tauri, "build.rs"),
-      Path.join([src_tauri, "src", "build.rs"])
-    )
   end
 
   # ── Tauri JSON configuration ───────────────────────────────────────────────
@@ -129,31 +125,41 @@ defmodule ExTauri.Install.Helpers do
     conf_path = Path.join([File.cwd!(), "src-tauri", "tauri.conf.json"])
     identifier = config.sanitized_name |> String.replace("_", "-")
 
-    conf_path
-    |> File.read!()
-    |> Jason.decode!()
-    |> Map.merge(%{
-      "productName" => config.app_name,
-      "identifier" => "you.app.#{identifier}"
-    })
-    |> put_in(["bundle", "externalBin"], ["../burrito_out/desktop"])
-    |> put_in(["app", "security"], %{
-      "csp" =>
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; " <>
-          "style-src 'self' 'unsafe-inline'; " <>
-          "connect-src 'self' ipc: tauri: ws: wss:; " <>
-          "img-src 'self' data: asset: tauri:; " <>
-          "font-src 'self' data:"
-    })
-    |> put_in(["app", "windows"], [
-      %{
-        title: config.window_title,
-        fullscreen: config.fullscreen,
-        width: config.width,
-        height: config.height,
-        resizable: config.resize
-      }
-    ])
+    tauri_conf =
+      conf_path
+      |> File.read!()
+      |> Jason.decode!()
+      |> Map.merge(%{
+        "productName" => config.app_name,
+        "identifier" => "you.app.#{identifier}"
+      })
+      |> put_in(["bundle", "externalBin"], ["../burrito_out/desktop"])
+      |> put_in(["app", "security"], %{
+        "csp" =>
+          "default-src 'self'; script-src 'self' 'unsafe-inline'; " <>
+            "style-src 'self' 'unsafe-inline'; " <>
+            "connect-src 'self' ipc: tauri: ws: wss:; " <>
+            "img-src 'self' data: asset: tauri:; " <>
+            "font-src 'self' data:"
+      })
+      |> put_in(["app", "windows"], [
+        %{
+          title: config.window_title,
+          fullscreen: config.fullscreen,
+          width: config.width,
+          height: config.height,
+          resizable: config.resize
+        }
+      ])
+
+    # Merge updater config if enabled
+    tauri_conf =
+      case ExTauri.Updater.tauri_config() do
+        config when config == %{} -> tauri_conf
+        updater_config -> Map.merge(tauri_conf, updater_config)
+      end
+
+    tauri_conf
     |> Jason.encode!(pretty: true)
     |> then(&File.write!(conf_path, &1))
   end
@@ -320,7 +326,6 @@ defmodule ExTauri.Install.Helpers do
     version = "0.1.0"
     default-run = "#{sanitized}"
     edition = "2021"
-    build = "src/build.rs"
     description = ""
 
     [build-dependencies]
@@ -347,241 +352,12 @@ defmodule ExTauri.Install.Helpers do
   @doc false
   def main_src(host, port, socket_name) do
     validate_rust_interpolations!(host, port, socket_name)
-    port_str = to_string(port)
 
-    """
-    // Prevents additional console window on Windows in release, DO NOT REMOVE!!
-    #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-    use tauri_plugin_shell::process::CommandEvent;
-    use tauri_plugin_shell::ShellExt;
-    use tauri::Manager;
-
-    use std::sync::Mutex;
-    use std::time::Duration;
-
-    struct AppState {
-        sidecar_child: Mutex<Option<SidecarProcess>>,
-    }
-
-    struct SidecarProcess {
-        child: Option<tauri_plugin_shell::process::CommandChild>,
-        pid: Option<u32>,
-    }
-
-    impl Drop for SidecarProcess {
-        fn drop(&mut self) {
-            if let Some(child) = self.child.take() {
-                let _ = child.kill();
-            }
-        }
-    }
-
-    fn kill_sidecar(app: &tauri::AppHandle) {
-        if let Some(state) = app.try_state::<AppState>() {
-            if let Ok(mut guard) = state.sidecar_child.lock() {
-                if let Some(mut process) = guard.take() {
-                    // Try graceful shutdown first with SIGTERM
-                    if let Some(pid) = process.pid {
-                        println!("Attempting graceful shutdown of sidecar (PID: {})...", pid);
-
-                        // Send SIGTERM for graceful shutdown
-                        #[cfg(unix)]
-                        {
-                            use std::process::Command;
-                            let _ = Command::new("kill")
-                                .args(["-TERM", &pid.to_string()])
-                                .output();
-
-                            // Wait up to 2 seconds for graceful shutdown
-                            let timeout = Duration::from_millis(2000);
-                            let start = std::time::Instant::now();
-
-                            while start.elapsed() < timeout {
-                                // Check if process is still running
-                                let status = Command::new("kill")
-                                    .args(["-0", &pid.to_string()])
-                                    .output();
-
-                                if let Ok(output) = status {
-                                    if !output.status.success() {
-                                        println!("Sidecar shut down gracefully");
-                                        return;
-                                    }
-                                }
-
-                                std::thread::sleep(Duration::from_millis(100));
-                            }
-
-                            println!("Graceful shutdown timeout, forcing kill...");
-                        }
-
-                        #[cfg(windows)]
-                        {
-                            // On Windows, wait a bit for graceful shutdown
-                            std::thread::sleep(Duration::from_millis(2000));
-                        }
-                    }
-
-                    // Fallback to SIGKILL if graceful shutdown didn't work
-                    if let Some(child) = process.child.take() {
-                        println!("Sending SIGKILL to sidecar...");
-                        let _ = child.kill();
-                    }
-                }
-            }
-        }
-    }
-
-    fn main() {
-        tauri::Builder::default()
-            .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
-                // Focus the main window when a second instance is launched
-            }))
-            .plugin(tauri_plugin_shell::init())
-            .plugin(tauri_plugin_log::Builder::new().build())
-            .plugin(tauri_plugin_notification::init())
-            .manage(AppState {
-                sidecar_child: Mutex::new(None),
-            })
-            .setup(|app| {
-                start_server(app.handle());
-                check_server_started();
-                start_heartbeat();
-                Ok(())
-            })
-            // Intercept menu events (especially CMD+Q on macOS)
-            .on_menu_event(|app, event| {
-                println!("Menu event received: {:?}", event.id());
-                // On macOS, the default menu includes a "quit" item
-                // Intercept it to perform graceful shutdown
-                if event.id().as_ref() == "quit" || event.id().as_ref().contains("quit") {
-                    println!("Quit menu item clicked (CMD+Q), shutting down gracefully...");
-                    kill_sidecar(app);
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    std::process::exit(0);
-                }
-            })
-            .on_window_event(|window, event| {
-                if let tauri::WindowEvent::CloseRequested { .. } = event {
-                    // Kill the sidecar when the window closes
-                    kill_sidecar(&window.app_handle());
-                }
-            })
-            .build(tauri::generate_context!())
-            .expect("error while building tauri application")
-            .run(|app_handle, event| {
-                if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                    // Kill the sidecar when the app is exiting (fallback for non-menu exits)
-                    println!("ExitRequested event received, shutting down...");
-                    kill_sidecar(app_handle);
-                    api.prevent_exit(); // Prevent exit until we've cleaned up
-                    // Allow exit after cleanup
-                    std::thread::spawn(move || {
-                        std::thread::sleep(std::time::Duration::from_millis(500));
-                        std::process::exit(0);
-                    });
-                }
-            });
-    }
-
-    fn start_server(app: &tauri::AppHandle) {
-        let sidecar_command = app.shell().sidecar("desktop")
-            .expect("failed to setup `desktop` sidecar");
-
-        let (mut rx, child) = sidecar_command
-            .spawn()
-            .expect("Failed to spawn desktop sidecar");
-
-        // Get the PID for graceful shutdown
-        let pid = child.pid();
-        println!("Sidecar process started with PID: {}", pid);
-
-        // Store the child process handle so we can kill it on exit
-        if let Some(state) = app.try_state::<AppState>() {
-            if let Ok(mut guard) = state.sidecar_child.lock() {
-                *guard = Some(SidecarProcess {
-                    child: Some(child),
-                    pid: Some(pid),
-                });
-            }
-        }
-
-        tauri::async_runtime::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                if let CommandEvent::Stdout(line_bytes) = event {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    println!("{}", line);
-                }
-            }
-        });
-    }
-
-    fn check_server_started() {
-        let sleep_interval = std::time::Duration::from_millis(200);
-        let host = "#{host}".to_string();
-        let port = "#{port_str}".to_string();
-        let addr = format!("{}:{}", host, port);
-        println!(
-            "Waiting for your phoenix dev server to start on {}...",
-            addr
-        );
-        loop {
-            if std::net::TcpStream::connect(addr.clone()).is_ok() {
-               break;
-            }
-            std::thread::sleep(sleep_interval);
-        }
-    }
-
-    fn start_heartbeat() {
-        println!("Starting heartbeat to Phoenix sidecar...");
-
-        std::thread::spawn(|| {
-            use std::io::Write;
-
-            let socket_path = std::env::temp_dir().join("tauri_heartbeat_#{socket_name}.sock");
-            let interval = Duration::from_millis(100);
-
-            #[cfg(unix)]
-            {
-                use std::os::unix::net::UnixStream;
-
-                // Wait for socket to be ready
-                let mut stream = loop {
-                    match UnixStream::connect(&socket_path) {
-                        Ok(s) => break s,
-                        Err(_) => {
-                            // Socket not ready yet, wait and retry
-                            std::thread::sleep(Duration::from_millis(100));
-                        }
-                    }
-                };
-
-                println!("Connected to heartbeat socket");
-
-                loop {
-                    match stream.write_all(b"h") {
-                        Ok(_) => {}
-                        Err(_) => {
-                            // Connection lost, sidecar likely shut down
-                            break;
-                        }
-                    }
-
-                    std::thread::sleep(interval);
-                }
-            }
-
-            #[cfg(windows)]
-            {
-                // Windows: use named pipe or TCP fallback for heartbeat
-                // TODO: Implement Windows named pipe heartbeat
-                println!("Heartbeat not yet supported on Windows");
-            }
-        });
-    }
-
-    """
+    EEx.eval_file(@main_rs_template,
+      host: to_string(host),
+      port: to_string(port),
+      socket_name: to_string(socket_name)
+    )
   end
 
   defp validate_rust_interpolations!(host, port, socket_name) do

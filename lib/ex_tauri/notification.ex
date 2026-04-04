@@ -7,9 +7,15 @@ defmodule ExTauri.Notification do
 
   ## Requirements
 
-  - `tauri-plugin-notification` must be installed (added by `mix ex_tauri.install`)
+  - `tauri-plugin-notification` must be installed (included by `mix ex_tauri.install`)
   - The `TauriHook` must be mounted in your LiveView (see `ExTauri.Hook`)
   - The `notification:default` capability must be configured
+
+  ## Plugin Setup
+
+  This plugin is included by default when running `mix ex_tauri.install`.
+  The `notification:default` capability is already configured in the
+  generated `src-tauri/capabilities/default.json`. No additional setup needed.
 
   ## Examples
 

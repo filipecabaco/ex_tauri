@@ -164,16 +164,41 @@ async function execCommand(command, payload) {
 
 export const TauriHook = {
   mounted() {
+    this._setupCommandHandler();
+  },
+
+  // Re-attach the event handler when LiveView reconnects after a disconnect.
+  // Without this, commands pushed after reconnection would be silently dropped.
+  reconnected() {
+    this._setupCommandHandler();
+  },
+
+  // Clean up any in-flight state when the hook element is removed from the DOM.
+  destroyed() {
+    this._destroyed = true;
+  },
+
+  _setupCommandHandler() {
+    this._destroyed = false;
+
     this.handleEvent("tauri_command", async ({ ref, command, payload }) => {
+      // Guard against responses being pushed after the hook was destroyed
+      // (e.g., a slow dialog resolved after navigation).
+      if (this._destroyed) return;
+
       try {
         const result = await execCommand(command, payload);
-        this.pushEvent("tauri_response", { ref, command, ...result });
+        if (!this._destroyed) {
+          this.pushEvent("tauri_response", { ref, command, ...result });
+        }
       } catch (error) {
-        this.pushEvent("tauri_error", {
-          ref,
-          command,
-          error: error.message || String(error),
-        });
+        if (!this._destroyed) {
+          this.pushEvent("tauri_error", {
+            ref,
+            command,
+            error: error.message || String(error),
+          });
+        }
       }
     });
   },

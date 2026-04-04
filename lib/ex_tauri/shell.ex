@@ -6,9 +6,27 @@ defmodule ExTauri.Shell do
 
   ## Requirements
 
-  - `tauri-plugin-shell` must be installed
+  - `tauri-plugin-shell` must be installed (included by `mix ex_tauri.install`)
   - The `TauriHook` must be mounted in your LiveView (see `ExTauri.Hook`)
   - Shell commands must be allowed in your Tauri capabilities configuration
+
+  ## Plugin Setup
+
+  This plugin is included by default when running `mix ex_tauri.install`.
+  To allowlist additional shell commands, add scoped permissions to
+  `src-tauri/capabilities/default.json`:
+
+      {
+        "identifier": "shell:allow-execute",
+        "allow": [
+          {"name": "git", "cmd": "git", "args": true},
+          {"name": "node", "cmd": "node", "args": ["--version"]}
+        ]
+      }
+
+  To allow opening URLs in the default browser:
+
+      "permissions": ["shell:allow-open"]
 
   ## Security Note
 

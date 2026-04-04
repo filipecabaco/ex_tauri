@@ -18,7 +18,6 @@ defmodule ExTauriIntegrationTest do
       assert cargo_toml =~ ~r/name = "test_app"/
       assert cargo_toml =~ ~r/version = "0\.1\.0"/
       assert cargo_toml =~ ~r/edition = "2021"/
-      assert cargo_toml =~ ~r/build = "src\/build\.rs"/
 
       # Verify build dependencies use semver major version (not exact version)
       assert cargo_toml =~ ~r/\[build-dependencies\]/

@@ -117,6 +117,47 @@ defmodule ExTauri.Hook do
   end
 
   @doc """
+  Pushes a Tauri command and tracks the `ref` in socket assigns for correlation.
+
+  This is useful when you need to distinguish between multiple concurrent
+  commands of the same type. The `ref` is stored under the given `assign_key`
+  in socket assigns, so you can match it in `handle_event/3`.
+
+  ## Examples
+
+      # Push and track
+      def handle_event("open_file_a", _params, socket) do
+        socket = ExTauri.Hook.push_command_tracked(socket, "dialog_open", %{title: "File A"}, :file_a_ref)
+        {:noreply, socket}
+      end
+
+      def handle_event("open_file_b", _params, socket) do
+        socket = ExTauri.Hook.push_command_tracked(socket, "dialog_open", %{title: "File B"}, :file_b_ref)
+        {:noreply, socket}
+      end
+
+      # Correlate the response
+      def handle_event("tauri_response", %{"ref" => ref} = params, socket) do
+        cond do
+          ref == socket.assigns[:file_a_ref] -> {:noreply, assign(socket, :file_a, params["path"])}
+          ref == socket.assigns[:file_b_ref] -> {:noreply, assign(socket, :file_b, params["path"])}
+          true -> {:noreply, socket}
+        end
+      end
+  """
+  def push_command_tracked(socket, command, payload, assign_key) do
+    ref = System.unique_integer([:positive]) |> to_string()
+
+    socket
+    |> Phoenix.LiveView.assign(assign_key, ref)
+    |> Phoenix.LiveView.push_event("tauri_command", %{
+      ref: ref,
+      command: command,
+      payload: payload
+    })
+  end
+
+  @doc """
   Returns the JavaScript source code for the TauriHook.
 
   This can be used to generate the vendor file at build time or

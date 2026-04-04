@@ -16,6 +16,11 @@ defmodule ExTauri do
 
   @doc false
   def start(_, _) do
+    validate_config()
+    Supervisor.start_link([], strategy: :one_for_one)
+  end
+
+  defp validate_config do
     unless Application.get_env(:ex_tauri, :version) do
       Logger.warning("""
       tauri version is not configured. Please set it in your config files:
@@ -24,7 +29,23 @@ defmodule ExTauri do
       """)
     end
 
-    Supervisor.start_link([], strategy: :one_for_one)
+    unless Application.get_env(:ex_tauri, :app_name) do
+      Logger.warning("""
+      :app_name is not configured. Please set it in your config files:
+
+          config :ex_tauri, :app_name, "My Desktop App"
+      """)
+    end
+
+    for key <- [:host, :port] do
+      unless Application.get_env(:ex_tauri, key) do
+        Logger.warning("""
+        :#{key} is not configured. This is required for ex_tauri.install and ex_tauri.dev.
+
+            config :ex_tauri, :#{key}, #{if key == :host, do: ~s("localhost"), else: "4000"}
+        """)
+      end
+    end
   end
 
   @doc """
@@ -126,19 +147,24 @@ defmodule ExTauri do
   end
 
   defp wrap() do
-    File.rm_rf!(Path.join([Path.expand("~"), "Library", "Application Support", ".burrito"]))
+    # Clear Burrito's cached ERTS to force a fresh download (macOS-specific path)
+    burrito_cache = Path.join([Path.expand("~"), "Library", "Application Support", ".burrito"])
+
+    if File.dir?(burrito_cache) do
+      File.rm_rf!(burrito_cache)
+    end
 
     get_in(Mix.Project.config(), [:releases, :desktop]) ||
       raise "expected a burrito release configured for the app :desktop in your mix.exs"
 
-    # Run release with MIX_ENV=prod at shell level to avoid including dev config with regexes
-    # Dev config (like live_reload patterns) contains regexes that can't be serialized
-    # Must run as separate process so dependencies are loaded correctly for prod environment
+    # Run release with MIX_ENV=prod at shell level to avoid including dev config with regexes.
+    # Dev config (like live_reload patterns) contains regexes that can't be serialized.
+    # Must run as separate process so dependencies are loaded correctly for prod environment.
     case System.cmd("mix", ["release", "desktop", "--overwrite"],
-      env: [{"MIX_ENV", "prod"}],
-      into: IO.stream(:stdio, :line),
-      stderr_to_stdout: true
-    ) do
+           env: [{"MIX_ENV", "prod"}],
+           into: IO.stream(:stdio, :line),
+           stderr_to_stdout: true
+         ) do
       {_, 0} ->
         :ok
 
@@ -153,11 +179,15 @@ defmodule ExTauri do
         """
     end
 
+    # Burrito names output with underscores (desktop_x86_64-...) but Tauri expects
+    # hyphens (desktop-x86_64-...). Get the host triple from rustc and rename.
+    {rustc_output, 0} = System.cmd("rustc", ["-Vv"])
+
     triplet =
-      System.cmd("rustc", ["-Vv"])
-      |> elem(0)
-      |> then(&Regex.run(~r/host: (.*)/, &1))
-      |> Enum.at(1)
+      case Regex.run(~r/host: (.+)/, rustc_output) do
+        [_, host] -> String.trim(host)
+        _ -> raise "Could not determine host triple from `rustc -Vv`"
+      end
 
     File.cp!(
       "burrito_out/desktop_#{triplet}",

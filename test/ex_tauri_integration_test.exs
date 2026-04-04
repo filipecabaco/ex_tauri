@@ -37,6 +37,7 @@ defmodule ExTauriIntegrationTest do
       # This is critical because plugins have independent versioning
       assert cargo_toml =~ ~r/tauri-plugin-shell = "2"/
       assert cargo_toml =~ ~r/tauri-plugin-log = "2"/
+      assert cargo_toml =~ ~r/tauri-plugin-notification = "2"/
 
       # Ensure exact version is NOT used for plugins
       refute cargo_toml =~ ~r/tauri-plugin-shell = "#{tauri_version}"/
@@ -114,6 +115,7 @@ defmodule ExTauriIntegrationTest do
       # Verify plugin initialization
       assert main_src =~ ~r/\.plugin\(tauri_plugin_shell::init\(\)\)/
       assert main_src =~ ~r/\.plugin\(tauri_plugin_log::Builder::new\(\)\.build\(\)\)/
+      assert main_src =~ ~r/\.plugin\(tauri_plugin_notification::init\(\)\)/
 
       # Verify setup function signature (V2 uses AppHandle reference)
       assert main_src =~ ~r/fn start_server\(app: &tauri::AppHandle\)/
@@ -179,11 +181,10 @@ defmodule ExTauriIntegrationTest do
       assert is_list(capabilities["permissions"])
       permissions = capabilities["permissions"]
 
-      # Verify shell permissions
-      assert "shell:allow-execute" in permissions
-      assert "shell:allow-spawn" in permissions
+      # Verify notification permissions
+      assert "notification:default" in permissions
 
-      # Verify sidecar permission configuration
+      # Verify scoped sidecar permission (least-privilege: only allow the desktop sidecar)
       sidecar_permission =
         Enum.find(permissions, fn
           %{"identifier" => "shell:allow-execute"} -> true
@@ -193,6 +194,12 @@ defmodule ExTauriIntegrationTest do
       assert sidecar_permission != nil
       assert is_list(sidecar_permission["allow"])
       assert %{"name" => "desktop", "sidecar" => true} in sidecar_permission["allow"]
+
+      # Verify broad shell permissions are NOT granted by default (least-privilege)
+      refute "shell:allow-execute" in permissions,
+             "Broad shell:allow-execute should not be a top-level string permission"
+      refute "shell:allow-spawn" in permissions,
+             "Broad shell:allow-spawn should not be granted by default"
     end
 
     test "capabilities.json is valid JSON" do
@@ -202,17 +209,13 @@ defmodule ExTauriIntegrationTest do
       assert {:ok, _} = Jason.decode(capabilities_json)
     end
 
-    test "capabilities.json includes all required permissions for external binary" do
+    test "capabilities.json includes scoped sidecar permission for external binary" do
       capabilities_json = ExTauri.__test_capabilities_json__()
       {:ok, capabilities} = Jason.decode(capabilities_json)
 
       permissions = capabilities["permissions"]
 
-      # Must have both execute and spawn permissions
-      assert "shell:allow-execute" in permissions
-      assert "shell:allow-spawn" in permissions
-
-      # Must explicitly allow the desktop sidecar
+      # Must explicitly allow the desktop sidecar via scoped permission
       sidecar_configs =
         permissions
         |> Enum.filter(&is_map/1)
@@ -223,6 +226,11 @@ defmodule ExTauriIntegrationTest do
       end)
 
       assert desktop_config != nil, "Desktop sidecar must be explicitly allowed in capabilities"
+
+      # Broad shell permissions should NOT be present (least-privilege principle)
+      string_permissions = Enum.filter(permissions, &is_binary/1)
+      refute "shell:allow-execute" in string_permissions
+      refute "shell:allow-spawn" in string_permissions
     end
   end
 
@@ -254,7 +262,7 @@ defmodule ExTauriIntegrationTest do
       assert cargo_toml =~ ~r/edition = "2021"/
       assert main_src =~ ~r/\.plugin\(/
       assert main_src =~ ~r/tauri_plugin_shell::ShellExt/
-      assert capabilities =~ ~r/shell:allow-execute/
+      assert capabilities =~ "shell:allow-execute"
 
       # Verify semver ranges are used (not exact versions)
       assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \[\] \}/

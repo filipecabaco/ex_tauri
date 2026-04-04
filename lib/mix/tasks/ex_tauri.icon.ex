@@ -79,7 +79,8 @@ defmodule Mix.Tasks.ExTauri.Icon do
     ExTauri.run_simple(["icon" | tauri_args])
   end
 
-  defp build_tauri_args(opts, positional_args) do
+  @doc false
+  def build_tauri_args(opts, positional_args) do
     args = positional_args
 
     args = if opts[:output], do: args ++ ["--output", opts[:output]], else: args

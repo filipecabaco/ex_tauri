@@ -4,8 +4,8 @@ defmodule ExTauri.ShutdownManager do
 
   This GenServer implements a heartbeat-based mechanism to detect when the Tauri
   frontend exits. The Rust frontend sends heartbeat signals every 100ms via Unix
-  domain socket, and if the Phoenix sidecar doesn't receive a heartbeat within 300ms,
-  it initiates graceful shutdown.
+  domain socket, and if the Phoenix sidecar doesn't receive a heartbeat within
+  1500ms (configurable), it initiates graceful shutdown.
 
   ## Usage
 
@@ -24,33 +24,35 @@ defmodule ExTauri.ShutdownManager do
   ## How it works
 
   The heartbeat mechanism provides robust shutdown detection:
-  1. ShutdownManager creates a Unix domain socket at `/tmp/tauri_heartbeat_<app_name>.sock`
+  1. ShutdownManager creates a Unix domain socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
   2. Rust frontend connects and sends a byte every 100ms
   3. ShutdownManager tracks the last heartbeat timestamp
-  4. Every 100ms, ShutdownManager checks if a heartbeat was received recently
-  5. If no heartbeat for 300ms (3 missed beats), initiates graceful shutdown
+  4. Every 500ms, ShutdownManager checks if a heartbeat was received recently
+  5. If no heartbeat for 1500ms, initiates graceful shutdown
 
-  The socket path is unique per application (based on :app_name config) to prevent
+  The socket path is unique per application (based on `:app_name` config) to prevent
   collisions when multiple ExTauri applications run simultaneously.
 
-  This works even if:
-  - The Tauri app is force-quit (CMD+Q)
-  - The Tauri app crashes
-  - The process is killed unexpectedly
+  This works even when:
+  - The app is force-quit (CMD+Q on macOS)
+  - The app crashes unexpectedly
+  - The process is killed without cleanup
 
-  After detecting heartbeat failure, the Phoenix app:
-  - Closes database connections
-  - Flushes logs
-  - Completes in-flight requests
-  - Performs any other cleanup needed
-  - Exits gracefully
+  ## Configuration
+
+  Heartbeat timing can be configured in your `config/config.exs`:
+
+      config :ex_tauri,
+        heartbeat_interval: 500,  # How often to check heartbeat (ms, default: 500)
+        heartbeat_timeout: 1500   # Time without heartbeat before shutdown (ms, default: 1500)
+
   """
 
   use GenServer
   require Logger
 
-  @heartbeat_interval 100
-  @heartbeat_timeout 300
+  @default_heartbeat_interval 500
+  @default_heartbeat_timeout 1500
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -61,10 +63,13 @@ defmodule ExTauri.ShutdownManager do
     # Trap exits so we can perform graceful shutdown
     Process.flag(:trap_exit, true)
 
+    heartbeat_interval = Application.get_env(:ex_tauri, :heartbeat_interval, @default_heartbeat_interval)
+    heartbeat_timeout = Application.get_env(:ex_tauri, :heartbeat_timeout, @default_heartbeat_timeout)
+
     # Create socket path using app name to prevent collisions
     app_name = Application.get_env(:ex_tauri, :app_name, "ex_tauri_app")
-    socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
-    socket_path = "/tmp/tauri_heartbeat_#{socket_name}.sock"
+    socket_name = ExTauri.Paths.sanitize_name(app_name)
+    socket_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
 
     # Clean up old socket file if it exists
     cleanup_socket(socket_path)
@@ -77,11 +82,14 @@ defmodule ExTauri.ShutdownManager do
       {:reuseaddr, true}
     ])
 
+    # Restrict socket to owner-only access (prevents local privilege escalation)
+    File.chmod(socket_path, 0o600)
+
     # Spawn acceptor process with link for proper supervision
     Task.start_link(fn -> accept_loop(listen_socket) end)
 
     # Schedule the first heartbeat check
-    schedule_heartbeat_check()
+    schedule_heartbeat_check(heartbeat_interval)
 
     Logger.info("[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{socket_path}")
 
@@ -90,7 +98,9 @@ defmodule ExTauri.ShutdownManager do
        listen_socket: listen_socket,
        socket_path: socket_path,
        last_heartbeat: System.monotonic_time(:millisecond),
-       shutdown_initiated: false
+       shutdown_initiated: false,
+       heartbeat_interval: heartbeat_interval,
+       heartbeat_timeout: heartbeat_timeout
      }}
   end
 
@@ -105,7 +115,7 @@ defmodule ExTauri.ShutdownManager do
     current_time = System.monotonic_time(:millisecond)
     time_since_last_heartbeat = current_time - state.last_heartbeat
 
-    if time_since_last_heartbeat > @heartbeat_timeout do
+    if time_since_last_heartbeat > state.heartbeat_timeout do
       Logger.warning(
         "[ExTauri.ShutdownManager] Heartbeat timeout (#{time_since_last_heartbeat}ms) - Tauri frontend appears to have exited"
       )
@@ -113,7 +123,7 @@ defmodule ExTauri.ShutdownManager do
       initiate_shutdown(state)
     else
       # Still receiving heartbeats, schedule next check
-      schedule_heartbeat_check()
+      schedule_heartbeat_check(state.heartbeat_interval)
       {:noreply, state}
     end
   end
@@ -139,14 +149,13 @@ defmodule ExTauri.ShutdownManager do
     :ok
   end
 
-  defp schedule_heartbeat_check do
-    Process.send_after(self(), :check_heartbeat, @heartbeat_interval)
+  defp schedule_heartbeat_check(interval) do
+    Process.send_after(self(), :check_heartbeat, interval)
   end
 
   defp cleanup_socket(socket_path) do
     File.rm(socket_path)
-  rescue
-    _ -> :ok
+    :ok
   end
 
   defp accept_loop(listen_socket) do
@@ -170,20 +179,10 @@ defmodule ExTauri.ShutdownManager do
   end
 
   defp handle_client(client_socket) do
-    do_handle_client(client_socket)
-  rescue
-    e ->
-      Logger.debug("[ExTauri.ShutdownManager] Client error: #{inspect(e)}")
-      :gen_tcp.close(client_socket)
-  end
-
-  defp do_handle_client(client_socket) do
     case :gen_tcp.recv(client_socket, 0) do
       {:ok, _data} ->
-        # Received heartbeat, notify the GenServer
         GenServer.cast(__MODULE__, :heartbeat)
-        # Continue receiving
-        do_handle_client(client_socket)
+        handle_client(client_socket)
 
       {:error, :closed} ->
         :gen_tcp.close(client_socket)

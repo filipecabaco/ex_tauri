@@ -1,11 +1,11 @@
-defmodule Desktop.MixProject do
+defmodule ExTauri.MixProject do
   use Mix.Project
 
   def project do
     [
       app: :ex_tauri,
       version: "0.1.0",
-      elixir: "~> 1.11",
+      elixir: "~> 1.15",
       # Limited to OTP 27 due to Burrito pre-compiled ERTS availability
       # OTP 28 doesn't have universal macOS binaries available yet
       otp_release: "~> 27.0",
@@ -16,8 +16,8 @@ defmodule Desktop.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, inets: :optional, ssl: :optional],
-      env: [default: []]
+      mod: {ExTauri, []},
+      extra_applications: [:logger, inets: :optional, ssl: :optional]
     ]
   end
 
@@ -25,7 +25,8 @@ defmodule Desktop.MixProject do
     [
       {:ex_doc, ">= 0.0.0", only: :docs},
       {:burrito, "~> 1.5"},
-      {:jason, "~> 1.4.0"}
+      {:igniter, "~> 0.7"},
+      {:jason, "~> 1.4"}
     ]
   end
 end

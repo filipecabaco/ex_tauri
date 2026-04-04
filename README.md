@@ -8,23 +8,24 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 
 ## Features
 
-- 🚀 **Phoenix LiveView as Desktop Apps** - Turn your Phoenix app into a native desktop application
-- 📦 **Single Binary Distribution** - Uses [Burrito](https://github.com/burrito-elixir/burrito) to bundle everything into one executable
-- 🔄 **Hot Reload in Dev Mode** - Full Phoenix development experience with live reload
-- 🎯 **Graceful Shutdown** - Heartbeat-based mechanism ensures clean shutdown on CMD+Q, crashes, or force-quit
-- 🌍 **Cross-Platform** - Build for macOS, Windows, and Linux
+- **Phoenix LiveView as Desktop Apps** — Turn your Phoenix app into a native desktop application
+- **Single Binary Distribution** — Uses [Burrito](https://github.com/burrito-elixir/burrito) to bundle everything into one executable
+- **Hot Reload in Dev Mode** — Full Phoenix development experience with live reload
+- **Graceful Shutdown** — Heartbeat-based mechanism ensures clean shutdown on CMD+Q, crashes, or force-quit
+- **Automated Setup** — Uses [Igniter](https://hexdocs.pm/igniter) for safe, AST-aware project configuration
+- **Cross-Platform** — Build for macOS, Windows, and Linux
 
-## Quick Start
+## Prerequisites
 
-### Prerequisites
+- **Elixir** >= 1.15 with **OTP 27** (OTP 28 not yet supported due to Burrito ERTS availability)
+- **Rust** — [Install via rustup](https://www.rust-lang.org/tools/install)
+- **Platform dependencies** — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Zig 0.10.0](https://ziglang.org/download/)
-- Elixir 1.14+
+> **Note:** Zig is only required if you use Burrito for cross-compilation. For same-platform builds, Rust alone is sufficient.
 
-### Installation
+## Getting Started
 
-1. **Add ExTauri to your Phoenix project:**
+### 1. Add ExTauri to your Phoenix project
 
 ```elixir
 # mix.exs
@@ -35,35 +36,51 @@ def deps do
 end
 ```
 
-2. **Configure ExTauri:**
+### 2. Install and set up
 
-```elixir
-# config/config.exs
-config :ex_tauri,
-  version: "2.5.1",
-  app_name: "My Desktop App",
-  host: "localhost",
-  port: 4000
+```bash
+mix deps.get
+mix ex_tauri.install
 ```
 
-3. **Add Burrito release:**
+That's it! `mix ex_tauri.install` handles everything automatically:
+
+- **Config** — Sets sensible defaults for `app_name`, `host`, `port`, and `version` in `config/config.exs`
+- **Tauri CLI** — Installs via Cargo
+- **Project structure** — Scaffolds `src-tauri/` with Rust code, config, and capabilities
+- **Supervision tree** — Adds `ExTauri.ShutdownManager` to your application (via Igniter)
+- **Release config** — Adds a `:desktop` release to `mix.exs` (via Igniter)
+- **JS hook** — Generates `assets/vendor/ex_tauri.js` and auto-injects the import and hook registration into `assets/js/app.js`
+- **Layout** — Auto-injects the `<div id="tauri-bridge">` element into your root layout
+
+### 3. Run in development
+
+```bash
+mix ex_tauri.dev
+```
+
+This starts your Phoenix app as a native desktop window with full hot-reload support.
+
+> **Tip:** Review the generated config in `config/config.exs` to customize your app name, port, or window settings.
+
+## Building for Production
+
+### 1. Add Burrito wrapping
+
+Update the `:desktop` release in your `mix.exs` to include Burrito:
 
 ```elixir
 # mix.exs
 def project do
   [
     # ... existing config
-    releases: releases()
-  ]
-end
-
-defp releases do
-  [
-    desktop: [
-      steps: [:assemble, &Burrito.wrap/1],
-      burrito: [
-        targets: [
-          "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64]
+    releases: [
+      desktop: [
+        steps: [:assemble, &Burrito.wrap/1],
+        burrito: [
+          targets: [
+            "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64]
+          ]
         ]
       ]
     ]
@@ -71,7 +88,7 @@ defp releases do
 end
 ```
 
-4. **Add required applications:**
+### 2. Add required applications
 
 ```elixir
 # mix.exs
@@ -83,108 +100,79 @@ def application do
 end
 ```
 
-5. **Add ExTauri.ShutdownManager to your supervision tree:**
+### 3. Build
 
-```elixir
-# lib/my_app/application.ex
-def start(_type, _args) do
-  children = [
-    MyApp.Repo,
-    {Phoenix.PubSub, name: MyApp.PubSub},
-    MyAppWeb.Endpoint,
-    ExTauri.ShutdownManager  # Add this at the bottom of the children list
-  ]
-
-  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
-  Supervisor.start_link(children, opts)
-end
-```
-
-6. **Install Tauri:**
-
-```bash
-mix deps.get
-mix ex_tauri.install
-```
-
-### Usage
-
-**Development** (with hot reload):
-```bash
-mix ex_tauri.dev
-```
-
-**Build for distribution**:
 ```bash
 mix ex_tauri.build
 ```
 
-Your app bundle will be at `src-tauri/target/release/bundle/macos/YourApp.app` (macOS) or equivalent for your platform.
+Your app bundle will be at `src-tauri/target/release/bundle/` with platform-specific packages:
+- **macOS:** `.app` and `.dmg`
+- **Linux:** `.deb` and `.appimage`
+- **Windows:** `.msi` and `.exe`
 
-### Available Mix Tasks
+## Mix Tasks
 
-ExTauri provides dedicated Mix tasks for common operations:
+| Task | Description |
+|------|-------------|
+| `mix ex_tauri.install` | Set up Tauri in your project (one-time) |
+| `mix ex_tauri.dev` | Run in development mode with hot-reload |
+| `mix ex_tauri.build` | Build for production |
 
-- **`mix ex_tauri.install`** - Install and configure Tauri in your project
-- **`mix ex_tauri.dev`** - Run in development mode with hot-reload
-- **`mix ex_tauri.build`** - Build for production and create distributable packages
-- **`mix ex_tauri.info`** - Show information about your Tauri project and environment
-- **`mix ex_tauri.icon`** - Generate application icons from a source image
-- **`mix ex_tauri.signer`** - Manage code signing for application updates
-
-Each task provides detailed help and options:
-```bash
-mix help ex_tauri.dev
-mix help ex_tauri.build
-# etc.
-```
+Run `mix help ex_tauri.<task>` for detailed options.
 
 ## How It Works
-
-### Heartbeat-Based Shutdown
-
-ExTauri uses a robust Unix domain socket heartbeat mechanism to ensure the Phoenix sidecar shuts down gracefully when the desktop app exits:
-
-1. Elixir creates a Unix domain socket at `/tmp/tauri_heartbeat_<app_name>.sock`
-2. Rust connects and sends a byte every 100ms
-3. Elixir monitors heartbeats and checks every 100ms
-4. If no heartbeat for 300ms (3 missed beats), graceful shutdown is initiated
-5. Phoenix closes database connections, flushes logs, and exits cleanly
-
-**Zero HTTP overhead** - Uses native Unix sockets (stdlib only, no dependencies!)
-
-The socket path is unique per application (based on `:app_name` config) to prevent collisions when running multiple ExTauri apps simultaneously.
-
-This works even when:
-- The app is force-quit (CMD+Q on macOS)
-- The app crashes unexpectedly
-- The process is killed without cleanup
 
 ### Architecture
 
 ```
-┌─────────────────┐
-│  Tauri Window   │  ← Native UI (Rust)
-│  (WebView)      │
-└────────┬────────┘
-         │ HTTP (for UI)
-         │ Unix Socket (for heartbeat)
-         ↓
-┌─────────────────┐
-│ Phoenix Server  │  ← Your Elixir App
-│  (Sidecar)      │     (Burrito-wrapped)
-│                 │     /tmp/tauri_heartbeat_<app>.sock
-└─────────────────┘
+┌─────────────────────┐
+│   Tauri Window       │  Native window (Rust/WebView)
+│   ┌───────────────┐  │
+│   │  Phoenix UI   │  │  Your LiveView app rendered in WebView
+│   └───────────────┘  │
+└─────────┬────────────┘
+          │
+          │  HTTP — serves your Phoenix UI to the WebView
+          │  Unix Socket — heartbeat for lifecycle management
+          │
+┌─────────┴────────────┐
+│   Phoenix Server     │  Your Elixir app (Burrito-wrapped sidecar)
+│   (Sidecar Process)  │
+└──────────────────────┘
 ```
 
-## Configuration Options
+Tauri launches your Phoenix app as a **sidecar process**. The WebView connects to Phoenix over HTTP to render your LiveView UI. A separate Unix domain socket carries heartbeat signals for lifecycle management.
+
+### Heartbeat-Based Shutdown
+
+ExTauri uses a Unix domain socket heartbeat to detect when the Tauri frontend exits:
+
+1. `ShutdownManager` creates a socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
+2. The Rust frontend connects and sends a byte every **100ms**
+3. `ShutdownManager` checks for heartbeats every **500ms**
+4. If no heartbeat is received for **1500ms**, graceful shutdown begins
+5. Phoenix closes connections, flushes logs, and exits cleanly
+
+This works even when the app is force-quit, crashes, or is killed unexpectedly. The socket path is unique per application (based on `:app_name`) to prevent collisions.
+
+## Configuration
+
+### Core Settings
+
+```elixir
+# config/config.exs
+config :ex_tauri,
+  version: "2.5.1",           # Tauri version (default: latest)
+  app_name: "My App",         # Application name (required)
+  host: "localhost",          # Phoenix host (required)
+  port: 4000                  # Phoenix port (required)
+```
+
+### Window Settings
 
 ```elixir
 config :ex_tauri,
-  version: "2.5.1",           # Tauri version
-  app_name: "My App",         # Application name
-  host: "localhost",          # Phoenix host
-  port: 4000,                 # Phoenix port
   window_title: "My Window",  # Window title (defaults to app_name)
   fullscreen: false,          # Start in fullscreen
   width: 800,                 # Window width
@@ -192,11 +180,31 @@ config :ex_tauri,
   resize: true                # Allow window resize
 ```
 
-## Common Issues
+### Advanced Settings
 
-### Database Configuration
+```elixir
+config :ex_tauri,
+  heartbeat_interval: 500,    # How often to check heartbeat (ms)
+  heartbeat_timeout: 1500,    # Time without heartbeat before shutdown (ms)
+  scheme: "http"              # URL scheme (http or https)
+```
 
-For desktop apps, configure your database in `config/runtime.exs`:
+## Troubleshooting
+
+### Rust/Cargo not found
+
+```
+Rust/Cargo is not installed or not in your PATH.
+```
+
+Install Rust via [rustup](https://www.rust-lang.org/tools/install):
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+### Database configuration for desktop apps
+
+Desktop apps need a local database path. Configure in `config/runtime.exs`:
 
 ```elixir
 database_path =
@@ -210,52 +218,43 @@ config :my_app, MyApp.Repo,
   pool_size: 5
 ```
 
-### Static Assets
+### Static assets in production
 
-Remove or comment out `cache_static_manifest` in `config/prod.exs`:
+Remove or comment out `cache_static_manifest` in `config/prod.exs` if you don't use `mix assets.deploy`:
 
 ```elixir
-# Not needed for desktop apps:
 # config :my_app, MyAppWeb.Endpoint,
 #   cache_static_manifest: "priv/static/cache_manifest.json"
 ```
 
-### DMG Build Permission Issues (macOS)
-
-When building DMGs on macOS, you may encounter an AppleScript permission error:
+### DMG build permission error (macOS)
 
 ```
 execution error: Not authorised to send Apple events to Finder. (-1743)
 ```
 
-**This error prevents the DMG from being created** - the creation script uses AppleScript to configure the DMG appearance (backgrounds, icon positions), but requires Finder automation permissions.
+Grant automation permissions: **System Settings** > **Privacy & Security** > **Automation** > enable **Finder** for your terminal app.
 
-**Solution: Grant Automation Permissions**
+### Port already in use
 
-1. Open **System Settings** → **Privacy & Security** → **Automation**
-2. Find your development environment (Terminal, iTerm2, VS Code, etc.)
-3. Enable **Finder** access
+If `mix ex_tauri.dev` hangs, check if another process is using the configured port:
 
-After granting permissions, build normally:
 ```bash
-cd example
-mix ex_tauri.build
+lsof -i :4000
 ```
 
-## Examples
+Kill the process or change the `:port` in your ExTauri config.
 
-Check the [example](/example) directory for a complete working Phoenix desktop application with:
-- SQLite database (Ecto + Exqlite)
-- Phoenix LiveView
-- Tailwind CSS
-- Notes CRUD interface
+## Example
+
+See the [example/](example/) directory for a complete working Phoenix desktop app with SQLite, LiveView, and Tailwind CSS.
 
 ## Acknowledgements
 
-- [Tauri App](https://tauri.app) - For the amazing framework and support
-- [Burrito](https://github.com/burrito-elixir/burrito) by Digit/Doawoo - For enabling single-binary Elixir apps
-- [phx_new_desktop](https://github.com/feng19/phx_new_desktop) by Kevin Pan/Feng19 - For inspiration
-- [Phoenix Tailwind](https://github.com/phoenixframework/tailwind) - For the package installation approach
+- [Tauri App](https://tauri.app) — For the amazing framework
+- [Burrito](https://github.com/burrito-elixir/burrito) by Digit/Doawoo — For single-binary Elixir apps
+- [Igniter](https://hexdocs.pm/igniter) — For safe, AST-aware code patching
+- [phx_new_desktop](https://github.com/feng19/phx_new_desktop) by Kevin Pan/Feng19 — For inspiration
 
 ## License
 

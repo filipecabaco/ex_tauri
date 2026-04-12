@@ -13,6 +13,9 @@ defmodule ExampleDesktopWeb.Router do
   scope "/", ExampleDesktopWeb do
     pipe_through :browser
 
-    live "/", NotesLive
+    live "/", HomeLive
+    live "/notes", NotesLive
+    live "/notifications", NotificationHubLive
+    live "/pomodoros", PomodoroLive
   end
 end

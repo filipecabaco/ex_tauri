@@ -10,8 +10,6 @@ defmodule ExampleDesktop.Application do
     children = [
       Repo,
       {Phoenix.PubSub, name: ExampleDesktop.PubSub},
-      ExampleDesktop.NotificationHub.Supervisor,
-      ExampleDesktop.Pomodoros.Supervisor,
       ExampleDesktopWeb.Endpoint,
       ExTauri.ShutdownManager
     ]

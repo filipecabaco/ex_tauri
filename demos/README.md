@@ -74,12 +74,6 @@ mix ex_tauri.dev    # native window
 
 ---
 
-## Shared assets
-
-Both demos reference heroicons from `example/assets/vendor/heroicons`
-via a symlink so icons aren't duplicated across the repo. Make sure
-the `example/` directory exists when building.
-
 ## Ideas for more demos
 
 - **System/BEAM monitor** — stream `:observer_backend` stats into a

@@ -3,12 +3,14 @@ defmodule ExTauriIntegrationTest do
 
   @moduletag :integration
 
+  alias ExTauri.Install.Helpers
+
   describe "Cargo.toml generation" do
     test "generates valid Cargo.toml with V2 dependencies using semver ranges" do
       app_name = "test_app"
       tauri_version = "2.5.1"
 
-      cargo_toml = ExTauri.__test_cargo_toml__(app_name, tauri_version)
+      cargo_toml = Helpers.cargo_toml(app_name, tauri_version)
 
       # NOTE: The install() function also uses semver ranges for tauri-cli installation
       # It extracts major version and uses: cargo install tauri-cli --version ^2
@@ -60,7 +62,7 @@ defmodule ExTauriIntegrationTest do
       ]
 
       for {tauri_version, expected_major} <- test_cases do
-        cargo_toml = ExTauri.__test_cargo_toml__("test_app", tauri_version)
+        cargo_toml = Helpers.cargo_toml("test_app", tauri_version)
 
         # Plugins should use major version only
         assert cargo_toml =~ ~r/tauri-plugin-shell = "#{expected_major}"/,
@@ -72,27 +74,28 @@ defmodule ExTauriIntegrationTest do
         assert cargo_toml =~ ~r/tauri = \{ version = "#{expected_major}", features = \[\] \}/,
                "Failed for version #{tauri_version}: expected major version #{expected_major}"
 
-        assert cargo_toml =~ ~r/tauri-build = \{ version = "#{expected_major}", features = \[\] \}/,
+        assert cargo_toml =~
+                 ~r/tauri-build = \{ version = "#{expected_major}", features = \[\] \}/,
                "Failed for version #{tauri_version}: expected major version #{expected_major}"
       end
     end
 
     test "generates Cargo.toml with Rust edition 2021, not 2018" do
-      cargo_toml = ExTauri.__test_cargo_toml__("my_app", "2.5.1")
+      cargo_toml = Helpers.cargo_toml("my_app", "2.5.1")
 
       assert cargo_toml =~ ~r/edition = "2021"/
       refute cargo_toml =~ ~r/edition = "2018"/
     end
 
     test "handles app names with spaces correctly" do
-      cargo_toml = ExTauri.__test_cargo_toml__("My Test App", "2.5.1")
+      cargo_toml = Helpers.cargo_toml("My Test App", "2.5.1")
 
       # Should convert to snake_case
       assert cargo_toml =~ ~r/name = "my_test_app"/
     end
 
     test "includes features = [] for tauri and tauri-build" do
-      cargo_toml = ExTauri.__test_cargo_toml__("test_app", "2.5.1")
+      cargo_toml = Helpers.cargo_toml("test_app", "2.5.1")
 
       # Verify empty features array to match working example
       assert cargo_toml =~ ~r/tauri-build = \{ version = "2", features = \[\] \}/
@@ -105,7 +108,7 @@ defmodule ExTauriIntegrationTest do
       host = "localhost"
       port = "4000"
 
-      main_src = ExTauri.__test_main_src__(host, port)
+      main_src = Helpers.main_src(host, port, "test_app")
 
       # Verify imports
       assert main_src =~ ~r/use tauri_plugin_shell::process::CommandEvent;/
@@ -135,18 +138,19 @@ defmodule ExTauriIntegrationTest do
       # Ensure NO V1 API usage
       refute main_src =~ ~r/use tauri::api::process/
       refute main_src =~ ~r/Command::new_sidecar/
-      refute main_src =~ ~r/CommandEvent::Stdout\(line\)/ # V1 used strings, not bytes
+      # V1 used strings, not bytes
+      refute main_src =~ ~r/CommandEvent::Stdout\(line\)/
     end
 
     test "generates main.rs with correct async runtime usage" do
-      main_src = ExTauri.__test_main_src__("localhost", "4000")
+      main_src = Helpers.main_src("localhost", "4000", "test_app")
 
       assert main_src =~ ~r/tauri::async_runtime::spawn\(async move/
       assert main_src =~ ~r/while let Some\(event\) = rx\.recv\(\)\.await/
     end
 
     test "generates main.rs with server startup check" do
-      main_src = ExTauri.__test_main_src__("localhost", "4000")
+      main_src = Helpers.main_src("localhost", "4000", "test_app")
 
       assert main_src =~ ~r/fn check_server_started\(\)/
       assert main_src =~ ~r/TcpStream::connect/
@@ -154,7 +158,7 @@ defmodule ExTauriIntegrationTest do
     end
 
     test "handles different host and port configurations" do
-      main_src = ExTauri.__test_main_src__("127.0.0.1", "8080")
+      main_src = Helpers.main_src("127.0.0.1", "8080", "test_app")
 
       assert main_src =~ ~r/let host = "127\.0\.0\.1"\.to_string\(\);/
       assert main_src =~ ~r/let port = "8080"\.to_string\(\);/
@@ -163,7 +167,7 @@ defmodule ExTauriIntegrationTest do
 
   describe "capabilities.json generation" do
     test "generates valid capabilities.json with V2 ACL structure" do
-      capabilities_json = ExTauri.__test_capabilities_json__()
+      capabilities_json = Helpers.capabilities_json()
 
       # Parse JSON to verify structure
       {:ok, capabilities} = Jason.decode(capabilities_json)
@@ -197,19 +201,20 @@ defmodule ExTauriIntegrationTest do
       # Verify broad shell permissions are NOT granted by default (least-privilege)
       refute "shell:allow-execute" in permissions,
              "Broad shell:allow-execute should not be a top-level string permission"
+
       refute "shell:allow-spawn" in permissions,
              "Broad shell:allow-spawn should not be granted by default"
     end
 
     test "capabilities.json is valid JSON" do
-      capabilities_json = ExTauri.__test_capabilities_json__()
+      capabilities_json = Helpers.capabilities_json()
 
       # Should parse without errors
       assert {:ok, _} = Jason.decode(capabilities_json)
     end
 
     test "capabilities.json includes scoped sidecar permission for external binary" do
-      capabilities_json = ExTauri.__test_capabilities_json__()
+      capabilities_json = Helpers.capabilities_json()
       {:ok, capabilities} = Jason.decode(capabilities_json)
 
       permissions = capabilities["permissions"]
@@ -220,9 +225,10 @@ defmodule ExTauriIntegrationTest do
         |> Enum.filter(&is_map/1)
         |> Enum.flat_map(fn config -> Map.get(config, "allow", []) end)
 
-      desktop_config = Enum.find(sidecar_configs, fn config ->
-        config["name"] == "desktop" && config["sidecar"] == true
-      end)
+      desktop_config =
+        Enum.find(sidecar_configs, fn config ->
+          config["name"] == "desktop" && config["sidecar"] == true
+        end)
 
       assert desktop_config != nil, "Desktop sidecar must be explicitly allowed in capabilities"
 
@@ -235,24 +241,34 @@ defmodule ExTauriIntegrationTest do
 
   describe "V2 compatibility verification" do
     test "generated files use only V2 APIs and configurations" do
-      cargo_toml = ExTauri.__test_cargo_toml__("test_app", "2.5.1")
-      main_src = ExTauri.__test_main_src__("localhost", "4000")
-      capabilities = ExTauri.__test_capabilities_json__()
+      cargo_toml = Helpers.cargo_toml("test_app", "2.5.1")
+      main_src = Helpers.main_src("localhost", "4000", "test_app")
+      capabilities = Helpers.capabilities_json()
 
       # V1-specific patterns that should NOT appear
       v1_patterns = [
-        ~r/tauri.*1\.\d/,  # V1 version numbers
-        ~r/api-all/,  # V1 feature flag
-        ~r/use tauri::api::process/,  # V1 import
-        ~r/Command::new_sidecar/,  # V1 sidecar API
-        ~r/allowlist/,  # V1 permission system
-        ~r/edition = "2018"/  # Old Rust edition
+        # V1 version numbers
+        ~r/tauri.*1\.\d/,
+        # V1 feature flag
+        ~r/api-all/,
+        # V1 import
+        ~r/use tauri::api::process/,
+        # V1 sidecar API
+        ~r/Command::new_sidecar/,
+        # V1 permission system
+        ~r/allowlist/,
+        # Old Rust edition
+        ~r/edition = "2018"/
       ]
 
       for pattern <- v1_patterns do
-        refute cargo_toml =~ pattern, "Cargo.toml should not contain V1 pattern: #{inspect(pattern)}"
+        refute cargo_toml =~ pattern,
+               "Cargo.toml should not contain V1 pattern: #{inspect(pattern)}"
+
         refute main_src =~ pattern, "main.rs should not contain V1 pattern: #{inspect(pattern)}"
-        refute capabilities =~ pattern, "capabilities.json should not contain V1 pattern: #{inspect(pattern)}"
+
+        refute capabilities =~ pattern,
+               "capabilities.json should not contain V1 pattern: #{inspect(pattern)}"
       end
 
       # V2-specific patterns that MUST appear
@@ -322,7 +338,7 @@ defmodule ExTauriIntegrationTest do
       ]
 
       for {tauri_version, expected_major} <- test_cases do
-        cli_version = ExTauri.__test_extract_cli_version__(tauri_version)
+        cli_version = Helpers.extract_cli_version(tauri_version)
 
         assert cli_version == expected_major,
                "Failed for version #{tauri_version}: expected #{expected_major}, got #{cli_version}"
@@ -331,7 +347,7 @@ defmodule ExTauriIntegrationTest do
 
     test "generates correct cargo install command arguments" do
       tauri_version = "2.5.1"
-      args = ExTauri.__test_build_cli_install_args__(tauri_version)
+      args = Helpers.build_cli_install_args(tauri_version)
 
       # Verify command structure
       assert args == ["install", "tauri-cli", "--version", "^2", "--root", "."]
@@ -353,7 +369,7 @@ defmodule ExTauriIntegrationTest do
       ]
 
       for {tauri_version, expected_version_arg} <- test_cases do
-        args = ExTauri.__test_build_cli_install_args__(tauri_version)
+        args = Helpers.build_cli_install_args(tauri_version)
 
         assert expected_version_arg in args,
                "Expected #{expected_version_arg} in args for version #{tauri_version}, got: #{inspect(args)}"
@@ -373,7 +389,7 @@ defmodule ExTauriIntegrationTest do
     test "prevents exact version installation errors" do
       # This is the command that was failing before the fix
       tauri_version = "2.5.1"
-      args = ExTauri.__test_build_cli_install_args__(tauri_version)
+      args = Helpers.build_cli_install_args(tauri_version)
 
       # The old broken command would have been: ["install", "tauri-cli@2.5.1", ...]
       # Verify we're NOT using that format
@@ -386,7 +402,7 @@ defmodule ExTauriIntegrationTest do
     end
 
     test "command structure matches cargo install expectations" do
-      args = ExTauri.__test_build_cli_install_args__("2.5.1")
+      args = Helpers.build_cli_install_args("2.5.1")
 
       # Verify command structure: install <package> --version <version> --root <path>
       assert Enum.at(args, 0) == "install"
@@ -414,7 +430,7 @@ defmodule ExTauriIntegrationTest do
       ]
 
       for {tauri_version, expected_version_arg} <- edge_cases do
-        args = ExTauri.__test_build_cli_install_args__(tauri_version)
+        args = Helpers.build_cli_install_args(tauri_version)
 
         assert expected_version_arg in args,
                "Failed to handle version #{tauri_version}: expected #{expected_version_arg} in #{inspect(args)}"
@@ -425,7 +441,7 @@ defmodule ExTauriIntegrationTest do
       # If version parsing fails, it should use the original version
       # This is a safety fallback to prevent total failure
       invalid_version = "invalid-version"
-      cli_version = ExTauri.__test_extract_cli_version__(invalid_version)
+      cli_version = Helpers.extract_cli_version(invalid_version)
 
       # Should fall back to the original string
       assert cli_version == invalid_version

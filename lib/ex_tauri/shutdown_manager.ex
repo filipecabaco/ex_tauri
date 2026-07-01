@@ -26,9 +26,12 @@ defmodule ExTauri.ShutdownManager do
   The heartbeat mechanism provides robust shutdown detection:
   1. ShutdownManager creates a Unix domain socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
   2. Rust frontend connects and sends a byte every 100ms
-  3. ShutdownManager tracks the last heartbeat timestamp
+  3. The acceptor reads bytes in the same process that accepted the connection and
+     casts each one back as a heartbeat (reading from another process would fail)
   4. Every 500ms, ShutdownManager checks if a heartbeat was received recently
-  5. If no heartbeat for 1500ms, initiates graceful shutdown
+  5. Once the frontend has connected at least once, no heartbeat for 1500ms
+     initiates graceful shutdown; before the first connection the timeout is not
+     enforced, so a slow boot can't shut the app down before the window attaches
 
   The socket path is unique per application (based on `:app_name` config) to prevent
   collisions when multiple ExTauri applications run simultaneously.
@@ -59,15 +62,27 @@ defmodule ExTauri.ShutdownManager do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     # Trap exits so we can perform graceful shutdown
     Process.flag(:trap_exit, true)
 
-    heartbeat_interval = Application.get_env(:ex_tauri, :heartbeat_interval, @default_heartbeat_interval)
-    heartbeat_timeout = Application.get_env(:ex_tauri, :heartbeat_timeout, @default_heartbeat_timeout)
+    # Options take precedence over application config, which falls back to the
+    # built-in defaults. Passing opts (used in tests) keeps configuration
+    # explicit and avoids mutating global application env.
+    heartbeat_interval =
+      opts[:heartbeat_interval] ||
+        Application.get_env(:ex_tauri, :heartbeat_interval, @default_heartbeat_interval)
+
+    heartbeat_timeout =
+      opts[:heartbeat_timeout] ||
+        Application.get_env(:ex_tauri, :heartbeat_timeout, @default_heartbeat_timeout)
+
+    # The action taken once the heartbeat is lost. Defaults to stopping the BEAM;
+    # tests inject a benign function so the suite isn't torn down by System.stop/1.
+    shutdown_fun = opts[:shutdown_fun] || (&default_shutdown/0)
 
     # Create socket path using app name to prevent collisions
-    app_name = Application.get_env(:ex_tauri, :app_name, "ex_tauri_app")
+    app_name = opts[:app_name] || Application.get_env(:ex_tauri, :app_name, "ex_tauri_app")
     socket_name = ExTauri.Paths.sanitize_name(app_name)
     socket_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
 
@@ -75,12 +90,13 @@ defmodule ExTauri.ShutdownManager do
     cleanup_socket(socket_path)
 
     # Start Unix domain socket server
-    {:ok, listen_socket} = :gen_tcp.listen(0, [
-      :binary,
-      {:ifaddr, {:local, socket_path}},
-      {:active, false},
-      {:reuseaddr, true}
-    ])
+    {:ok, listen_socket} =
+      :gen_tcp.listen(0, [
+        :binary,
+        {:ifaddr, {:local, socket_path}},
+        {:active, false},
+        {:reuseaddr, true}
+      ])
 
     # Restrict socket to owner-only access (prevents local privilege escalation)
     File.chmod(socket_path, 0o600)
@@ -91,26 +107,41 @@ defmodule ExTauri.ShutdownManager do
     # Schedule the first heartbeat check
     schedule_heartbeat_check(heartbeat_interval)
 
-    Logger.info("[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{socket_path}")
+    Logger.info(
+      "[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{socket_path}"
+    )
 
     {:ok,
      %{
        listen_socket: listen_socket,
        socket_path: socket_path,
        last_heartbeat: System.monotonic_time(:millisecond),
+       # Stays false until the frontend connects at least once. While false a
+       # heartbeat timeout means "still booting", not "window gone".
+       connected: false,
        shutdown_initiated: false,
        heartbeat_interval: heartbeat_interval,
-       heartbeat_timeout: heartbeat_timeout
+       heartbeat_timeout: heartbeat_timeout,
+       shutdown_fun: shutdown_fun
      }}
   end
 
   @impl true
   def handle_cast(:heartbeat, state) do
-    # Update the last heartbeat timestamp
-    {:noreply, %{state | last_heartbeat: System.monotonic_time(:millisecond)}}
+    # Record the heartbeat and mark the frontend as having connected at least once.
+    {:noreply, %{state | last_heartbeat: System.monotonic_time(:millisecond), connected: true}}
   end
 
   @impl true
+  def handle_info(:check_heartbeat, %{connected: false} = state) do
+    # Startup grace: the timeout only applies once the frontend has connected at
+    # least once. The frontend connects only after the server port is up, so
+    # before the first heartbeat "no heartbeat yet" is the still-booting case, not
+    # a lost window. Enforcing the timeout here would shut the app down mid-boot.
+    schedule_heartbeat_check(state.heartbeat_interval)
+    {:noreply, state}
+  end
+
   def handle_info(:check_heartbeat, state) do
     current_time = System.monotonic_time(:millisecond)
     time_since_last_heartbeat = current_time - state.last_heartbeat
@@ -131,7 +162,7 @@ defmodule ExTauri.ShutdownManager do
   @impl true
   def handle_info(:execute_shutdown, state) do
     Logger.info("[ExTauri.ShutdownManager] Stopping application...")
-    System.stop(0)
+    state.shutdown_fun.()
     {:noreply, state}
   end
 
@@ -149,6 +180,10 @@ defmodule ExTauri.ShutdownManager do
     :ok
   end
 
+  defp default_shutdown do
+    System.stop(0)
+  end
+
   defp schedule_heartbeat_check(interval) do
     Process.send_after(self(), :check_heartbeat, interval)
   end
@@ -161,9 +196,12 @@ defmodule ExTauri.ShutdownManager do
   defp accept_loop(listen_socket) do
     case :gen_tcp.accept(listen_socket, 1000) do
       {:ok, client_socket} ->
-        # Spawn client handler under the TaskSupervisor
-        Task.Supervisor.start_child(ExTauri.TaskSupervisor, fn -> handle_client(client_socket) end)
-        # Continue accepting more connections
+        # Read in THIS process — the one that accepted. recv on a passive socket
+        # from a separately-spawned process returns {:error, :closed}, so reading
+        # the heartbeat elsewhere silently drops every byte and the frontend never
+        # registers as connected. The frontend holds one connection at a time
+        # (reconnecting on drop), so handling them sequentially is enough.
+        recv_loop(client_socket)
         accept_loop(listen_socket)
 
       {:error, :timeout} ->
@@ -178,17 +216,17 @@ defmodule ExTauri.ShutdownManager do
     end
   end
 
-  defp handle_client(client_socket) do
+  defp recv_loop(client_socket) do
     case :gen_tcp.recv(client_socket, 0) do
       {:ok, _data} ->
         GenServer.cast(__MODULE__, :heartbeat)
-        handle_client(client_socket)
-
-      {:error, :closed} ->
-        :gen_tcp.close(client_socket)
+        recv_loop(client_socket)
 
       {:error, reason} ->
-        Logger.debug("[ExTauri.ShutdownManager] Client recv error: #{inspect(reason)}")
+        unless reason == :closed do
+          Logger.debug("[ExTauri.ShutdownManager] Client recv error: #{inspect(reason)}")
+        end
+
         :gen_tcp.close(client_socket)
     end
   end

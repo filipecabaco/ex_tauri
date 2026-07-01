@@ -118,7 +118,11 @@ defmodule Mix.Tasks.ExTauri.Build do
         aliases: [d: :debug, v: :verbose]
       )
 
-    tauri_args = ExTauri.TaskHelpers.build_tauri_args(@flag_specs, opts, extra_args)
-    ExTauri.run(["build" | tauri_args])
+    ExTauri.run(["build" | build_tauri_args(opts, extra_args)])
+  end
+
+  @doc false
+  def build_tauri_args(opts, extra_args) do
+    ExTauri.TaskHelpers.build_tauri_args(@flag_specs, opts, extra_args)
   end
 end

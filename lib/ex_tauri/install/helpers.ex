@@ -82,14 +82,22 @@ defmodule ExTauri.Install.Helpers do
     tauri_args =
       [
         "init",
-        "--app-name", config.sanitized_name,
-        "--window-title", config.window_title,
-        "--dev-url", dev_url,
-        "--frontend-dist", dev_url,
-        "--directory", File.cwd!(),
-        "--tauri-path", File.cwd!(),
-        "--before-dev-command", "",
-        "--before-build-command", ""
+        "--app-name",
+        config.sanitized_name,
+        "--window-title",
+        config.window_title,
+        "--dev-url",
+        dev_url,
+        "--frontend-dist",
+        dev_url,
+        "--directory",
+        File.cwd!(),
+        "--tauri-path",
+        File.cwd!(),
+        "--before-dev-command",
+        "",
+        "--before-build-command",
+        ""
       ] ++ extra_args
 
     cmd_opts = [into: IO.stream(:stdio, :line), stderr_to_stdout: true]
@@ -115,7 +123,7 @@ defmodule ExTauri.Install.Helpers do
 
     File.write!(
       Path.join([src_tauri, "src", "main.rs"]),
-      main_src(config.host, config.port, config.sanitized_name)
+      main_src(config.host, config.port, config.sanitized_name, config.app_name)
     )
   end
 
@@ -224,7 +232,8 @@ defmodule ExTauri.Install.Helpers do
         insert_at = last_pos + last_len
 
         String.slice(content, 0, insert_at) <>
-          "\n" <> import_line <>
+          "\n" <>
+          import_line <>
           String.slice(content, insert_at..-1//1)
     end
   end
@@ -350,14 +359,25 @@ defmodule ExTauri.Install.Helpers do
   end
 
   @doc false
-  def main_src(host, port, socket_name) do
+  def main_src(host, port, socket_name, app_name \\ "App") do
     validate_rust_interpolations!(host, port, socket_name)
+    validate_rust_string!(app_name)
 
     EEx.eval_file(@main_rs_template,
       host: to_string(host),
       port: to_string(port),
-      socket_name: to_string(socket_name)
+      socket_name: to_string(socket_name),
+      app_name: to_string(app_name)
     )
+  end
+
+  # app_name is interpolated into a Rust string literal (the menu's Quit label),
+  # so it must not contain a quote, backslash, or newline that would break it.
+  defp validate_rust_string!(app_name) do
+    unless to_string(app_name) =~ ~r/\A[^"\\\r\n]+\z/ do
+      raise ArgumentError,
+            "app_name contains characters unsafe for a Rust string literal: #{inspect(app_name)}"
+    end
   end
 
   defp validate_rust_interpolations!(host, port, socket_name) do

@@ -32,7 +32,7 @@ defmodule ExTauri.BuildReleaseTest do
       """
 
       assert String.contains?(documentation, "MIX_ENV=prod")
-      assert String.contains?(documentation, "regexes cannot be serialized")
+      assert String.contains?(documentation, "Regexes cannot be serialized")
       assert String.contains?(documentation, "config/dev.exs is NOT loaded")
     end
 
@@ -70,7 +70,7 @@ defmodule ExTauri.BuildReleaseTest do
 
       for {description, regex} <- problematic_configs do
         assert is_binary(description)
-        assert Regex.regex?(regex)
+        assert is_struct(regex, Regex)
       end
     end
 

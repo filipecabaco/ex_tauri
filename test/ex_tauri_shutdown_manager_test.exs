@@ -3,179 +3,217 @@ defmodule ExTauri.ShutdownManagerTest do
 
   alias ExTauri.ShutdownManager
 
-  @heartbeat_interval 500
+  # Fast timing keeps the suite snappy. Production defaults (500/1500) are
+  # exercised through config, not these per-test timings.
+  @interval 50
+  @timeout 150
 
   setup do
-    # Use a unique app name per test to avoid socket collisions
+    # A unique app name per test keeps each manager on its own socket.
     app_name = "test_app_#{System.unique_integer([:positive])}"
-    Application.put_env(:ex_tauri, :app_name, app_name)
+    socket_path = socket_path_for(app_name)
 
-    socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
-    socket_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
+    # start_supervised stops the manager after each test, and terminate/2 removes
+    # the socket. This is just a belt-and-suspenders cleanup for stray files.
+    on_exit(fn -> File.rm(socket_path) end)
 
-    on_exit(fn ->
-      # Clean up: stop the manager if running, remove socket
-      if Process.whereis(ShutdownManager), do: GenServer.stop(ShutdownManager, :normal, 1000)
-      File.rm(socket_path)
-      Application.delete_env(:ex_tauri, :app_name)
-    end)
+    %{app_name: app_name, socket_path: socket_path}
+  end
 
-    %{socket_path: socket_path, app_name: app_name}
+  # Starts the manager under ExUnit's supervisor. Its parent is then the test
+  # supervisor, not the ephemeral test process — so the gen_server parent-exit
+  # rule no longer terminates it with :shutdown the instant a test ends, and we
+  # don't need a manual GenServer.stop in on_exit.
+  #
+  # The injected shutdown_fun replaces System.stop/1, so a lost heartbeat sends
+  # us a message instead of tearing down the test VM. :restart is :temporary so
+  # tests that stop the manager mid-run aren't fighting an automatic restart.
+  defp start_manager(ctx, opts \\ []) do
+    test_pid = self()
+
+    opts =
+      Keyword.merge(
+        [
+          app_name: ctx.app_name,
+          heartbeat_interval: @interval,
+          heartbeat_timeout: @timeout,
+          shutdown_fun: fn -> send(test_pid, :shutdown_triggered) end
+        ],
+        opts
+      )
+
+    start_supervised!({ShutdownManager, opts}, restart: :temporary)
   end
 
   describe "start_link/1" do
-    test "starts the GenServer and creates the socket file", %{socket_path: socket_path} do
-      assert {:ok, pid} = ShutdownManager.start_link()
+    test "starts the GenServer and creates the socket file", ctx do
+      pid = start_manager(ctx)
+
       assert Process.alive?(pid)
       assert Process.whereis(ShutdownManager) == pid
-
-      # Socket file should exist after startup
-      # Give it a moment to bind
-      Process.sleep(50)
-      assert File.exists?(socket_path)
+      assert wait_for_file(ctx.socket_path)
     end
 
-    test "cleans up stale socket file on startup", %{socket_path: socket_path} do
-      # Create a stale socket file
-      File.write!(socket_path, "stale")
-      assert File.exists?(socket_path)
+    test "cleans up a stale socket file on startup", ctx do
+      File.write!(ctx.socket_path, "stale")
+      assert File.exists?(ctx.socket_path)
 
-      # Starting the manager should clean up and recreate
-      assert {:ok, _pid} = ShutdownManager.start_link()
-      Process.sleep(50)
-      assert File.exists?(socket_path)
+      pid = start_manager(ctx)
+
+      assert Process.alive?(pid)
+      assert wait_for_file(ctx.socket_path)
     end
   end
 
   describe "heartbeat mechanism" do
-    test "accepts heartbeat connections via Unix socket", %{socket_path: socket_path} do
-      {:ok, _pid} = ShutdownManager.start_link()
-      Process.sleep(50)
+    test "accepts heartbeat connections via the Unix socket", ctx do
+      start_manager(ctx)
+      assert wait_for_file(ctx.socket_path)
 
-      # Connect as a heartbeat client (simulating the Rust side)
-      {:ok, client} = :gen_tcp.connect({:local, socket_path}, 0, [:binary, active: false])
-
-      # Send a heartbeat byte
+      client = connect(ctx.socket_path)
       assert :ok = :gen_tcp.send(client, "h")
+      :gen_tcp.close(client)
+    end
+
+    test "a socket heartbeat marks the frontend as connected", ctx do
+      pid = start_manager(ctx)
+      assert wait_for_file(ctx.socket_path)
+
+      client = connect(ctx.socket_path)
+      :ok = :gen_tcp.send(client, "h")
+
+      # The acceptor casts :heartbeat asynchronously; poll until the state reflects it.
+      assert eventually(fn -> :sys.get_state(pid).connected end)
 
       :gen_tcp.close(client)
     end
 
-    test "stays alive while receiving heartbeats", %{socket_path: socket_path} do
-      {:ok, pid} = ShutdownManager.start_link()
-      Process.sleep(50)
+    test "a direct :heartbeat cast marks the frontend as connected", ctx do
+      pid = start_manager(ctx)
 
-      # Connect and send heartbeats
-      {:ok, client} = :gen_tcp.connect({:local, socket_path}, 0, [:binary, active: false])
+      GenServer.cast(ShutdownManager, :heartbeat)
 
-      # Send heartbeats for longer than the timeout period
-      for _ <- 1..5 do
+      assert eventually(fn -> :sys.get_state(pid).connected end)
+    end
+
+    test "continuous heartbeats keep the manager alive past the timeout", ctx do
+      start_manager(ctx)
+      assert wait_for_file(ctx.socket_path)
+
+      client = connect(ctx.socket_path)
+
+      # Heartbeat faster than the timeout across several timeout windows.
+      for _ <- 1..10 do
         :gen_tcp.send(client, "h")
-        Process.sleep(@heartbeat_interval)
+        Process.sleep(div(@timeout, 3))
       end
 
-      # Manager should still be alive
-      assert Process.alive?(pid)
-
+      refute_received :shutdown_triggered
       :gen_tcp.close(client)
-    end
-
-    test "casts :heartbeat updates the last heartbeat timestamp" do
-      {:ok, pid} = ShutdownManager.start_link()
-      Process.sleep(50)
-
-      # Directly cast a heartbeat
-      GenServer.cast(ShutdownManager, :heartbeat)
-      Process.sleep(10)
-
-      # The process should still be alive (heartbeat was received)
-      assert Process.alive?(pid)
     end
   end
 
   describe "shutdown detection" do
-    test "detects heartbeat timeout and transitions to shutdown state" do
-      {:ok, pid} = ShutdownManager.start_link()
-      Process.sleep(50)
+    test "does not shut down before the first heartbeat (startup grace)", ctx do
+      pid = start_manager(ctx)
 
-      # Suspend the process so :execute_shutdown won't fire System.stop/0
-      # while we inspect state. We use :sys.suspend to freeze message processing.
-      # First wait for the heartbeat timeout to trigger initiate_shutdown.
-      # Timeline: 1500ms timeout + 500ms check interval = ~2000ms.
-      Process.sleep(2200)
-
-      :sys.suspend(pid)
-      state = :sys.get_state(pid)
-
-      # Kill the process immediately (don't resume, as :execute_shutdown
-      # would call System.stop/0 and kill the test runner)
-      Process.exit(pid, :kill)
-
-      assert state.shutdown_initiated,
-             "ShutdownManager should have set shutdown_initiated after heartbeat timeout"
+      # No heartbeat has ever arrived. Well past the timeout, the manager must NOT
+      # shut down — "no heartbeat yet" is the still-booting case, not a lost window.
+      refute_receive :shutdown_triggered, @timeout * 5
+      refute :sys.get_state(pid).shutdown_initiated
     end
 
-    test "does not shut down immediately if heartbeats are being sent", %{socket_path: socket_path} do
-      {:ok, pid} = ShutdownManager.start_link()
-      Process.sleep(50)
+    test "shuts down once the heartbeat is lost", ctx do
+      pid = start_manager(ctx)
 
-      ref = Process.monitor(pid)
+      # Mark the frontend as having connected once, then stop sending heartbeats.
+      # Only now is the timeout enforced.
+      GenServer.cast(ShutdownManager, :heartbeat)
 
-      # Connect and send heartbeats for 500ms (beyond the timeout window)
-      {:ok, client} = :gen_tcp.connect({:local, socket_path}, 0, [:binary, active: false])
+      assert_receive :shutdown_triggered, @timeout * 10
+      assert :sys.get_state(pid).shutdown_initiated
+    end
 
-      for _ <- 1..5 do
-        :gen_tcp.send(client, "h")
-        Process.sleep(80)
-      end
+    test "triggers the shutdown action only once", ctx do
+      start_manager(ctx)
+      GenServer.cast(ShutdownManager, :heartbeat)
 
-      # Should NOT have received a DOWN message during heartbeating
-      refute_received {:DOWN, ^ref, :process, ^pid, _reason}
-
-      :gen_tcp.close(client)
+      assert_receive :shutdown_triggered, @timeout * 10
+      # initiate_shutdown is idempotent: no further checks are scheduled.
+      refute_receive :shutdown_triggered, @timeout * 4
     end
   end
 
   describe "cleanup" do
-    test "removes socket file on terminate", %{socket_path: socket_path} do
-      {:ok, pid} = ShutdownManager.start_link()
-      Process.sleep(50)
-      assert File.exists?(socket_path)
+    test "removes the socket file on terminate", ctx do
+      start_manager(ctx)
+      assert wait_for_file(ctx.socket_path)
 
-      GenServer.stop(pid, :normal)
-      Process.sleep(50)
+      :ok = stop_supervised(ShutdownManager)
 
-      refute File.exists?(socket_path)
+      assert eventually(fn -> not File.exists?(ctx.socket_path) end)
     end
   end
 
   describe "configuration" do
-    test "uses app_name from config for socket path" do
-      app_name = "my_custom_app_#{System.unique_integer([:positive])}"
+    test "falls back to :app_name from config for the socket path" do
+      app_name = "config_app_#{System.unique_integer([:positive])}"
       Application.put_env(:ex_tauri, :app_name, app_name)
-      socket_name = app_name |> String.replace(" ", "_") |> String.downcase()
-      expected_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
+      on_exit(fn -> Application.delete_env(:ex_tauri, :app_name) end)
 
-      {:ok, pid} = ShutdownManager.start_link()
-      Process.sleep(50)
+      expected = socket_path_for(app_name)
+      on_exit(fn -> File.rm(expected) end)
 
-      assert File.exists?(expected_path)
+      # No :app_name opt, so the manager reads it from config.
+      start_supervised!(
+        {ShutdownManager,
+         heartbeat_interval: @interval, heartbeat_timeout: @timeout, shutdown_fun: fn -> :ok end},
+        restart: :temporary
+      )
 
-      GenServer.stop(pid, :normal)
-      File.rm(expected_path)
+      assert wait_for_file(expected)
     end
 
-    test "defaults app_name to ex_tauri_app when not configured" do
+    test "defaults :app_name to ex_tauri_app when not configured" do
       Application.delete_env(:ex_tauri, :app_name)
-      expected_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_ex_tauri_app.sock")
+      expected = socket_path_for("ex_tauri_app")
+      on_exit(fn -> File.rm(expected) end)
 
-      {:ok, pid} = ShutdownManager.start_link()
-      Process.sleep(50)
+      start_supervised!(
+        {ShutdownManager,
+         heartbeat_interval: @interval, heartbeat_timeout: @timeout, shutdown_fun: fn -> :ok end},
+        restart: :temporary
+      )
 
-      assert File.exists?(expected_path)
+      assert wait_for_file(expected)
+    end
+  end
 
-      GenServer.stop(pid, :normal)
-      File.rm(expected_path)
+  # --- helpers ---
+
+  defp socket_path_for(app_name) do
+    socket_name = ExTauri.Paths.sanitize_name(app_name)
+    Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
+  end
+
+  defp connect(socket_path) do
+    {:ok, client} = :gen_tcp.connect({:local, socket_path}, 0, [:binary, active: false])
+    client
+  end
+
+  defp wait_for_file(path), do: eventually(fn -> File.exists?(path) end)
+
+  # Polls a predicate until it returns true or the deadline passes. Replaces
+  # fixed sleeps, which make tests both slow and timing-flaky.
+  defp eventually(fun, attempts \\ 50, delay \\ 10)
+  defp eventually(_fun, 0, _delay), do: false
+
+  defp eventually(fun, attempts, delay) do
+    if fun.() do
+      true
+    else
+      Process.sleep(delay)
+      eventually(fun, attempts - 1, delay)
     end
   end
 end

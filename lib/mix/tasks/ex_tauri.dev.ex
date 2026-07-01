@@ -82,10 +82,14 @@ defmodule Mix.Tasks.ExTauri.Dev do
         aliases: [r: :release]
       )
 
-    tauri_args =
-      ["--no-dev-server-wait"] ++
-        ExTauri.TaskHelpers.build_tauri_args(@flag_specs, opts, extra_args)
+    ExTauri.run_dev(["dev" | build_tauri_args(opts, extra_args)])
+  end
 
-    ExTauri.run_dev(["dev" | tauri_args])
+  @doc false
+  def build_tauri_args(opts, extra_args) do
+    # --no-dev-server-wait is always passed: Tauri must not block waiting for a
+    # dev server it doesn't manage (Phoenix is started separately).
+    ["--no-dev-server-wait"] ++
+      ExTauri.TaskHelpers.build_tauri_args(@flag_specs, opts, extra_args)
   end
 end

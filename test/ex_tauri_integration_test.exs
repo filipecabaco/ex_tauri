@@ -120,8 +120,9 @@ defmodule ExTauriIntegrationTest do
       assert main_src =~ ~r/\.plugin\(tauri_plugin_log::Builder::new\(\)\.build\(\)\)/
       assert main_src =~ ~r/\.plugin\(tauri_plugin_notification::init\(\)\)/
 
-      # Verify setup function signature (V2 uses AppHandle reference)
-      assert main_src =~ ~r/fn start_server\(app: &tauri::AppHandle\)/
+      # Verify setup function signature (V2 uses AppHandle reference; the
+      # port is resolved at runtime and passed in)
+      assert main_src =~ ~r/fn start_server\(app: &tauri::AppHandle, port: u16\)/
 
       # Verify sidecar usage with new API
       assert main_src =~ ~r/app\.shell\(\)\.sidecar\("desktop"\)/

@@ -97,15 +97,19 @@ defmodule ExTauri.ShutdownManagerTest do
     end
 
     test "continuous heartbeats keep the manager alive past the timeout", ctx do
-      start_manager(ctx)
+      # Generous margins: CI runners (macOS especially) can oversleep by tens
+      # of milliseconds, so heartbeat at 1/4 of an enlarged timeout window
+      # instead of racing the standard one.
+      timeout = @timeout * 4
+      start_manager(ctx, heartbeat_timeout: timeout)
       assert wait_for_file(ctx.socket_path)
 
       client = connect(ctx.socket_path)
 
       # Heartbeat faster than the timeout across several timeout windows.
-      for _ <- 1..10 do
+      for _ <- 1..6 do
         :gen_tcp.send(client, "h")
-        Process.sleep(div(@timeout, 3))
+        Process.sleep(div(timeout, 4))
       end
 
       refute_received :shutdown_triggered

@@ -13,20 +13,13 @@ defmodule ExTauri.Filesystem do
 
   ## Plugin Setup
 
-  Add the dependency to `src-tauri/Cargo.toml`:
+      mix ex_tauri.add fs
 
-      [dependencies]
-      tauri-plugin-fs = "2"
+  This adds the Cargo dependency, registers the plugin in `main.rs`, and adds
+  the `fs:default` capability. See `Mix.Tasks.ExTauri.Add` for details.
 
-  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
-
-      .plugin(tauri_plugin_fs::init())
-
-  Add the capability to `src-tauri/capabilities/default.json`:
-
-      "permissions": ["fs:default"]
-
-  For broader access, use scoped permissions:
+  For broader access, add scoped permissions to
+  `src-tauri/capabilities/default.json`:
 
       {
         "identifier": "fs:allow-read-text-file",

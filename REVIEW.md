@@ -49,6 +49,13 @@ The following issues from prior reviews have been addressed:
 | `cargo install` failures ignored | `install_tauri_cli` raises with an actionable message on non-zero exit |
 | Cryptic `:enoent` when CLI missing | `run_tauri_cli` resolves the binary (including `.exe` on Windows) and points to `mix ex_tauri.install` |
 | No Hex metadata or LICENSE | `mix.exs` has `description`/`package`/`docs`; MIT `LICENSE` file added |
+| JS hook required npm packages | Bridge rewritten on the global Tauri API (`window.__TAURI__`, `withGlobalTauri: true` set by install) — a stock Phoenix esbuild setup bundles it with zero JS dependencies |
+| Manual 3-file plugin setup | `mix ex_tauri.add <plugin>` patches Cargo.toml, main.rs, and capabilities idempotently for dialog, fs, clipboard, os, global-shortcut, autostart, process, updater |
+| Runtime window management | `ExTauri.Window` — minimize/maximize/fullscreen/title/size/center/focus/hide/show/always-on-top/resizable/start-dragging/info |
+| Drag and drop | `ExTauri.Event.subscribe(socket, "tauri://drag-drop")` forwards native events to `handle_event/3` as `"tauri_event"` |
+| Global shortcuts | `ExTauri.GlobalShortcut` register/unregister/registered? with presses delivered as `"tauri_event"` |
+| Autostart | `ExTauri.Autostart` enable/disable/status |
+| App lifecycle | `ExTauri.App` info/exit/relaunch; `ExTauri.Updater.check/install` runtime API |
 
 ---
 
@@ -66,16 +73,13 @@ The following issues from prior reviews have been addressed:
 |---------|---------|
 | Hex publication | Package metadata is now in mix.exs; remaining step is `mix hex.publish` (and a docs review on hexdocs). |
 | System tray | Tauri V2 supports tray icons/menus. No integration exists. Important for long-running desktop apps. |
-| Deep linking | `tauri-plugin-deep-link` for `myapp://` URL handling (OAuth, inter-app). |
-| Global shortcuts | `tauri-plugin-global-shortcut` for app-wide keyboard shortcuts. |
+| Deep linking | `tauri-plugin-deep-link` for `myapp://` URL handling (OAuth, inter-app). Event delivery to LiveView already works via `ExTauri.Event` once the plugin is registered. |
 
 ### P2 — Nice to Have
 
 | Feature | Details |
 |---------|---------|
-| Autostart | `tauri-plugin-autostart` for launch-at-login. |
-| Runtime window management | Beyond initial config — minimize, maximize, set title, multi-window from LiveView. |
-| Drag and drop | Tauri supports DnD events but no bridge to LiveView. |
+| Multi-window support | `ExTauri.Window` manages the current window; creating/addressing additional windows from LiveView is not yet exposed. |
 | Compile-time config validation | Catch missing `:host`/`:port` at compile time, not runtime. |
 
 ### Architecture Considerations (Resolved)

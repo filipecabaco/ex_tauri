@@ -11,18 +11,10 @@ defmodule ExTauri.Dialog do
 
   ## Plugin Setup
 
-  Add the dependency to `src-tauri/Cargo.toml`:
+      mix ex_tauri.add dialog
 
-      [dependencies]
-      tauri-plugin-dialog = "2"
-
-  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
-
-      .plugin(tauri_plugin_dialog::init())
-
-  Add the capability to `src-tauri/capabilities/default.json`:
-
-      "permissions": ["dialog:default"]
+  This adds the Cargo dependency, registers the plugin in `main.rs`, and adds
+  the `dialog:default` capability. See `Mix.Tasks.ExTauri.Add` for details.
 
   ## Examples
 

@@ -9,6 +9,9 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 ## Features
 
 - **Phoenix LiveView as Desktop Apps** — Turn your Phoenix app into a native desktop application
+- **Desktop APIs from Elixir** — Notifications, dialogs, clipboard, filesystem, window management, global shortcuts, and more — all driven from your LiveView, no JavaScript required
+- **One-Command Plugin Setup** — `mix ex_tauri.add dialog fs` wires the Rust side for you (Cargo dep, plugin registration, permissions)
+- **Native Events in LiveView** — Subscribe to drag-and-drop, focus, or custom Rust events and handle them in `handle_event/3`
 - **Single Binary Distribution** — Uses [Burrito](https://github.com/burrito-elixir/burrito) to bundle everything into one executable
 - **Hot Reload in Dev Mode** — Full Phoenix development experience with live reload
 - **Graceful Shutdown** — Heartbeat-based mechanism ensures clean shutdown on CMD+Q, crashes, or force-quit
@@ -116,6 +119,7 @@ Your app bundle will be at `src-tauri/target/release/bundle/` with platform-spec
 | Task | Description |
 |------|-------------|
 | `mix ex_tauri.install` | Set up Tauri in your project (one-time) |
+| `mix ex_tauri.add` | Add Tauri plugins (dialogs, filesystem, shortcuts, ...) |
 | `mix ex_tauri.dev` | Run in development mode with hot-reload |
 | `mix ex_tauri.build` | Build for production |
 
@@ -123,8 +127,9 @@ Run `mix help ex_tauri.<task>` for detailed options.
 
 ## Using Desktop APIs
 
-ExTauri provides Elixir modules for common desktop features. Some are included
-by default, others require installing additional Tauri plugins.
+ExTauri provides Elixir modules for desktop features, all driven from your
+LiveView. The JS bridge uses Tauri's global API, so **no npm packages are
+required** — a stock Phoenix esbuild setup just works.
 
 ### Included by default
 
@@ -132,16 +137,25 @@ These work out of the box after `mix ex_tauri.install`:
 
 - **`ExTauri.Notification`** — Native desktop notifications
 - **`ExTauri.Shell`** — Open URLs, execute scoped commands
+- **`ExTauri.Window`** — Runtime window management (minimize, fullscreen, title, size, ...)
+- **`ExTauri.Event`** — Subscribe to native events (drag-and-drop, focus, custom Rust events)
+- **`ExTauri.App`** — App name/version info
 
-### Requires additional plugin setup
+### One command away
 
-These modules need a Tauri plugin added to your `src-tauri/` project.
-See each module's documentation for setup instructions.
+These modules need a Tauri plugin on the Rust side. `mix ex_tauri.add` wires
+everything (Cargo dependency, plugin registration, permissions):
 
-- **`ExTauri.Dialog`** — File open/save dialogs, message boxes
-- **`ExTauri.Clipboard`** — Read/write the system clipboard
-- **`ExTauri.Filesystem`** — Read/write files outside the web sandbox
-- **`ExTauri.OS`** — Query platform, architecture, locale
+| Module | Enable with |
+|--------|-------------|
+| **`ExTauri.Dialog`** — File open/save dialogs, message boxes | `mix ex_tauri.add dialog` |
+| **`ExTauri.Clipboard`** — Read/write the system clipboard | `mix ex_tauri.add clipboard` |
+| **`ExTauri.Filesystem`** — Read/write files outside the web sandbox | `mix ex_tauri.add fs` |
+| **`ExTauri.OS`** — Query platform, architecture, locale | `mix ex_tauri.add os` |
+| **`ExTauri.GlobalShortcut`** — App-wide keyboard shortcuts | `mix ex_tauri.add global-shortcut` |
+| **`ExTauri.Autostart`** — Launch at login | `mix ex_tauri.add autostart` |
+| **`ExTauri.App.exit/relaunch`** — App lifecycle control | `mix ex_tauri.add process` |
+| **`ExTauri.Updater`** — Check for and install updates | `mix ex_tauri.add updater` |
 
 ### Example: sending a notification from LiveView
 
@@ -171,6 +185,31 @@ end
 
 def handle_event("tauri_response", %{"command" => "dialog_open", "path" => path}, socket) do
   {:noreply, assign(socket, :selected_file, path)}
+end
+```
+
+### Example: window management and drag-and-drop
+
+```elixir
+def mount(_params, _session, socket) do
+  socket =
+    if connected?(socket) do
+      ExTauri.Event.subscribe(socket, "tauri://drag-drop")
+    else
+      socket
+    end
+
+  {:ok, socket}
+end
+
+# React to files dropped onto the window
+def handle_event("tauri_event", %{"event" => "tauri://drag-drop", "payload" => %{"paths" => paths}}, socket) do
+  {:noreply, assign(socket, :dropped_files, paths)}
+end
+
+# Update the native window title as app state changes
+def handle_event("open_document", %{"name" => name}, socket) do
+  {:noreply, ExTauri.Window.set_title(socket, "#{name} — MyApp")}
 end
 ```
 

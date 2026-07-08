@@ -97,15 +97,85 @@ defmodule ExTauri.HookTest do
       assert source =~ "Command.create"
     end
 
-    test "imports from @tauri-apps plugin packages" do
+    test "uses the global Tauri API instead of npm packages" do
       source = Hook.js_source()
-      assert source =~ "@tauri-apps/plugin-notification"
-      assert source =~ "@tauri-apps/plugin-clipboard-manager"
-      assert source =~ "@tauri-apps/plugin-dialog"
-      assert source =~ "@tauri-apps/plugin-os"
-      assert source =~ "@tauri-apps/plugin-fs"
-      assert source =~ "@tauri-apps/plugin-shell"
-      assert source =~ "@tauri-apps/api/core"
+
+      # Namespaces resolved off window.__TAURI__ via tauriApi(...)
+      for namespace <- ~w(notification clipboardManager dialog os fs shell core
+                          window app event globalShortcut autostart process updater dpi) do
+        assert source =~ ~s(tauriApi("#{namespace}")),
+               "expected tauriApi(\"#{namespace}\") in hook source"
+      end
+
+      # No @tauri-apps imports remain — a stock Phoenix esbuild setup has no
+      # node_modules, so bundling would fail if any were present.
+      refute source =~ "@tauri-apps"
+      refute source =~ "import("
+    end
+
+    test "supports runtime window management" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "window")
+      assert source =~ "getCurrentWindow"
+
+      for action <- ~w(minimize maximize unmaximize toggle_maximize set_fullscreen set_title
+                       set_size center set_focus hide show set_always_on_top set_resizable
+                       start_dragging info) do
+        assert source =~ ~s(case "#{action}"), "expected window action: #{action}"
+      end
+    end
+
+    test "supports app info command" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "app_info")
+      assert source =~ "getVersion"
+      assert source =~ "getTauriVersion"
+    end
+
+    test "supports event subscription commands" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "event_listen")
+      assert source =~ ~s(case "event_unlisten")
+      assert source =~ ~s(case "event_emit")
+    end
+
+    test "forwards subscribed events and shortcuts as tauri_event" do
+      source = Hook.js_source()
+      assert source =~ ~s(pushEvent("tauri_event")
+      assert source =~ ~s("global_shortcut")
+    end
+
+    test "supports global shortcut commands" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "shortcut_register")
+      assert source =~ ~s(case "shortcut_unregister")
+      assert source =~ ~s(case "shortcut_is_registered")
+    end
+
+    test "supports autostart commands" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "autostart_enable")
+      assert source =~ ~s(case "autostart_disable")
+      assert source =~ ~s(case "autostart_status")
+    end
+
+    test "supports process commands" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "process_exit")
+      assert source =~ ~s(case "process_relaunch")
+    end
+
+    test "supports updater commands" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "updater_check")
+      assert source =~ ~s(case "updater_install")
+      assert source =~ "downloadAndInstall"
+    end
+
+    test "cleans up event listeners when the hook is destroyed" do
+      source = Hook.js_source()
+      assert source =~ "destroyed()"
+      assert source =~ "_eventUnlisteners"
     end
   end
 end

@@ -11,18 +11,10 @@ defmodule ExTauri.Clipboard do
 
   ## Plugin Setup
 
-  Add the dependency to `src-tauri/Cargo.toml`:
+      mix ex_tauri.add clipboard
 
-      [dependencies]
-      tauri-plugin-clipboard-manager = "2"
-
-  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
-
-      .plugin(tauri_plugin_clipboard_manager::init())
-
-  Add the capability to `src-tauri/capabilities/default.json`:
-
-      "permissions": ["clipboard-manager:allow-write-text", "clipboard-manager:allow-read-text"]
+  This adds the Cargo dependency, registers the plugin in `main.rs`, and adds
+  the read/write-text capabilities. See `Mix.Tasks.ExTauri.Add` for details.
 
   ## Examples
 

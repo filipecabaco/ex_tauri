@@ -173,6 +173,10 @@ defmodule ExTauri.Install.Helpers do
           resizable: config.resize
         }
       ])
+      # Expose the Tauri API on window.__TAURI__. The generated LiveView hook
+      # relies on this global — it means no @tauri-apps npm packages are needed,
+      # so a stock Phoenix esbuild setup can bundle the hook as-is.
+      |> put_in(["app", "withGlobalTauri"], true)
 
     # Merge updater config if enabled
     tauri_conf =
@@ -420,7 +424,22 @@ defmodule ExTauri.Install.Helpers do
       "description": "Capability for the main application window",
       "windows": ["main"],
       "permissions": [
+        "core:default",
         "notification:default",
+        "core:window:allow-minimize",
+        "core:window:allow-maximize",
+        "core:window:allow-unmaximize",
+        "core:window:allow-toggle-maximize",
+        "core:window:allow-set-fullscreen",
+        "core:window:allow-set-title",
+        "core:window:allow-set-size",
+        "core:window:allow-center",
+        "core:window:allow-set-focus",
+        "core:window:allow-hide",
+        "core:window:allow-show",
+        "core:window:allow-set-always-on-top",
+        "core:window:allow-set-resizable",
+        "core:window:allow-start-dragging",
         {
           "identifier": "shell:allow-execute",
           "allow": [

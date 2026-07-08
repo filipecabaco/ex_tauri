@@ -44,28 +44,33 @@ defmodule ExTauri.Hook do
   - The JS hook receives the event and calls the appropriate Tauri API
   - Results are sent back to the LiveView as `"tauri_response"` events
   - Errors are sent back as `"tauri_error"` events
+  - Subscribed native events (see `ExTauri.Event`) and global shortcut presses
+    arrive as `"tauri_event"` events
+
+  The hook uses Tauri's global API (`window.__TAURI__`, enabled by
+  `withGlobalTauri` in the generated `tauri.conf.json`), so no JavaScript
+  package installation is required.
 
   ## Supported Commands
 
-  The following command types are supported (requires corresponding Tauri plugins):
+  Rather than pushing raw commands, prefer the higher-level modules — each
+  command family has one. Plugins are installed with `mix ex_tauri.add`.
 
-  | Command         | Plugin Required                  | Description                    |
-  |-----------------|----------------------------------|--------------------------------|
-  | `notification`  | `tauri-plugin-notification`      | Send system notifications      |
-  | `clipboard_write` | `tauri-plugin-clipboard-manager` | Write to clipboard           |
-  | `clipboard_read`  | `tauri-plugin-clipboard-manager` | Read from clipboard          |
-  | `dialog_open`   | `tauri-plugin-dialog`            | Open file dialog               |
-  | `dialog_save`   | `tauri-plugin-dialog`            | Save file dialog               |
-  | `dialog_message`| `tauri-plugin-dialog`            | Message dialog (alert/confirm) |
-  | `os_info`       | `tauri-plugin-os`                | Get OS information             |
-  | `fs_read`       | `tauri-plugin-fs`                | Read a file                    |
-  | `fs_write`      | `tauri-plugin-fs`                | Write a file                   |
-  | `fs_exists`     | `tauri-plugin-fs`                | Check if path exists           |
-  | `fs_readdir`    | `tauri-plugin-fs`                | List directory entries          |
-  | `fs_remove`     | `tauri-plugin-fs`                | Remove a file                  |
-  | `fs_mkdir`      | `tauri-plugin-fs`                | Create a directory             |
-  | `shell_open`    | `tauri-plugin-shell`             | Open URL/path in default app   |
-  | `shell_exec`    | `tauri-plugin-shell`             | Execute a scoped command       |
+  | Command family    | Elixir API               | Rust plugin (via `mix ex_tauri.add`) |
+  |-------------------|--------------------------|--------------------------------------|
+  | `notification`    | `ExTauri.Notification`   | included by install                  |
+  | `clipboard_*`     | `ExTauri.Clipboard`      | `clipboard`                          |
+  | `dialog_*`        | `ExTauri.Dialog`         | `dialog`                             |
+  | `os_info`         | `ExTauri.OS`             | `os`                                 |
+  | `app_info`        | `ExTauri.App`            | none (core API)                      |
+  | `fs_*`            | `ExTauri.Filesystem`     | `fs`                                 |
+  | `shell_*`         | `ExTauri.Shell`          | included by install                  |
+  | `window`          | `ExTauri.Window`         | none (core API)                      |
+  | `event_*`         | `ExTauri.Event`          | none (core API)                      |
+  | `shortcut_*`      | `ExTauri.GlobalShortcut` | `global-shortcut`                    |
+  | `autostart_*`     | `ExTauri.Autostart`      | `autostart`                          |
+  | `process_*`       | `ExTauri.App`            | `process`                            |
+  | `updater_*`       | `ExTauri.Updater`        | `updater`                            |
 
   Custom Tauri commands registered via `#[tauri::command]` can also be invoked
   by using `"invoke"` as the command type with a `cmd` field in the payload.

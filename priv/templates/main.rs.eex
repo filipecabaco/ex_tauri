@@ -5,8 +5,15 @@ use tauri_plugin_shell::ShellExt;
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
+
+// Flipped to false when the app is quitting. The heartbeat thread stops sending
+// once this is false, which lets the sidecar detect heartbeat loss and shut
+// itself down gracefully — the only graceful path on Windows, where there is no
+// SIGTERM to deliver.
+static HEARTBEAT_ACTIVE: AtomicBool = AtomicBool::new(true);
 
 struct AppState {
     sidecar_child: Mutex<Option<SidecarProcess>>,
@@ -26,6 +33,10 @@ impl Drop for SidecarProcess {
 }
 
 fn kill_sidecar(app: &tauri::AppHandle) {
+    // Stop heartbeating first: the sidecar's ShutdownManager sees the heartbeat
+    // stop and begins its own graceful shutdown while we wait below.
+    HEARTBEAT_ACTIVE.store(false, Ordering::Relaxed);
+
     if let Some(state) = app.try_state::<AppState>() {
         if let Ok(mut guard) = state.sidecar_child.lock() {
             if let Some(mut process) = guard.take() {
@@ -66,7 +77,10 @@ fn kill_sidecar(app: &tauri::AppHandle) {
 
                     #[cfg(windows)]
                     {
-                        // On Windows, wait a bit for graceful shutdown
+                        // No SIGTERM on Windows. The heartbeat was stopped above,
+                        // so the sidecar's ShutdownManager times out (1500ms by
+                        // default) and exits gracefully on its own — give it time
+                        // to do so before falling through to the hard kill.
                         std::thread::sleep(Duration::from_millis(2000));
                     }
                 }
@@ -211,19 +225,26 @@ fn start_heartbeat() {
     std::thread::spawn(|| {
         use std::io::Write;
 
-        let socket_path = std::env::temp_dir().join("tauri_heartbeat_<%= socket_name %>.sock");
         let interval = Duration::from_millis(100);
+
+        // Outer loop: (re)establish the connection. The sidecar's listener can
+        // come up late (slow boot) or be recreated, so a dropped connection must
+        // reconnect rather than end the heartbeat — otherwise the backend would
+        // see the heartbeat stop and shut itself down. Both loops exit once
+        // HEARTBEAT_ACTIVE is cleared (the app is quitting): stopping the
+        // heartbeat is what tells the sidecar to shut down gracefully.
 
         #[cfg(unix)]
         {
             use std::os::unix::net::UnixStream;
 
-            // Outer loop: (re)establish the connection. The sidecar's listener can
-            // come up late (slow boot) or be recreated, so a dropped connection must
-            // reconnect rather than end the heartbeat — otherwise the backend would
-            // see the heartbeat stop and shut itself down.
-            loop {
+            let socket_path = std::env::temp_dir().join("tauri_heartbeat_<%= socket_name %>.sock");
+
+            while HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
                 let mut stream = loop {
+                    if !HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
+                        return;
+                    }
                     match UnixStream::connect(&socket_path) {
                         Ok(s) => break s,
                         Err(_) => std::thread::sleep(Duration::from_millis(100)),
@@ -233,19 +254,52 @@ fn start_heartbeat() {
                 println!("Connected to heartbeat socket");
 
                 // Send heartbeats until the connection drops, then reconnect.
-                while stream.write_all(b"h").is_ok() {
+                while HEARTBEAT_ACTIVE.load(Ordering::Relaxed) && stream.write_all(b"h").is_ok() {
                     std::thread::sleep(interval);
                 }
 
-                println!("Heartbeat connection lost, reconnecting...");
+                if HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
+                    println!("Heartbeat connection lost, reconnecting...");
+                }
             }
         }
 
         #[cfg(windows)]
         {
-            // Windows: use named pipe or TCP fallback for heartbeat
-            // TODO: Implement Windows named pipe heartbeat
-            println!("Heartbeat not yet supported on Windows");
+            use std::net::TcpStream;
+
+            // The BEAM cannot listen on Unix domain sockets on Windows, so the
+            // sidecar listens on 127.0.0.1 with an OS-assigned port and publishes
+            // the port number in this discovery file (see ExTauri.ShutdownManager).
+            let port_file = std::env::temp_dir().join("tauri_heartbeat_<%= socket_name %>.port");
+
+            while HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
+                // Re-read the port file on every (re)connect: the port changes
+                // whenever the sidecar restarts its listener.
+                let mut stream = loop {
+                    if !HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let port = std::fs::read_to_string(&port_file)
+                        .ok()
+                        .and_then(|contents| contents.trim().parse::<u16>().ok());
+                    match port.and_then(|p| TcpStream::connect(("127.0.0.1", p)).ok()) {
+                        Some(s) => break s,
+                        None => std::thread::sleep(Duration::from_millis(100)),
+                    }
+                };
+
+                println!("Connected to heartbeat socket");
+
+                // Send heartbeats until the connection drops, then reconnect.
+                while HEARTBEAT_ACTIVE.load(Ordering::Relaxed) && stream.write_all(b"h").is_ok() {
+                    std::thread::sleep(interval);
+                }
+
+                if HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
+                    println!("Heartbeat connection lost, reconnecting...");
+                }
+            }
         }
     });
 }

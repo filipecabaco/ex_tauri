@@ -3,9 +3,10 @@ defmodule ExTauri.ShutdownManager do
   Manages graceful shutdown of the Phoenix application when running as a Tauri sidecar.
 
   This GenServer implements a heartbeat-based mechanism to detect when the Tauri
-  frontend exits. The Rust frontend sends heartbeat signals every 100ms via Unix
-  domain socket, and if the Phoenix sidecar doesn't receive a heartbeat within
-  1500ms (configurable), it initiates graceful shutdown.
+  frontend exits. The Rust frontend sends heartbeat signals every 100ms — over a
+  Unix domain socket on macOS/Linux, or a localhost TCP socket on Windows — and
+  if the Phoenix sidecar doesn't receive a heartbeat within 1500ms (configurable),
+  it initiates graceful shutdown.
 
   ## Usage
 
@@ -24,7 +25,11 @@ defmodule ExTauri.ShutdownManager do
   ## How it works
 
   The heartbeat mechanism provides robust shutdown detection:
-  1. ShutdownManager creates a Unix domain socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
+  1. ShutdownManager opens a listener. On macOS/Linux this is a Unix domain
+     socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`. On Windows (where the
+     BEAM cannot listen on Unix domain sockets) it is a TCP socket bound to
+     `127.0.0.1` on an ephemeral port, and the port number is written to
+     `<tmpdir>/tauri_heartbeat_<app_name>.port` so the Rust frontend can find it
   2. Rust frontend connects and sends a byte every 100ms
   3. The acceptor reads bytes in the same process that accepted the connection and
      casts each one back as a heartbeat (reading from another process would fail)
@@ -49,6 +54,9 @@ defmodule ExTauri.ShutdownManager do
         heartbeat_interval: 500,  # How often to check heartbeat (ms, default: 500)
         heartbeat_timeout: 1500   # Time without heartbeat before shutdown (ms, default: 1500)
 
+  The transport is selected automatically from the OS (`:unix` on macOS/Linux,
+  `:tcp` on Windows). It can be forced with the `:heartbeat_transport` config
+  key or the `:transport` start option, which is mainly useful for tests.
   """
 
   use GenServer
@@ -84,22 +92,14 @@ defmodule ExTauri.ShutdownManager do
     # Create socket path using app name to prevent collisions
     app_name = opts[:app_name] || Application.get_env(:ex_tauri, :app_name, "ex_tauri_app")
     socket_name = ExTauri.Paths.sanitize_name(app_name)
-    socket_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
 
-    # Clean up old socket file if it exists
-    cleanup_socket(socket_path)
+    # Unix domain sockets on macOS/Linux; localhost TCP + a port discovery file
+    # on Windows, where the BEAM cannot listen on Unix domain sockets.
+    transport =
+      opts[:transport] ||
+        Application.get_env(:ex_tauri, :heartbeat_transport, default_transport())
 
-    # Start Unix domain socket server
-    {:ok, listen_socket} =
-      :gen_tcp.listen(0, [
-        :binary,
-        {:ifaddr, {:local, socket_path}},
-        {:active, false},
-        {:reuseaddr, true}
-      ])
-
-    # Restrict socket to owner-only access (prevents local privilege escalation)
-    File.chmod(socket_path, 0o600)
+    {listen_socket, endpoint, cleanup_paths} = open_listener(transport, socket_name)
 
     # Spawn acceptor process under the ExTauri TaskSupervisor
     Task.Supervisor.start_child(ExTauri.TaskSupervisor, fn -> accept_loop(listen_socket) end)
@@ -108,13 +108,13 @@ defmodule ExTauri.ShutdownManager do
     schedule_heartbeat_check(heartbeat_interval)
 
     Logger.info(
-      "[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{socket_path}"
+      "[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{endpoint}"
     )
 
     {:ok,
      %{
        listen_socket: listen_socket,
-       socket_path: socket_path,
+       cleanup_paths: cleanup_paths,
        last_heartbeat: System.monotonic_time(:millisecond),
        # Stays false until the frontend connects at least once. While false a
        # heartbeat timeout means "still booting", not "window gone".
@@ -176,7 +176,7 @@ defmodule ExTauri.ShutdownManager do
   def terminate(reason, state) do
     Logger.info("[ExTauri.ShutdownManager] Terminating: #{inspect(reason)}")
     :gen_tcp.close(state.listen_socket)
-    cleanup_socket(state.socket_path)
+    Enum.each(state.cleanup_paths, &File.rm/1)
     :ok
   end
 
@@ -184,13 +184,58 @@ defmodule ExTauri.ShutdownManager do
     System.stop(0)
   end
 
-  defp schedule_heartbeat_check(interval) do
-    Process.send_after(self(), :check_heartbeat, interval)
+  defp default_transport do
+    case :os.type() do
+      {:win32, _} -> :tcp
+      _ -> :unix
+    end
   end
 
-  defp cleanup_socket(socket_path) do
+  defp open_listener(:unix, socket_name) do
+    socket_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
+
+    # Clean up old socket file if it exists
     File.rm(socket_path)
-    :ok
+
+    {:ok, listen_socket} =
+      :gen_tcp.listen(0, [
+        :binary,
+        {:ifaddr, {:local, socket_path}},
+        {:active, false},
+        {:reuseaddr, true}
+      ])
+
+    # Restrict socket to owner-only access (prevents local privilege escalation)
+    File.chmod(socket_path, 0o600)
+
+    {listen_socket, socket_path, [socket_path]}
+  end
+
+  defp open_listener(:tcp, socket_name) do
+    port_file = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.port")
+
+    # Clean up a stale port file so the frontend can't connect to a dead port
+    File.rm(port_file)
+
+    # Bind to loopback only; port 0 lets the OS pick a free ephemeral port,
+    # which is then published through the port file for the Rust frontend.
+    {:ok, listen_socket} =
+      :gen_tcp.listen(0, [
+        :binary,
+        {:ip, {127, 0, 0, 1}},
+        {:active, false},
+        {:reuseaddr, true}
+      ])
+
+    {:ok, port} = :inet.port(listen_socket)
+    File.write!(port_file, Integer.to_string(port))
+    File.chmod(port_file, 0o600)
+
+    {listen_socket, "127.0.0.1:#{port}", [port_file]}
+  end
+
+  defp schedule_heartbeat_check(interval) do
+    Process.send_after(self(), :check_heartbeat, interval)
   end
 
   defp accept_loop(listen_socket) do

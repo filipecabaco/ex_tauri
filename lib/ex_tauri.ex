@@ -165,9 +165,7 @@ defmodule ExTauri do
       cd: File.cwd!()
     ]
 
-    case [installation_path(), "bin", "cargo-tauri"]
-         |> Path.join()
-         |> System.cmd(args, opts) do
+    case System.cmd(tauri_cli_path!(), args, opts) do
       {_, 0} ->
         :ok
 
@@ -179,6 +177,21 @@ defmodule ExTauri do
         are properly installed.
         """
     end
+  end
+
+  # Resolves the installed Tauri CLI binary, failing with an actionable message
+  # instead of an :enoent ErlangError when it was never installed.
+  defp tauri_cli_path! do
+    base = Path.join([installation_path(), "bin", "cargo-tauri"])
+
+    Enum.find([base, base <> ".exe"], &File.exists?/1) ||
+      raise """
+      Tauri CLI not found at #{base}.
+
+      Run the installer first:
+
+          mix ex_tauri.install
+      """
   end
 
   defp check_src_tauri! do

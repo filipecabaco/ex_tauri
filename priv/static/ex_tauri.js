@@ -181,7 +181,14 @@ export const TauriHook = {
   _setupCommandHandler() {
     this._destroyed = false;
 
-    this.handleEvent("tauri_command", async ({ ref, command, payload }) => {
+    // handleEvent callbacks persist across reconnects, so re-registering
+    // without removing the old one would run every command twice. Drop the
+    // previous handler before attaching a fresh one.
+    if (this._commandHandlerRef != null) {
+      this.removeHandleEvent(this._commandHandlerRef);
+    }
+
+    this._commandHandlerRef = this.handleEvent("tauri_command", async ({ ref, command, payload }) => {
       // Guard against responses being pushed after the hook was destroyed
       // (e.g., a slow dialog resolved after navigation).
       if (this._destroyed) return;

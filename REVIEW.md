@@ -41,6 +41,14 @@ The following issues from prior reviews have been addressed:
 | Dev mode uses full Burrito build | `run_dev/1` builds standard release with shell wrapper sidecar |
 | TauriHook fragile on re-render | Added `reconnected()`, `destroyed()` lifecycle callbacks |
 | OTP version constraint hidden | `validate_config` and `preflight_check!` surface clear OTP warnings |
+| Windows heartbeat IPC | `ShutdownManager` supports a `:tcp` transport (localhost + port discovery file), used automatically on Windows; the Rust template implements the matching `#[cfg(windows)]` heartbeat |
+| No graceful shutdown on Windows quit | Quitting clears `HEARTBEAT_ACTIVE`, stopping the heartbeat so the sidecar times out and exits gracefully (no SIGTERM needed) |
+| CI/CD pipeline | `.github/workflows/ci.yml` runs unit/integration tests, E2E tests, and the full CLI flow on Linux |
+| Duplicate command execution after LiveView reconnect | `TauriHook` removes the previous `handleEvent` callback before re-registering |
+| Injection helpers corrupt UTF-8 files | `inject_js_hook`/`inject_layout_hook` now split on byte offsets (`binary_part`) matching regex `:index` returns |
+| `cargo install` failures ignored | `install_tauri_cli` raises with an actionable message on non-zero exit |
+| Cryptic `:enoent` when CLI missing | `run_tauri_cli` resolves the binary (including `.exe` on Windows) and points to `mix ex_tauri.install` |
+| No Hex metadata or LICENSE | `mix.exs` has `description`/`package`/`docs`; MIT `LICENSE` file added |
 
 ---
 
@@ -50,14 +58,13 @@ The following issues from prior reviews have been addressed:
 
 | Feature | Details |
 |---------|---------|
-| Windows heartbeat IPC | `ShutdownManager` uses Unix domain sockets. Windows needs named pipes or TCP localhost. The Rust template has a `#[cfg(windows)]` stub but no implementation. |
-| CI/CD pipeline | No GitHub Actions. Need: test matrix (OTP 27, Elixir 1.15+), Rust compilation check, Credo/Dialyzer. |
+| Windows end-to-end validation | The Windows heartbeat path (TCP transport + port file) is implemented and unit-tested, but no Windows CI job builds and runs a real app yet. Add a `windows-latest` job. |
 
 ### P1 — Important for Adoption
 
 | Feature | Details |
 |---------|---------|
-| Hex publication | Currently git-only dependency. Needs `package` config in mix.exs, hex docs. |
+| Hex publication | Package metadata is now in mix.exs; remaining step is `mix hex.publish` (and a docs review on hexdocs). |
 | System tray | Tauri V2 supports tray icons/menus. No integration exists. Important for long-running desktop apps. |
 | Deep linking | `tauri-plugin-deep-link` for `myapp://` URL handling (OAuth, inter-app). |
 | Global shortcuts | `tauri-plugin-global-shortcut` for app-wide keyboard shortcuts. |

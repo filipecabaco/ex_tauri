@@ -155,6 +155,70 @@ defmodule ExTauri.ShutdownManagerTest do
     end
   end
 
+  # The :tcp transport is what production uses on Windows, where the BEAM
+  # cannot listen on Unix domain sockets. It is fully exercisable on any OS:
+  # the manager listens on 127.0.0.1 and publishes the ephemeral port through
+  # a discovery file that the Rust frontend polls.
+  describe "tcp transport (Windows heartbeat path)" do
+    setup ctx do
+      port_file = port_file_for(ctx.app_name)
+      on_exit(fn -> File.rm(port_file) end)
+      %{port_file: port_file}
+    end
+
+    test "publishes the listener port in a discovery file", ctx do
+      start_manager(ctx, transport: :tcp)
+
+      assert wait_for_file(ctx.port_file)
+
+      port = ctx.port_file |> File.read!() |> String.trim() |> String.to_integer()
+      assert port in 1..65_535
+    end
+
+    test "accepts heartbeats over TCP and marks the frontend as connected", ctx do
+      pid = start_manager(ctx, transport: :tcp)
+      assert wait_for_file(ctx.port_file)
+
+      client = tcp_connect(ctx.port_file)
+      :ok = :gen_tcp.send(client, "h")
+
+      assert eventually(fn -> :sys.get_state(pid).connected end)
+
+      :gen_tcp.close(client)
+    end
+
+    test "shuts down once the TCP heartbeat is lost", ctx do
+      start_manager(ctx, transport: :tcp)
+      assert wait_for_file(ctx.port_file)
+
+      client = tcp_connect(ctx.port_file)
+      :ok = :gen_tcp.send(client, "h")
+      :gen_tcp.close(client)
+
+      assert_receive :shutdown_triggered, @timeout * 10
+    end
+
+    test "removes the port file on terminate", ctx do
+      start_manager(ctx, transport: :tcp)
+      assert wait_for_file(ctx.port_file)
+
+      :ok = stop_supervised(ShutdownManager)
+
+      assert eventually(fn -> not File.exists?(ctx.port_file) end)
+    end
+
+    test "cleans up a stale port file on startup", ctx do
+      File.write!(ctx.port_file, "99999")
+
+      pid = start_manager(ctx, transport: :tcp)
+
+      assert Process.alive?(pid)
+      assert wait_for_file(ctx.port_file)
+      port = ctx.port_file |> File.read!() |> String.trim() |> String.to_integer()
+      assert port in 1..65_535
+    end
+  end
+
   describe "configuration" do
     test "falls back to :app_name from config for the socket path" do
       app_name = "config_app_#{System.unique_integer([:positive])}"
@@ -198,6 +262,17 @@ defmodule ExTauri.ShutdownManagerTest do
 
   defp connect(socket_path) do
     {:ok, client} = :gen_tcp.connect({:local, socket_path}, 0, [:binary, active: false])
+    client
+  end
+
+  defp port_file_for(app_name) do
+    socket_name = ExTauri.Paths.sanitize_name(app_name)
+    Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.port")
+  end
+
+  defp tcp_connect(port_file) do
+    port = port_file |> File.read!() |> String.trim() |> String.to_integer()
+    {:ok, client} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary, active: false])
     client
   end
 

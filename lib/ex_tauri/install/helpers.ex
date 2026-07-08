@@ -73,7 +73,16 @@ defmodule ExTauri.Install.Helpers do
       stderr_to_stdout: true
     ]
 
-    System.cmd("cargo", build_cli_install_args(version), cmd_opts)
+    {_output, exit_code} = System.cmd("cargo", build_cli_install_args(version), cmd_opts)
+
+    unless exit_code == 0 do
+      raise """
+      Failed to install the Tauri CLI (cargo install exited with status #{exit_code}).
+
+      Check the cargo output above for details — common causes are network
+      failures and an outdated Rust toolchain (try `rustup update`).
+      """
+    end
   end
 
   defp init_tauri_project(config, extra_args) do
@@ -103,12 +112,17 @@ defmodule ExTauri.Install.Helpers do
     cmd_opts = [into: IO.stream(:stdio, :line), stderr_to_stdout: true]
 
     {_output, exit_code} =
-      Path.join([config.installation_path, "bin", "cargo-tauri"])
-      |> System.cmd(tauri_args, cmd_opts)
+      System.cmd(tauri_cli_path(config.installation_path), tauri_args, cmd_opts)
 
     unless exit_code == 0 do
       raise "tauri unable to install. exited with status #{exit_code}"
     end
+  end
+
+  # cargo installs the CLI as cargo-tauri.exe on Windows.
+  defp tauri_cli_path(installation_path) do
+    base = Path.join([installation_path, "bin", "cargo-tauri"])
+    Enum.find([base, base <> ".exe"], &File.exists?/1) || base
   end
 
   # ── Rust file generation ───────────────────────────────────────────────────
@@ -231,11 +245,17 @@ defmodule ExTauri.Install.Helpers do
         {last_pos, last_len} = matches |> List.last() |> List.first()
         insert_at = last_pos + last_len
 
-        String.slice(content, 0, insert_at) <>
-          "\n" <>
-          import_line <>
-          String.slice(content, insert_at..-1//1)
+        insert_at_byte_offset(content, insert_at, "\n" <> import_line)
     end
+  end
+
+  # Regex `return: :index` yields BYTE offsets, so the split must use
+  # binary_part — String.slice counts graphemes and would corrupt files
+  # containing multibyte characters before the insertion point.
+  defp insert_at_byte_offset(content, insert_at, insertion) do
+    binary_part(content, 0, insert_at) <>
+      insertion <>
+      binary_part(content, insert_at, byte_size(content) - insert_at)
   end
 
   defp inject_tauri_hooks(content) do
@@ -303,10 +323,7 @@ defmodule ExTauri.Install.Helpers do
           insert_at = pos + len
           hook_element = "\n    <div id=\"tauri-bridge\" phx-hook=\"TauriHook\"></div>"
 
-          new_content =
-            String.slice(content, 0, insert_at) <>
-              hook_element <>
-              String.slice(content, insert_at..-1//1)
+          new_content = insert_at_byte_offset(content, insert_at, hook_element)
 
           File.write!(path, new_content)
           Mix.shell().info("Injected tauri-bridge element into #{Path.relative_to_cwd(path)}")

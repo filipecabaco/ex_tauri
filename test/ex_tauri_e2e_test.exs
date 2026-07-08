@@ -144,6 +144,24 @@ defmodule ExTauri.E2ETest do
       assert main_rs =~ "std::env::temp_dir()"
     end
 
+    test "generated main.rs implements the heartbeat for both Unix and Windows" do
+      socket_name = ExTauri.Paths.sanitize_name(@app_name)
+      main_rs = ExTauri.Install.Helpers.main_src(@host, @port, socket_name)
+
+      # Unix: heartbeat over the Unix domain socket
+      assert main_rs =~ "UnixStream::connect"
+      assert main_rs =~ "tauri_heartbeat_#{socket_name}.sock"
+
+      # Windows: heartbeat over localhost TCP, discovered via the port file
+      # written by ExTauri.ShutdownManager's :tcp transport
+      assert main_rs =~ "tauri_heartbeat_#{socket_name}.port"
+      assert main_rs =~ ~s{TcpStream::connect(("127.0.0.1", p))}
+      refute main_rs =~ "Heartbeat not yet supported on Windows"
+
+      # Quitting stops the heartbeat so the sidecar can shut down gracefully
+      assert main_rs =~ "HEARTBEAT_ACTIVE"
+    end
+
     test "generated capabilities.json is valid JSON with required permissions" do
       json_str = ExTauri.Install.Helpers.capabilities_json()
       {:ok, parsed} = Jason.decode(json_str)

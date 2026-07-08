@@ -195,19 +195,22 @@ end
 └──────────────────────┘
 ```
 
-Tauri launches your Phoenix app as a **sidecar process**. The WebView connects to Phoenix over HTTP to render your LiveView UI. A separate Unix domain socket carries heartbeat signals for lifecycle management.
+Tauri launches your Phoenix app as a **sidecar process**. The WebView connects to Phoenix over HTTP to render your LiveView UI. A separate local socket carries heartbeat signals for lifecycle management.
 
 ### Heartbeat-Based Shutdown
 
-ExTauri uses a Unix domain socket heartbeat to detect when the Tauri frontend exits:
+ExTauri uses a local socket heartbeat to detect when the Tauri frontend exits:
 
-1. `ShutdownManager` creates a socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
+1. `ShutdownManager` opens a listener:
+   - **macOS/Linux:** a Unix domain socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
+   - **Windows:** a TCP socket on `127.0.0.1` with an OS-assigned port, published
+     in `<tmpdir>/tauri_heartbeat_<app_name>.port` for the frontend to discover
 2. The Rust frontend connects and sends a byte every **100ms**
 3. `ShutdownManager` checks for heartbeats every **500ms**
 4. If no heartbeat is received for **1500ms**, graceful shutdown begins
 5. Phoenix closes connections, flushes logs, and exits cleanly
 
-This works even when the app is force-quit, crashes, or is killed unexpectedly. The socket path is unique per application (based on `:app_name`) to prevent collisions.
+This works even when the app is force-quit, crashes, or is killed unexpectedly. The socket path is unique per application (based on `:app_name`) to prevent collisions. When you quit normally, the frontend stops heartbeating before waiting on the sidecar, so the same mechanism drives graceful shutdown on platforms without SIGTERM (Windows).
 
 ## Configuration
 

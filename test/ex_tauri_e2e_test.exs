@@ -92,6 +92,16 @@ defmodule ExTauri.E2ETest do
       File.write!(Path.join(src_tauri, "tauri.conf.json"), tauri_conf)
       File.write!(Path.join(capabilities_dir, "default.json"), capabilities)
 
+      # tauri-build validates that externalBin resources exist, so provide a
+      # placeholder sidecar binary the way a real build would have one.
+      {rustc_output, 0} = System.cmd("rustc", ["-Vv"])
+      [_, triplet] = Regex.run(~r/host: (.+)/, rustc_output)
+      burrito_out = Path.join(tmp_dir, "burrito_out")
+      File.mkdir_p!(burrito_out)
+      sidecar = Path.join(burrito_out, "desktop-#{String.trim(triplet)}")
+      File.write!(sidecar, "#!/bin/sh\nexit 0\n")
+      File.chmod!(sidecar, 0o755)
+
       # Build (not just check) to produce a real binary
       {build_output, build_exit} =
         System.cmd("cargo", ["build"],

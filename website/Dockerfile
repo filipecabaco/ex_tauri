@@ -16,7 +16,7 @@ WORKDIR /app
 COPY . .
 
 RUN mix local.hex --force && mix local.rebar --force && mix deps.get && mix compile
-RUN mix assets.deploy
+RUN mix assets.build
 RUN mix release
 
 # Run Stage

@@ -19,13 +19,14 @@ defmodule ExTauriWebsite.MixProject do
 
   defp deps do
     [
-      {:francis, "~> 0.3"}
+      {:francis, "~> 0.3.3"},
+      {:tailwind, "~> 0.4", runtime: Mix.env() == :dev}
     ]
   end
 
   defp aliases do
     [
-      "assets.deploy": ["francis.digest"]
+      "assets.build": ["tailwind default", "francis.digest priv/static --clean"]
     ]
   end
 end

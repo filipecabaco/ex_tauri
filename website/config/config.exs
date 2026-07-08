@@ -1,9 +1,13 @@
 import Config
 
-case config_env() do
-  :dev ->
-    config :francis, dev: true
+config :tailwind,
+  version: "4.1.12",
+  default: [
+    args: ~w(
+      --input=assets/css/app.css
+      --output=priv/static/tw.css
+    ),
+    cd: Path.expand("..", __DIR__)
+  ]
 
-  _ ->
-    config :francis, dev: false
-end
+import_config "#{config_env()}.exs"

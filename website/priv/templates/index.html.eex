@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ExTauri — Build native desktop apps with Phoenix &amp; Elixir</title>
+<meta name="description" content="ExTauri wraps Tauri so your Phoenix LiveView app runs as a native desktop application on macOS, Windows, and Linux — desktop APIs from Elixir, no JavaScript required.">
+<meta property="og:title" content="ExTauri — Build native desktop apps with Phoenix &amp; Elixir">
+<meta property="og:description" content="Turn your Phoenix LiveView app into a native desktop application. Notifications, dialogs, tray, filesystem and more — driven from Elixir.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='42' fill='%238b5cf6'/%3E%3Ccircle cx='50' cy='50' r='18' fill='%23ffc131'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="<%= tw_css %>">
+</head>
+<body>
+
+<nav class="sticky top-0 z-50 border-b border-bdr-soft bg-ink/80 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-5xl items-center gap-7 px-6">
+    <a class="flex items-center gap-2.5 text-[17px] font-bold text-txt no-underline" href="#">
+      <span class="h-[26px] w-[26px] rounded-lg bg-[conic-gradient(from_210deg,#8b5cf6,#6d28d9_45%,#ffc131_46%,#ffc131_60%,#8b5cf6)] shadow-[0_0_18px_rgba(139,92,246,.45)]"></span>
+      ExTauri
+    </a>
+    <div class="ml-auto flex items-center gap-5">
+      <a href="#features" class="hidden text-sm font-medium text-mut hover:text-txt sm:block">Features</a>
+      <a href="#get-started" class="hidden text-sm font-medium text-mut hover:text-txt sm:block">Get Started</a>
+      <a href="#apis" class="hidden text-sm font-medium text-mut hover:text-txt sm:block">Desktop APIs</a>
+      <a href="#architecture" class="hidden text-sm font-medium text-mut hover:text-txt sm:block">Architecture</a>
+      <a class="inline-flex items-center gap-2 rounded-lg border border-bdr bg-panel px-3.5 py-1.5 text-sm text-txt transition hover:border-grape-deep hover:bg-panel-2" href="https://github.com/filipecabaco/ex_tauri">
+        <svg class="h-4 w-4 fill-current" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<header class="relative overflow-hidden pb-18 pt-24 text-center">
+  <div class="pointer-events-none absolute -inset-x-20 -top-40 h-[130%] bg-[radial-gradient(600px_320px_at_30%_20%,rgba(139,92,246,.22),transparent_70%),radial-gradient(500px_300px_at_72%_10%,rgba(255,193,49,.10),transparent_70%)]"></div>
+  <div class="relative mx-auto max-w-5xl px-6">
+    <h1 class="mb-5 text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl">
+      Build native desktop apps<br>
+      with <span class="bg-gradient-to-r from-grape via-[#c4b5fd] to-amber bg-clip-text text-transparent">Phoenix &amp; Elixir</span>
+    </h1>
+    <p class="mx-auto mb-9 max-w-2xl text-lg text-mut">
+      Run your Phoenix LiveView app as a native desktop application on
+      <strong class="font-semibold text-txt">macOS, Windows, and Linux</strong>
+      — desktop APIs included, no JavaScript required.
+    </p>
+    <div class="mb-7 flex flex-wrap justify-center gap-3.5">
+      <a class="btn-primary" href="#get-started">Get Started</a>
+      <a class="btn-ghost" href="https://github.com/filipecabaco/ex_tauri">View on GitHub</a>
+    </div>
+    <div class="inline-flex items-center gap-3 rounded-xl border border-bdr bg-code px-4 py-3 font-mono text-sm text-mut">
+      <span class="select-none text-faint">$</span><code class="text-txt">mix ex_tauri.install</code>
+      <button class="copy-btn" data-copy="mix ex_tauri.install" title="Copy to clipboard" aria-label="Copy install command">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>
+    </div>
+
+    <div class="mx-auto mt-14 max-w-3xl overflow-hidden rounded-2xl border border-bdr bg-panel shadow-[0_30px_80px_rgba(0,0,0,.55),0_0_0_1px_rgba(139,92,246,.12)]">
+      <div class="flex items-center gap-2 border-b border-bdr-soft bg-panel-2 px-3.5 py-2.5">
+        <span class="h-[11px] w-[11px] rounded-full bg-[#ff5f57]"></span>
+        <span class="h-[11px] w-[11px] rounded-full bg-[#febc2e]"></span>
+        <span class="h-[11px] w-[11px] rounded-full bg-[#28c840]"></span>
+        <span class="mx-auto -translate-x-6 text-xs text-faint">My Phoenix App — native window</span>
+      </div>
+      <img class="block w-full" src="<%= example_gif %>" alt="A Phoenix LiveView application running inside a native desktop window via ExTauri" loading="lazy">
+    </div>
+  </div>
+</header>
+
+<section id="features" class="py-26">
+  <div class="mx-auto max-w-5xl px-6">
+    <div class="mx-auto mb-13 max-w-xl text-center">
+      <div class="eyebrow">Features</div>
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Keep writing Phoenix. Ship a desktop app.</h2>
+    </div>
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 text-lg">🖥️</div><h3 class="mb-2 font-semibold">LiveView as a Desktop App</h3><p class="text-sm text-mut">Your app renders inside a native window — same code, same components.</p></div>
+      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 text-lg">🧩</div><h3 class="mb-2 font-semibold">Desktop APIs from Elixir</h3><p class="text-sm text-mut">Notifications, dialogs, clipboard, filesystem, tray — with callback-style responses.</p></div>
+      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 text-lg">🔥</div><h3 class="mb-2 font-semibold">True Hot Reload</h3><p class="text-sm text-mut"><code class="inline-code">mix ex_tauri.dev</code> runs your dev server inside the native window.</p></div>
+      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 text-lg">📡</div><h3 class="mb-2 font-semibold">Server-Side Channel</h3><p class="text-sm text-mut">Send notifications and drive the system tray from GenServers — no browser involved.</p></div>
+      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 text-lg">📦</div><h3 class="mb-2 font-semibold">Single Binary</h3><p class="text-sm text-mut">Burrito bundles the BEAM and your app into one executable per platform.</p></div>
+      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 text-lg">💓</div><h3 class="mb-2 font-semibold">Graceful Shutdown</h3><p class="text-sm text-mut">Heartbeat-based cleanup, even on force-quit or crash.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="get-started" class="border-y border-bdr-soft bg-ink-soft py-26">
+  <div class="mx-auto max-w-3xl px-6">
+    <div class="mb-13">
+      <div class="eyebrow">Get Started</div>
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Three steps to a native window</h2>
+    </div>
+
+    <div class="grid gap-7">
+      <div class="grid grid-cols-[56px_1fr] gap-5">
+        <div><div class="grid h-10 w-10 place-items-center rounded-full border border-grape-deep/35 bg-grape-deep/10 font-bold text-grape">1</div></div>
+        <div>
+          <h3 class="mb-3 text-lg font-semibold">Add the dependency</h3>
+          <div class="code-shell"><div class="code-label">mix.exs</div><pre><code class="lang-elixir">{:ex_tauri, git: "https://github.com/filipecabaco/ex_tauri.git"}</code></pre></div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-[56px_1fr] gap-5">
+        <div><div class="grid h-10 w-10 place-items-center rounded-full border border-grape-deep/35 bg-grape-deep/10 font-bold text-grape">2</div></div>
+        <div>
+          <h3 class="mb-3 text-lg font-semibold">Install</h3>
+          <div class="code-shell"><div class="code-label">shell</div><pre><code class="lang-bash">mix deps.get
+mix ex_tauri.install</code></pre></div>
+          <p class="mt-3 text-sm text-mut">One command wires everything: config, Rust scaffolding, supervision tree, JS hook, and layout.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-[56px_1fr] gap-5">
+        <div><div class="grid h-10 w-10 place-items-center rounded-full border border-grape-deep/35 bg-grape-deep/10 font-bold text-grape">3</div></div>
+        <div>
+          <h3 class="mb-3 text-lg font-semibold">Run it</h3>
+          <div class="code-shell"><div class="code-label">shell</div><pre><code class="lang-bash">mix ex_tauri.dev</code></pre></div>
+          <p class="mt-3 text-sm text-mut">Your app opens in a native window with code reloading and live reload, exactly as in the browser.</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="mt-10 text-sm text-faint">Requires Elixir ≥ 1.15 with OTP 27, <a class="text-mut underline hover:text-txt" href="https://www.rust-lang.org/tools/install">Rust</a>, and the <a class="text-mut underline hover:text-txt" href="https://v2.tauri.app/start/prerequisites/">Tauri prerequisites</a>.</p>
+  </div>
+</section>
+
+<section id="apis" class="py-26">
+  <div class="mx-auto max-w-5xl px-6">
+    <div class="mb-13 max-w-2xl">
+      <div class="eyebrow">Desktop APIs</div>
+      <h2 class="mb-3.5 text-3xl font-bold tracking-tight sm:text-4xl">Native capabilities, idiomatic Elixir</h2>
+      <p class="text-mut">Add <code class="inline-code">use ExTauri.LiveView</code> and every API accepts a callback that receives the result — no manual event pattern-matching.</p>
+    </div>
+
+    <div class="mb-5 flex flex-wrap gap-2" role="tablist">
+      <button class="tab active" data-tab="dialog">📂 File Dialogs</button>
+      <button class="tab" data-tab="notify">🔔 Notifications</button>
+      <button class="tab" data-tab="events">🎯 Native Events</button>
+      <button class="tab" data-tab="desktop">📡 Server-Side Tray</button>
+    </div>
+
+    <div class="tab-panel active" data-panel="dialog">
+      <div class="code-shell"><div class="code-label">lib/my_app_web/live/home_live.ex</div><pre><code class="lang-elixir">defmodule MyAppWeb.HomeLive do
+  use MyAppWeb, :live_view
+  use ExTauri.LiveView
+
+  def handle_event("pick_file", _params, socket) do
+    socket =
+      ExTauri.Dialog.open(socket, [title: "Pick a file"], fn
+        {:ok, %{"path" => path}}, socket -> assign(socket, :file, path)
+        {:error, _reason}, socket -> put_flash(socket, :error, "No file selected")
+      end)
+
+    {:noreply, socket}
+  end
+end</code></pre></div>
+    </div>
+
+    <div class="tab-panel" data-panel="notify">
+      <div class="code-shell"><div class="code-label">lib/my_app_web/live/home_live.ex</div><pre><code class="lang-elixir">def handle_event("notify", _params, socket) do
+  socket = ExTauri.Notification.send(socket, "Saved!", body: "Your file was saved.")
+  {:noreply, socket}
+end</code></pre></div>
+    </div>
+
+    <div class="tab-panel" data-panel="events">
+      <div class="code-shell"><div class="code-label">lib/my_app_web/live/editor_live.ex</div><pre><code class="lang-elixir">def mount(_params, _session, socket) do
+  {:ok, ExTauri.Event.subscribe(socket, "tauri://drag-drop")}
+end
+
+# React to files dropped onto the window
+def handle_event("tauri_event", %{"payload" => %{"paths" => paths}}, socket) do
+  {:noreply, assign(socket, :dropped_files, paths)}
+end</code></pre></div>
+    </div>
+
+    <div class="tab-panel" data-panel="desktop">
+      <div class="code-shell"><div class="code-label">anywhere in your app — no LiveView needed</div><pre><code class="lang-elixir"># Notify from a background job
+ExTauri.Desktop.notify("Sync complete", body: "128 records updated")
+
+# Define a system tray from Elixir; clicks arrive as messages
+ExTauri.Desktop.set_tray(
+  tooltip: "My App",
+  items: [%{id: "sync", label: "Sync now"}, %{id: "quit", label: "Quit"}]
+)</code></pre></div>
+    </div>
+
+    <p class="mt-8 max-w-3xl rounded-r-xl border-l-[3px] border-grape-deep bg-grape-deep/5 px-4.5 py-3.5 text-[14.5px] text-mut">
+      <b class="font-semibold text-txt">Notification, Shell, Window, Event, App</b> and <b class="font-semibold text-txt">Desktop</b> work out of the box.
+      Dialogs, clipboard, filesystem, global shortcuts, autostart, updater, and deep links are one
+      <code class="inline-code">mix ex_tauri.add &lt;plugin&gt;</code> away —
+      see the <a class="text-grape hover:underline" href="https://github.com/filipecabaco/ex_tauri#using-desktop-apis">full list</a>.
+    </p>
+  </div>
+</section>
+
+<section id="architecture" class="border-y border-bdr-soft bg-ink-soft py-26">
+  <div class="mx-auto max-w-5xl px-6">
+    <div class="mb-13">
+      <div class="eyebrow">Architecture</div>
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">How it works</h2>
+    </div>
+    <div class="grid items-start gap-10 lg:grid-cols-2">
+      <div class="grid justify-items-center rounded-2xl border border-bdr bg-code p-8">
+        <div class="w-full max-w-sm rounded-xl border border-amber/40 bg-panel px-5 py-4 text-center">
+          <b class="block text-[15px]">🪟 Tauri Window</b>
+          <span class="text-xs text-faint">Native window · Rust / WebView</span>
+          <div class="mt-3 rounded-lg border border-dashed border-bdr bg-ink p-2.5 text-[13px] text-mut">Phoenix UI — your LiveView app rendered in the WebView</div>
+        </div>
+        <div class="grid justify-items-center gap-1 py-3.5 text-center text-xs text-faint">
+          <span class="text-base leading-none text-grape-deep">│</span>
+          <span><b class="text-mut">HTTP</b> — serves your Phoenix UI to the WebView</span>
+          <span><b class="text-mut">Local socket</b> — heartbeat + desktop channel</span>
+          <span class="text-base leading-none text-grape-deep">│</span>
+        </div>
+        <div class="w-full max-w-sm rounded-xl border border-grape-deep/50 bg-panel px-5 py-4 text-center">
+          <b class="block text-[15px]">🐦‍🔥 Phoenix Server</b>
+          <span class="text-xs text-faint">Your Elixir app · Burrito-wrapped sidecar process</span>
+        </div>
+      </div>
+      <div class="grid gap-5">
+        <div>
+          <h4 class="mb-1 font-semibold">A sidecar, not a rewrite</h4>
+          <p class="text-sm text-mut">Tauri launches your Phoenix app as a sidecar process on an OS-assigned free port and navigates the window once the server is up. Standard <code class="inline-code">runtime.exs</code> conventions apply.</p>
+        </div>
+        <div>
+          <h4 class="mb-1 font-semibold">Crash-safe shutdown</h4>
+          <p class="text-sm text-mut">The frontend heartbeats over a local socket; if it stops — quit, crash, or force-kill — Phoenix shuts down cleanly. Works on every platform, including Windows.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="ship" class="py-26 text-center">
+  <div class="mx-auto max-w-3xl px-6">
+    <div class="mx-auto mb-13 max-w-xl">
+      <div class="eyebrow">Ship It</div>
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">One command to production bundles</h2>
+    </div>
+    <div class="code-shell mx-auto mb-6 max-w-md"><div class="code-label">shell</div><pre><code class="lang-bash">mix ex_tauri.build</code></pre></div>
+    <ul class="flex list-none flex-wrap justify-center gap-3 p-0">
+      <li class="flex items-center gap-2.5 rounded-xl border border-bdr-soft bg-panel px-4.5 py-3 text-sm font-semibold">🍎 macOS <span class="font-mono text-[13px] font-normal text-amber">.app · .dmg</span></li>
+      <li class="flex items-center gap-2.5 rounded-xl border border-bdr-soft bg-panel px-4.5 py-3 text-sm font-semibold">🐧 Linux <span class="font-mono text-[13px] font-normal text-amber">.deb · .appimage</span></li>
+      <li class="flex items-center gap-2.5 rounded-xl border border-bdr-soft bg-panel px-4.5 py-3 text-sm font-semibold">🪟 Windows <span class="font-mono text-[13px] font-normal text-amber">.msi · .exe</span></li>
+    </ul>
+    <p class="mt-10 text-sm text-faint">Signing, notarization, auto-updates, CI matrix: <a class="text-mut underline hover:text-txt" href="https://github.com/filipecabaco/ex_tauri/blob/main/guides/releasing.md">release guide</a>. Working demos in <a class="text-mut underline hover:text-txt" href="https://github.com/filipecabaco/ex_tauri/tree/main/demos">demos/</a> and <a class="text-mut underline hover:text-txt" href="https://github.com/filipecabaco/ex_tauri/tree/main/example">example/</a>.</p>
+  </div>
+</section>
+
+<div class="py-25 text-center">
+  <div class="mx-auto max-w-5xl px-6">
+    <h2 class="mb-8 text-3xl font-extrabold tracking-tight sm:text-5xl">Your LiveView app, <span class="bg-gradient-to-r from-grape to-amber bg-clip-text text-transparent">on the desktop</span></h2>
+    <div class="flex flex-wrap justify-center gap-3.5">
+      <a class="btn-primary" href="#get-started">Get Started</a>
+      <a class="btn-ghost" href="https://github.com/filipecabaco/ex_tauri">Star on GitHub ★</a>
+    </div>
+  </div>
+</div>
+
+<footer class="border-t border-bdr-soft py-10 text-[13.5px] text-faint">
+  <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-5 px-6">
+    <div>ExTauri · MIT License · © <%= year %> · Built with ❤️ on the BEAM, served by <a class="footer-link" href="https://francis.build">Francis</a></div>
+    <div class="flex flex-wrap gap-4.5">
+      <a class="footer-link" href="https://github.com/filipecabaco/ex_tauri">GitHub</a>
+      <a class="footer-link" href="https://github.com/filipecabaco/ex_tauri/blob/main/guides/releasing.md">Release Guide</a>
+      <a class="footer-link" href="https://tauri.app">Tauri</a>
+      <a class="footer-link" href="https://github.com/burrito-elixir/burrito">Burrito</a>
+      <a class="footer-link" href="https://francis.build">Francis</a>
+    </div>
+  </div>
+</footer>
+
+<script src="<%= site_js %>" defer></script>
+</body>
+</html>

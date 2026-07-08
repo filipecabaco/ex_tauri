@@ -104,7 +104,8 @@ defmodule ExTauri.HookTest do
       for namespace <- ~w(notification clipboardManager dialog os fs shell core
                           window webviewWindow app event globalShortcut autostart process
                           updater dpi) do
-        assert source =~ ~s(tauriApi("#{namespace}")),
+        # Square-bracket sigil: the pattern itself contains parentheses.
+        assert source =~ ~s[tauriApi("#{namespace}")],
                "expected tauriApi(\"#{namespace}\") in hook source"
       end
 

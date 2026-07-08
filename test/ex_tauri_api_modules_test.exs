@@ -1,8 +1,9 @@
 defmodule ExTauri.ApiModulesTest do
   use ExUnit.Case, async: true
 
-  # function_exported?/3 reports false for modules that haven't been loaded yet,
-  # and nothing else in the suite references these modules — so load them first.
+  # function_exported?/3 reports false for modules that haven't been loaded
+  # yet, and load order depends on the test seed — so load everything this
+  # file asserts on up front.
   setup_all do
     for mod <- [
           ExTauri.Window,
@@ -10,7 +11,14 @@ defmodule ExTauri.ApiModulesTest do
           ExTauri.Event,
           ExTauri.GlobalShortcut,
           ExTauri.Autostart,
-          ExTauri.Updater
+          ExTauri.Updater,
+          ExTauri.Desktop,
+          ExTauri.Dialog,
+          ExTauri.Clipboard,
+          ExTauri.Filesystem,
+          ExTauri.OS,
+          ExTauri.Notification,
+          ExTauri.Shell
         ] do
       Code.ensure_loaded!(mod)
     end

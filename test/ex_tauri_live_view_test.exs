@@ -54,11 +54,12 @@ defmodule ExTauri.LiveViewTest do
     end
   end
 
-  describe "handle_bridge_event/3 fall-through" do
-    # A bare map stands in for the socket: the fall-through paths only read
-    # socket.assigns, so no LiveView struct is needed.
-    defp fake_socket, do: %{assigns: %{}}
+  # A bare map stands in for the socket: the fall-through paths only read
+  # socket.assigns, so no LiveView struct is needed. (Module level — defp
+  # is not allowed inside describe blocks.)
+  defp fake_socket, do: %{assigns: %{}}
 
+  describe "handle_bridge_event/3 fall-through" do
     test "responses without a registered callback continue to user handlers" do
       params = %{"ref" => "123", "command" => "dialog_open", "path" => "/tmp/x"}
       assert {:cont, _socket} = LiveView.handle_bridge_event("tauri_response", params, fake_socket())

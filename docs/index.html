@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ExTauri — Build native desktop apps with Phoenix &amp; Elixir</title>
+<meta name="description" content="ExTauri wraps Tauri so your Phoenix LiveView app runs as a native desktop application on macOS, Windows, and Linux — desktop APIs from Elixir, no JavaScript required.">
+<meta property="og:title" content="ExTauri — Build native desktop apps with Phoenix &amp; Elixir">
+<meta property="og:description" content="Turn your Phoenix LiveView app into a native desktop application. Notifications, dialogs, tray, filesystem and more — driven from Elixir.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='42' fill='%238b5cf6'/%3E%3Ccircle cx='50' cy='50' r='18' fill='%23ffc131'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0b0a10;
+    --bg-soft: #121017;
+    --panel: #17141f;
+    --panel-2: #1d1928;
+    --border: #2a2438;
+    --border-soft: #221d30;
+    --text: #ece9f4;
+    --muted: #a29bb8;
+    --faint: #6f6885;
+    --purple: #a78bfa;
+    --purple-deep: #8b5cf6;
+    --amber: #ffc131;
+    --green: #4ade80;
+    --code-bg: #100e17;
+    --radius: 14px;
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(139, 92, 246, .35); }
+  a { color: var(--purple); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(11, 10, 16, .82);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .nav-inner {
+    display: flex; align-items: center; gap: 28px;
+    height: 64px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 17px; color: var(--text);
+  }
+  .logo:hover { text-decoration: none; }
+  .logo-mark {
+    width: 26px; height: 26px; border-radius: 8px;
+    background: conic-gradient(from 210deg, var(--purple-deep), #6d28d9 45%, var(--amber) 46%, var(--amber) 60%, var(--purple-deep));
+    box-shadow: 0 0 18px rgba(139, 92, 246, .45);
+  }
+  .nav-links { display: flex; gap: 22px; margin-left: auto; align-items: center; }
+  .nav-links a { color: var(--muted); font-size: 14px; font-weight: 500; }
+  .nav-links a:hover { color: var(--text); text-decoration: none; }
+  .gh-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 7px 14px; color: var(--text) !important; font-size: 14px;
+    background: var(--panel);
+    transition: border-color .15s, background .15s;
+  }
+  .gh-btn:hover { border-color: var(--purple-deep); background: var(--panel-2); text-decoration: none; }
+  .gh-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    padding: 96px 0 72px;
+    text-align: center;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute; inset: -40% -20% auto;
+    height: 130%;
+    background:
+      radial-gradient(600px 320px at 30% 20%, rgba(139, 92, 246, .22), transparent 70%),
+      radial-gradient(500px 300px at 72% 10%, rgba(255, 193, 49, .10), transparent 70%);
+    pointer-events: none;
+  }
+  .hero > .wrap { position: relative; }
+  .hero .kicker {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; letter-spacing: .04em;
+    color: var(--purple);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 14px; background: var(--panel);
+    margin-bottom: 26px;
+  }
+  .hero h1 {
+    font-size: clamp(38px, 6vw, 62px);
+    line-height: 1.08; font-weight: 800; letter-spacing: -0.02em;
+    margin-bottom: 20px;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(92deg, var(--purple) 10%, #c4b5fd 45%, var(--amber) 95%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p.lede {
+    font-size: 19px; color: var(--muted); max-width: 680px; margin: 0 auto 36px;
+  }
+  .hero p.lede strong { color: var(--text); font-weight: 600; }
+  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 30px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    border-radius: 12px; padding: 12px 22px;
+    font-size: 15px; font-weight: 600;
+    transition: transform .12s, box-shadow .15s, background .15s, border-color .15s;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); }
+  .btn-primary {
+    background: linear-gradient(120deg, var(--purple-deep), #7c3aed);
+    color: #fff !important;
+    box-shadow: 0 6px 24px rgba(139, 92, 246, .35);
+  }
+  .btn-primary:hover { box-shadow: 0 8px 30px rgba(139, 92, 246, .5); }
+  .btn-ghost { border: 1px solid var(--border); color: var(--text) !important; background: var(--panel); }
+  .btn-ghost:hover { border-color: var(--purple-deep); }
+  .install-pill {
+    display: inline-flex; align-items: center; gap: 12px;
+    font-family: var(--mono); font-size: 14.5px;
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 18px;
+    color: var(--muted);
+  }
+  .install-pill .dollar { color: var(--faint); user-select: none; }
+  .install-pill code { color: var(--text); }
+  .copy-btn {
+    border: none; background: transparent; cursor: pointer;
+    color: var(--faint); padding: 2px; display: inline-flex;
+    transition: color .15s;
+  }
+  .copy-btn:hover { color: var(--purple); }
+  .copy-btn svg { width: 16px; height: 16px; }
+  .platforms { margin-top: 26px; font-size: 13.5px; color: var(--faint); }
+  .platforms b { color: var(--muted); font-weight: 600; }
+
+  .hero-shot {
+    margin: 56px auto 0; max-width: 860px;
+    border-radius: 16px; border: 1px solid var(--border);
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 0 0 1px rgba(139, 92, 246, .12);
+    background: var(--panel);
+  }
+  .hero-shot .titlebar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 11px 14px; background: var(--panel-2);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .titlebar span { margin: 0 auto; font-size: 12.5px; color: var(--faint); transform: translateX(-24px); }
+  .hero-shot img { display: block; width: 100%; }
+
+  /* ---------- sections ---------- */
+  section { padding: 88px 0; }
+  section.alt { background: var(--bg-soft); border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+  .sec-head { max-width: 640px; margin-bottom: 48px; }
+  .sec-head.center { margin-left: auto; margin-right: auto; text-align: center; }
+  .sec-head .eyebrow {
+    font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--amber); margin-bottom: 10px;
+  }
+  .sec-head h2 { font-size: clamp(28px, 4vw, 38px); font-weight: 750; letter-spacing: -0.015em; margin-bottom: 14px; }
+  .sec-head p { color: var(--muted); font-size: 16.5px; }
+
+  /* features */
+  .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .feat {
+    background: var(--panel); border: 1px solid var(--border-soft);
+    border-radius: var(--radius); padding: 24px;
+    transition: border-color .15s, transform .15s;
+  }
+  .feat:hover { border-color: var(--purple-deep); transform: translateY(-2px); }
+  .feat .icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: grid; place-items: center; font-size: 19px;
+    background: linear-gradient(140deg, rgba(139, 92, 246, .22), rgba(255, 193, 49, .10));
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .feat h3 { font-size: 16px; font-weight: 650; margin-bottom: 8px; }
+  .feat p { font-size: 14px; color: var(--muted); }
+  .feat p code { font-family: var(--mono); font-size: 12.5px; color: var(--purple); background: rgba(139,92,246,.1); padding: 1px 5px; border-radius: 5px; }
+
+  /* steps */
+  .steps { display: grid; gap: 26px; }
+  .step { display: grid; grid-template-columns: 56px 1fr; gap: 20px; }
+  .step-num {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 16px; color: var(--purple);
+    background: rgba(139, 92, 246, .12); border: 1px solid rgba(139, 92, 246, .35);
+  }
+  .step h3 { font-size: 18px; font-weight: 650; margin-bottom: 6px; }
+  .step p { color: var(--muted); font-size: 15px; margin-bottom: 14px; }
+  .step p code, .note code, td code, li code { font-family: var(--mono); font-size: 13px; color: var(--purple); background: rgba(139,92,246,.1); padding: 1px 5px; border-radius: 5px; }
+  .check-list { list-style: none; margin: 14px 0 0; display: grid; gap: 8px; }
+  .check-list li { font-size: 14px; color: var(--muted); padding-left: 26px; position: relative; }
+  .check-list li::before { content: "✓"; position: absolute; left: 4px; color: var(--green); font-weight: 700; }
+  .note {
+    margin-top: 16px; font-size: 14px; color: var(--muted);
+    border-left: 3px solid var(--amber); background: rgba(255, 193, 49, .06);
+    padding: 12px 16px; border-radius: 0 10px 10px 0;
+  }
+
+  /* code blocks */
+  .code {
+    position: relative;
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+  }
+  .code .code-label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--mono); font-size: 12px; color: var(--faint);
+    padding: 9px 16px; border-bottom: 1px solid var(--border-soft);
+    background: rgba(255, 255, 255, .015);
+  }
+  .code pre {
+    padding: 18px 20px; overflow-x: auto;
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.65;
+    color: #d6d2e4;
+  }
+  .code pre::-webkit-scrollbar { height: 8px; }
+  .code pre::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  /* syntax colors */
+  .tok-kw  { color: #c4b5fd; }
+  .tok-mod { color: #7dd3fc; }
+  .tok-atom{ color: var(--amber); }
+  .tok-str { color: #86efac; }
+  .tok-com { color: #5f5876; font-style: italic; }
+  .tok-num { color: #fda4af; }
+  .tok-fn  { color: #f0abfc; }
+  .tok-var { color: #93c5fd; }
+  .tok-cmd { color: #7dd3fc; }
+
+  /* API tabs */
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .tab {
+    border: 1px solid var(--border); background: var(--panel);
+    color: var(--muted); font-size: 14px; font-weight: 600;
+    border-radius: 10px; padding: 9px 16px; cursor: pointer;
+    font-family: var(--font);
+    transition: all .15s;
+  }
+  .tab:hover { color: var(--text); border-color: var(--purple-deep); }
+  .tab.active { background: rgba(139, 92, 246, .15); border-color: var(--purple-deep); color: var(--purple); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: grid; gap: 20px; }
+  .tab-panel .desc { color: var(--muted); font-size: 15px; max-width: 760px; }
+  .tab-panel .desc code { font-family: var(--mono); font-size: 13px; color: var(--purple); background: rgba(139,92,246,.1); padding: 1px 5px; border-radius: 5px; }
+
+  /* module tables */
+  .api-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 54px; }
+  .api-card { background: var(--panel); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 26px; }
+  .api-card h3 { font-size: 16px; font-weight: 650; margin-bottom: 6px; }
+  .api-card > p { font-size: 14px; color: var(--muted); margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; color: var(--faint); font-weight: 600; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--border-soft); color: var(--muted); vertical-align: top; }
+  td:first-child { color: var(--text); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+
+  /* architecture */
+  .arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  .arch-diagram {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 30px;
+    display: grid; gap: 0; justify-items: center;
+  }
+  .arch-box {
+    width: 100%; max-width: 360px;
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 20px; background: var(--panel);
+    text-align: center;
+  }
+  .arch-box.tauri { border-color: rgba(255, 193, 49, .4); }
+  .arch-box.phoenix { border-color: rgba(139, 92, 246, .5); }
+  .arch-box b { display: block; font-size: 15px; margin-bottom: 3px; }
+  .arch-box span { font-size: 12.5px; color: var(--faint); }
+  .arch-inner {
+    margin-top: 12px; border: 1px dashed var(--border);
+    border-radius: 9px; padding: 10px; font-size: 13px; color: var(--muted);
+    background: var(--bg);
+  }
+  .arch-link {
+    display: grid; gap: 3px; justify-items: center;
+    padding: 14px 0; font-size: 12.5px; color: var(--faint); text-align: center;
+  }
+  .arch-link .pipe { color: var(--purple-deep); font-size: 16px; line-height: .8; }
+  .arch-list { display: grid; gap: 18px; }
+  .arch-item h4 { font-size: 15.5px; font-weight: 650; margin-bottom: 4px; }
+  .arch-item h4 .tag { font-size: 11px; font-weight: 700; color: var(--amber); background: rgba(255,193,49,.1); border: 1px solid rgba(255,193,49,.3); padding: 2px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 2px; }
+  .arch-item p { font-size: 14px; color: var(--muted); }
+  .arch-item p code { font-family: var(--mono); font-size: 12.5px; color: var(--purple); background: rgba(139,92,246,.1); padding: 1px 5px; border-radius: 5px; }
+
+  /* production */
+  .prod-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 36px; align-items: start; }
+  .bundle-list { list-style: none; display: grid; gap: 12px; margin-top: 18px; }
+  .bundle-list li {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--panel); border: 1px solid var(--border-soft);
+    border-radius: 12px; padding: 14px 18px; font-size: 14.5px;
+  }
+  .bundle-list .os { font-weight: 650; min-width: 84px; }
+  .bundle-list .fmt { font-family: var(--mono); font-size: 13px; color: var(--amber); }
+
+  /* demos */
+  .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .demo-card {
+    background: var(--panel); border: 1px solid var(--border-soft);
+    border-radius: var(--radius); padding: 28px;
+    display: flex; flex-direction: column; gap: 12px;
+    transition: border-color .15s, transform .15s;
+  }
+  .demo-card:hover { border-color: var(--purple-deep); transform: translateY(-2px); }
+  .demo-card .demo-emoji { font-size: 30px; }
+  .demo-card h3 { font-size: 18px; font-weight: 650; }
+  .demo-card h3 code { font-family: var(--mono); font-size: 14px; color: var(--purple); }
+  .demo-card p { font-size: 14.5px; color: var(--muted); flex: 1; }
+  .demo-card .run { font-family: var(--mono); font-size: 13px; color: var(--faint); background: var(--code-bg); border: 1px solid var(--border-soft); border-radius: 9px; padding: 10px 14px; }
+  .demo-card .run b { color: var(--text); font-weight: 500; }
+
+  /* footer cta + footer */
+  .final-cta { text-align: center; padding: 100px 0; }
+  .final-cta h2 { font-size: clamp(28px, 4.5vw, 42px); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 14px; }
+  .final-cta p { color: var(--muted); font-size: 17px; margin-bottom: 32px; }
+  footer {
+    border-top: 1px solid var(--border-soft);
+    padding: 40px 0; font-size: 13.5px; color: var(--faint);
+  }
+  .foot-inner { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; align-items: center; }
+  footer a { color: var(--muted); }
+  footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
+
+  @media (max-width: 900px) {
+    .feat-grid { grid-template-columns: 1fr 1fr; }
+    .arch-grid, .prod-grid, .api-cols, .demo-grid { grid-template-columns: 1fr; }
+    .nav-links a:not(.gh-btn) { display: none; }
+  }
+  @media (max-width: 600px) {
+    .feat-grid { grid-template-columns: 1fr; }
+    .step { grid-template-columns: 44px 1fr; }
+    section { padding: 64px 0; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="logo" href="#"><span class="logo-mark"></span>ExTauri</a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#get-started">Get Started</a>
+      <a href="#apis">Desktop APIs</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#demos">Demos</a>
+      <a class="gh-btn" href="https://github.com/filipecabaco/ex_tauri">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">⚡ Phoenix LiveView, shipped as a native app</span>
+    <h1>Build native desktop apps<br>with <span class="grad">Phoenix &amp; Elixir</span></h1>
+    <p class="lede">ExTauri wraps <strong>Tauri</strong> so your Phoenix LiveView application runs as a native desktop app on <strong>macOS, Windows, and Linux</strong> — with notifications, dialogs, system tray, filesystem access and more, all driven from Elixir. No JavaScript required.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#get-started">Get Started</a>
+      <a class="btn btn-ghost" href="https://github.com/filipecabaco/ex_tauri">View on GitHub</a>
+    </div>
+    <div class="install-pill">
+      <span class="dollar">$</span><code id="install-cmd">mix ex_tauri.install</code>
+      <button class="copy-btn" data-copy="mix ex_tauri.install" title="Copy to clipboard" aria-label="Copy install command">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>
+    </div>
+    <p class="platforms"><b>MIT licensed</b> &nbsp;·&nbsp; Elixir ≥ 1.15 / OTP 27 &nbsp;·&nbsp; Powered by Tauri 2 &amp; Burrito</p>
+
+    <div class="hero-shot">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span>My Phoenix App — native window</span></div>
+      <img src="assets/example.gif" alt="A Phoenix LiveView application running inside a native desktop window via ExTauri" loading="lazy">
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head center">
+      <div class="eyebrow">Features</div>
+      <h2>Everything you need to go from LiveView to desktop</h2>
+      <p>Keep writing Phoenix the way you already do. ExTauri handles the native shell, the desktop APIs, the packaging, and the lifecycle.</p>
+    </div>
+    <div class="feat-grid">
+      <div class="feat"><div class="icon">🖥️</div><h3>LiveView as a Desktop App</h3><p>Your Phoenix app renders inside a native Tauri window — same code, same components, now a real desktop application.</p></div>
+      <div class="feat"><div class="icon">🧩</div><h3>Desktop APIs from Elixir</h3><p>Notifications, dialogs, clipboard, filesystem, window management, global shortcuts — with callback-style responses via <code>use ExTauri.LiveView</code>. No JavaScript required.</p></div>
+      <div class="feat"><div class="icon">📡</div><h3>Server-Side Desktop Channel</h3><p><code>ExTauri.Desktop</code> sends notifications and drives the system tray from GenServers and background jobs — no browser involved.</p></div>
+      <div class="feat"><div class="icon">🔌</div><h3>One-Command Plugin Setup</h3><p><code>mix ex_tauri.add dialog fs</code> wires the Rust side for you: Cargo dependency, plugin registration, and permissions.</p></div>
+      <div class="feat"><div class="icon">🎯</div><h3>Native Events in LiveView</h3><p>Subscribe to drag-and-drop, deep links, or custom Rust events and handle them like any other LiveView event.</p></div>
+      <div class="feat"><div class="icon">🔥</div><h3>True Hot Reload</h3><p><code>mix ex_tauri.dev</code> runs your Phoenix dev server inside the native window — code reloading and live reload just work.</p></div>
+      <div class="feat"><div class="icon">🪟</div><h3>Multi-Window</h3><p>Open and close secondary native windows straight from your LiveView, no extra plumbing.</p></div>
+      <div class="feat"><div class="icon">📦</div><h3>Single Binary Distribution</h3><p>Uses Burrito to bundle the BEAM, your app, and its assets into one executable, then Tauri packages it per platform.</p></div>
+      <div class="feat"><div class="icon">💓</div><h3>Graceful Shutdown</h3><p>A heartbeat-based mechanism guarantees clean shutdown on CMD+Q, crashes, or force-quit — even on platforms without SIGTERM.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="get-started" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Get Started</div>
+      <h2>From Phoenix app to native window in three steps</h2>
+      <p>ExTauri uses <a href="https://hexdocs.pm/igniter">Igniter</a> for safe, AST-aware setup — it patches your config, supervision tree, layout, and JS for you.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div><div class="step-num">1</div></div>
+        <div>
+          <h3>Add the dependency</h3>
+          <p>Add ExTauri to your existing Phoenix project. You'll need Elixir ≥ 1.15 with OTP 27, plus <a href="https://www.rust-lang.org/tools/install">Rust</a> and the <a href="https://v2.tauri.app/start/prerequisites/">Tauri platform prerequisites</a>.</p>
+          <div class="code"><div class="code-label"><span>mix.exs</span></div><pre><code class="lang-elixir">def deps do
+  [
+    {:ex_tauri, git: "https://github.com/filipecabaco/ex_tauri.git"}
+  ]
+end</code></pre></div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div><div class="step-num">2</div></div>
+        <div>
+          <h3>Install and set up</h3>
+          <p>One command scaffolds everything.</p>
+          <div class="code"><div class="code-label"><span>shell</span></div><pre><code class="lang-bash">mix deps.get
+mix ex_tauri.install</code></pre></div>
+          <ul class="check-list">
+            <li>Sensible defaults for <code>app_name</code>, <code>host</code>, <code>port</code> and <code>version</code> in <code>config/config.exs</code></li>
+            <li>Installs the Tauri CLI via Cargo and scaffolds <code>src-tauri/</code> with Rust code, config, and capabilities</li>
+            <li>Adds <code>ExTauri.ShutdownManager</code> to your supervision tree and a <code>:desktop</code> release to <code>mix.exs</code></li>
+            <li>Generates the JS hook and auto-injects it into <code>assets/js/app.js</code> and your root layout</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="step">
+        <div><div class="step-num">3</div></div>
+        <div>
+          <h3>Run it</h3>
+          <p>Your app opens in a native window running the actual <code>mix phx.server</code> dev loop — live reload works exactly as in the browser.</p>
+          <div class="code"><div class="code-label"><span>shell</span></div><pre><code class="lang-bash">mix ex_tauri.dev</code></pre></div>
+          <div class="note">💡 Use <code>--prod-sidecar</code> to test against a compiled release, and review the generated <code>config/config.exs</code> to customize your app name, port, or window settings.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="apis">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Desktop APIs</div>
+      <h2>Native capabilities, idiomatic Elixir</h2>
+      <p>Add <code style="font-family: var(--mono); font-size: 14px; color: var(--purple);">use ExTauri.LiveView</code> and every API accepts a trailing callback that receives the result — no manual event pattern-matching. The JS bridge uses Tauri's global API, so a stock Phoenix esbuild setup just works.</p>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="dialog">📂 File Dialogs</button>
+      <button class="tab" data-tab="notify">🔔 Notifications</button>
+      <button class="tab" data-tab="events">🎯 Native Events</button>
+      <button class="tab" data-tab="desktop">📡 Server-Side Tray</button>
+    </div>
+
+    <div class="tab-panel active" data-panel="dialog">
+      <p class="desc">Open native file pickers and handle the result inline with a callback — success and error branches, right where you need them.</p>
+      <div class="code"><div class="code-label"><span>lib/my_app_web/live/home_live.ex</span></div><pre><code class="lang-elixir">defmodule MyAppWeb.HomeLive do
+  use MyAppWeb, :live_view
+  use ExTauri.LiveView
+
+  def handle_event("pick_file", _params, socket) do
+    socket =
+      ExTauri.Dialog.open(socket, [title: "Pick a file"], fn
+        {:ok, %{"path" => path}}, socket -> assign(socket, :file, path)
+        {:error, _reason}, socket -> put_flash(socket, :error, "No file selected")
+      end)
+
+    {:noreply, socket}
+  end
+end</code></pre></div>
+    </div>
+
+    <div class="tab-panel" data-panel="notify">
+      <p class="desc">Send native desktop notifications from any LiveView event handler. Works out of the box after <code>mix ex_tauri.install</code>.</p>
+      <div class="code"><div class="code-label"><span>lib/my_app_web/live/home_live.ex</span></div><pre><code class="lang-elixir">def handle_event("notify", _params, socket) do
+  socket = ExTauri.Notification.send(socket, "Saved!", body: "Your file was saved.")
+  {:noreply, socket}
+end
+
+def handle_event("tauri_response", %{"command" => "notification", "status" => status}, socket) do
+  {:noreply, assign(socket, :notification_status, status)}
+end</code></pre></div>
+    </div>
+
+    <div class="tab-panel" data-panel="events">
+      <p class="desc">Subscribe to native events — drag-and-drop, window focus, deep links, custom Rust events — and drive the native window from app state.</p>
+      <div class="code"><div class="code-label"><span>lib/my_app_web/live/editor_live.ex</span></div><pre><code class="lang-elixir">def mount(_params, _session, socket) do
+  socket =
+    if connected?(socket) do
+      ExTauri.Event.subscribe(socket, "tauri://drag-drop")
+    else
+      socket
+    end
+
+  {:ok, socket}
+end
+
+# React to files dropped onto the window
+def handle_event("tauri_event", %{"event" => "tauri://drag-drop", "payload" => %{"paths" => paths}}, socket) do
+  {:noreply, assign(socket, :dropped_files, paths)}
+end
+
+# Update the native window title as app state changes
+def handle_event("open_document", %{"name" => name}, socket) do
+  {:noreply, ExTauri.Window.set_title(socket, "#{name} — MyApp")}
+end</code></pre></div>
+    </div>
+
+    <div class="tab-panel" data-panel="desktop">
+      <p class="desc"><code>ExTauri.Desktop</code> talks to the frontend over ExTauri's internal channel, so it works from <em>any</em> process — background jobs, GenServers, PubSub handlers. No LiveView, no browser.</p>
+      <div class="code"><div class="code-label"><span>anywhere in your app</span></div><pre><code class="lang-elixir"># Notify from a background job
+ExTauri.Desktop.notify("Sync complete", body: "128 records updated")
+
+# Define a system tray from Elixir; clicks arrive as messages
+ExTauri.Desktop.set_tray(
+  tooltip: "My App",
+  items: [%{id: "sync", label: "Sync now"}, %{id: "quit", label: "Quit"}]
+)
+
+ExTauri.Desktop.subscribe()
+# ... later, in handle_info:
+{:ex_tauri_event, "tray_menu_click", %{"id" => "sync"}}</code></pre></div>
+    </div>
+
+    <div class="api-cols">
+      <div class="api-card">
+        <h3>✅ Included by default</h3>
+        <p>These work out of the box after <code>mix ex_tauri.install</code>:</p>
+        <table>
+          <tr><td><code>ExTauri.Notification</code></td><td>Native desktop notifications</td></tr>
+          <tr><td><code>ExTauri.Shell</code></td><td>Open URLs, execute scoped commands</td></tr>
+          <tr><td><code>ExTauri.Window</code></td><td>Minimize, fullscreen, title, size, …</td></tr>
+          <tr><td><code>ExTauri.Event</code></td><td>Drag-and-drop, focus, custom Rust events</td></tr>
+          <tr><td><code>ExTauri.App</code></td><td>App name &amp; version info</td></tr>
+          <tr><td><code>ExTauri.Desktop</code></td><td>Server-side notifications &amp; system tray</td></tr>
+        </table>
+      </div>
+      <div class="api-card">
+        <h3>⚡ One command away</h3>
+        <p><code>mix ex_tauri.add &lt;plugin&gt;</code> wires the Cargo dep, plugin registration, and permissions:</p>
+        <table>
+          <tr><td><code>ExTauri.Dialog</code></td><td><code>mix ex_tauri.add dialog</code></td></tr>
+          <tr><td><code>ExTauri.Clipboard</code></td><td><code>mix ex_tauri.add clipboard</code></td></tr>
+          <tr><td><code>ExTauri.Filesystem</code></td><td><code>mix ex_tauri.add fs</code></td></tr>
+          <tr><td><code>ExTauri.OS</code></td><td><code>mix ex_tauri.add os</code></td></tr>
+          <tr><td><code>ExTauri.GlobalShortcut</code></td><td><code>mix ex_tauri.add global-shortcut</code></td></tr>
+          <tr><td><code>ExTauri.Autostart</code></td><td><code>mix ex_tauri.add autostart</code></td></tr>
+          <tr><td><code>ExTauri.Updater</code></td><td><code>mix ex_tauri.add updater</code></td></tr>
+          <tr><td>Deep links</td><td><code>mix ex_tauri.add deep-link</code></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="architecture" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Architecture</div>
+      <h2>How it works</h2>
+      <p>Tauri launches your Phoenix app as a <b>sidecar process</b>. The WebView renders your LiveView UI over HTTP, while a separate local socket carries the shutdown heartbeat plus a duplex JSON channel for server-side desktop features.</p>
+    </div>
+    <div class="arch-grid">
+      <div class="arch-diagram">
+        <div class="arch-box tauri">
+          <b>🪟 Tauri Window</b>
+          <span>Native window · Rust / WebView</span>
+          <div class="arch-inner">Phoenix UI — your LiveView app rendered in the WebView</div>
+        </div>
+        <div class="arch-link">
+          <span class="pipe">│</span>
+          <span><b style="color: var(--muted);">HTTP</b> — serves your Phoenix UI to the WebView</span>
+          <span><b style="color: var(--muted);">Local socket</b> — heartbeat + duplex desktop channel</span>
+          <span class="pipe">│</span>
+        </div>
+        <div class="arch-box phoenix">
+          <b>🐦‍🔥 Phoenix Server</b>
+          <span>Your Elixir app · Burrito-wrapped sidecar process</span>
+        </div>
+      </div>
+      <div class="arch-list">
+        <div class="arch-item">
+          <h4>No port collisions in production</h4>
+          <p>The app binds Phoenix to an <b>OS-assigned free port</b>. The Rust shell passes <code>PORT</code>, <code>PHX_SERVER</code>, <code>PHX_HOST</code>, and a generated <code>SECRET_KEY_BASE</code> to the sidecar — standard Phoenix <code>runtime.exs</code> picks these up — and navigates the window once the server is up.</p>
+        </div>
+        <div class="arch-item">
+          <h4>Heartbeat-based shutdown <span class="tag">crash-safe</span></h4>
+          <p>The Rust frontend sends a byte every 100&nbsp;ms over a local socket; <code>ExTauri.ShutdownManager</code> checks every 500&nbsp;ms. If nothing arrives for 1500&nbsp;ms, Phoenix closes connections, flushes logs, and exits cleanly — even on force-quit, crash, or platforms without SIGTERM like Windows.</p>
+        </div>
+        <div class="arch-item">
+          <h4>Unique per application</h4>
+          <p>On macOS/Linux the heartbeat rides a Unix domain socket; on Windows, a loopback TCP socket with a published port file. The path is derived from your <code>:app_name</code>, so multiple ExTauri apps never collide.</p>
+        </div>
+        <div class="arch-item">
+          <h4>Dev mode stays predictable</h4>
+          <p>In development, <code>EX_TAURI_PORT</code> pins the configured port so live-reload URLs always match.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="production">
+  <div class="wrap">
+    <div class="prod-grid">
+      <div>
+        <div class="sec-head" style="margin-bottom: 28px;">
+          <div class="eyebrow">Ship It</div>
+          <h2>One command to production bundles</h2>
+          <p>Add Burrito wrapping to your <code>:desktop</code> release, then <code>mix ex_tauri.build</code> produces signed-ready, platform-native packages under <code>src-tauri/target/release/bundle/</code>.</p>
+        </div>
+        <div class="code"><div class="code-label"><span>mix.exs</span></div><pre><code class="lang-elixir">releases: [
+  desktop: [
+    steps: [:assemble, &amp;Burrito.wrap/1],
+    burrito: [
+      targets: [
+        "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64]
+      ]
+    ]
+  ]
+]</code></pre></div>
+        <div class="note" style="margin-top: 18px;">📖 Full guide — signing, notarization, auto-updates, CI matrix: <a href="https://github.com/filipecabaco/ex_tauri/blob/main/guides/releasing.md">guides/releasing.md</a></div>
+      </div>
+      <div>
+        <div class="code" style="margin-bottom: 18px;"><div class="code-label"><span>shell</span></div><pre><code class="lang-bash">mix ex_tauri.build</code></pre></div>
+        <ul class="bundle-list">
+          <li><span class="os">🍎 macOS</span><span class="fmt">.app · .dmg</span></li>
+          <li><span class="os">🐧 Linux</span><span class="fmt">.deb · .appimage</span></li>
+          <li><span class="os">🪟 Windows</span><span class="fmt">.msi · .exe</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="demos" class="alt">
+  <div class="wrap">
+    <div class="sec-head center">
+      <div class="eyebrow">Demos</div>
+      <h2>See it in action</h2>
+      <p>The repository ships standalone demo apps — each one a full Phoenix LiveView project that runs as a native window — plus a complete <a href="https://github.com/filipecabaco/ex_tauri/tree/main/example">example app</a> with SQLite, LiveView, and Tailwind CSS.</p>
+    </div>
+    <div class="demo-grid">
+      <div class="demo-card">
+        <div class="demo-emoji">📬</div>
+        <h3><code>notification_hub</code> — Unified Notification Inbox</h3>
+        <p>A realtime inbox aggregating notifications from GitHub, Linear, Gmail and Slack. Each provider is its own supervised GenServer — kill one in IEx and the rest keep streaming. The LiveView never polls: it subscribes to PubSub and re-renders on broadcasts.</p>
+        <div class="run"><b>cd demos/notification_hub &amp;&amp; mix setup &amp;&amp; mix ex_tauri.dev</b></div>
+      </div>
+      <div class="demo-card">
+        <div class="demo-emoji">🍅</div>
+        <h3><code>pomodoro_farm</code> — Concurrent Timer Board</h3>
+        <p>Fire up any number of focus/break timers and watch them tick in parallel. Every timer is its own GenServer under a DynamicSupervisor, found via a Registry — true BEAM concurrency, not fake setInterval. Crash one and the rest are unaffected.</p>
+        <div class="run"><b>cd demos/pomodoro_farm &amp;&amp; mix setup &amp;&amp; mix ex_tauri.dev</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="final-cta">
+  <div class="wrap">
+    <h2>Your LiveView app, <span style="background: linear-gradient(92deg, var(--purple), var(--amber)); -webkit-background-clip: text; background-clip: text; color: transparent;">on the desktop</span></h2>
+    <p>Two commands stand between your Phoenix project and a native app.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#get-started">Get Started</a>
+      <a class="btn btn-ghost" href="https://github.com/filipecabaco/ex_tauri">Star on GitHub ★</a>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap foot-inner">
+    <div>ExTauri · MIT License · Built with ❤️ on the BEAM</div>
+    <div class="links">
+      <a href="https://github.com/filipecabaco/ex_tauri">GitHub</a>
+      <a href="https://github.com/filipecabaco/ex_tauri/blob/main/guides/releasing.md">Release Guide</a>
+      <a href="https://tauri.app">Tauri</a>
+      <a href="https://github.com/burrito-elixir/burrito">Burrito</a>
+      <a href="https://hexdocs.pm/igniter">Igniter</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ------- tabs -------
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelector(`.tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+  });
+});
+
+// ------- copy button -------
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+      const old = btn.innerHTML;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" width="16" height="16"><path d="M20 6 9 17l-5-5"/></svg>';
+      setTimeout(() => { btn.innerHTML = old; }, 1400);
+    });
+  });
+});
+
+// ------- tiny syntax highlighter -------
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function highlightElixir(src) {
+  const rules = [
+    { re: /#[^\n]*/y, cls: 'tok-com' },
+    { re: /"(?:[^"\\]|\\.)*"/y, cls: 'tok-str' },
+    { re: /:[a-zA-Z_][a-zA-Z0-9_?!]*|\b[a-zA-Z_][a-zA-Z0-9_?!]*:(?=\s)/y, cls: 'tok-atom' },
+    { re: /\b(defmodule|defp?|do|end|fn|use|import|alias|if|else|case|cond|with|for|when|and|or|not|in|true|false|nil|receive|after|raise|try|rescue)\b/y, cls: 'tok-kw' },
+    { re: /\b[A-Z][a-zA-Z0-9_]*(?:\.[A-Z][a-zA-Z0-9_]*)*/y, cls: 'tok-mod' },
+    { re: /\b\d[\d_]*\b/y, cls: 'tok-num' },
+    { re: /\b(handle_event|handle_info|mount|assign|put_flash|connected\?|subscribe|notify|set_tray|set_title|send|open|wrap)(?=\()/y, cls: 'tok-fn' },
+    { re: /@[a-zA-Z_][a-zA-Z0-9_]*/y, cls: 'tok-var' },
+  ];
+  let out = '', i = 0;
+  while (i < src.length) {
+    let matched = false;
+    for (const { re, cls } of rules) {
+      re.lastIndex = i;
+      const m = re.exec(src);
+      if (m && m.index === i) {
+        out += `<span class="${cls}">${esc(m[0])}</span>`;
+        i += m[0].length;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) { out += esc(src[i]); i++; }
+  }
+  return out;
+}
+
+function highlightBash(src) {
+  return src.split('\n').map(line => {
+    if (/^\s*#/.test(line)) return `<span class="tok-com">${esc(line)}</span>`;
+    const m = line.match(/^(\s*)(\S+)(.*)$/);
+    if (!m) return esc(line);
+    return `${m[1]}<span class="tok-cmd">${esc(m[2])}</span>${esc(m[3])}`;
+  }).join('\n');
+}
+
+document.querySelectorAll('code.lang-elixir').forEach(el => { el.innerHTML = highlightElixir(el.textContent); });
+document.querySelectorAll('code.lang-bash').forEach(el => { el.innerHTML = highlightBash(el.textContent); });
+</script>
+</body>
+</html>

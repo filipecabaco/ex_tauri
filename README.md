@@ -4,6 +4,8 @@
 
 ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications to run as native desktop apps on macOS, Windows, and Linux.
 
+**Website:** [filipecabaco.github.io/ex_tauri](https://filipecabaco.github.io/ex_tauri/) — feature showcase, installation guide, and API tour.
+
 ![example.gif](example.gif)
 
 ## Features

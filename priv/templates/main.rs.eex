@@ -321,7 +321,7 @@ fn check_server_started(port: u16) {
 // port (production), the compile-time URL in tauri.conf.json is wrong — and
 // even in dev this reload recovers the webview if it raced the server boot.
 fn navigate_main_window(app: &tauri::AppHandle, port: u16) {
-    if let Some(mut window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_webview_window("main") {
         let url = format!("<%= scheme %>://<%= host %>:{}", port);
         if let Ok(url) = url.parse() {
             let _ = window.navigate(url);

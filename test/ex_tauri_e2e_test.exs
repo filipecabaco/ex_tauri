@@ -38,9 +38,21 @@ defmodule ExTauri.E2ETest do
       src_tauri = Path.join(tmp_dir, "src-tauri")
       src_dir = Path.join(src_tauri, "src")
       capabilities_dir = Path.join(src_tauri, "capabilities")
+      icons_dir = Path.join(src_tauri, "icons")
 
       File.mkdir_p!(src_dir)
       File.mkdir_p!(capabilities_dir)
+      File.mkdir_p!(icons_dir)
+
+      # generate_context! embeds a default window icon (required with the
+      # tray-icon feature); a real install gets icons from `cargo tauri init`,
+      # so provide a minimal valid 1x1 PNG here.
+      png =
+        Base.decode64!(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        )
+
+      File.write!(Path.join(icons_dir, "icon.png"), png)
 
       socket_name = ExTauri.Paths.sanitize_name(@app_name)
 
@@ -80,7 +92,8 @@ defmodule ExTauri.E2ETest do
               ]
             },
             "bundle" => %{
-              "externalBin" => ["../burrito_out/desktop"]
+              "externalBin" => ["../burrito_out/desktop"],
+              "icon" => ["icons/icon.png"]
             }
           },
           pretty: true

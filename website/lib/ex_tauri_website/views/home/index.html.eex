@@ -21,7 +21,6 @@
       <a href="#get-started">Get Started</a>
       <a href="#apis">Desktop APIs</a>
       <a href="#architecture">Architecture</a>
-      <a href="#demos">Demos</a>
       <a class="gh-btn" href="https://github.com/filipecabaco/ex_tauri">
         <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
@@ -32,9 +31,8 @@
 
 <header class="hero">
   <div class="wrap">
-    <span class="kicker">⚡ Phoenix LiveView, shipped as a native app</span>
     <h1>Build native desktop apps<br>with <span class="grad">Phoenix &amp; Elixir</span></h1>
-    <p class="lede">ExTauri wraps <strong>Tauri</strong> so your Phoenix LiveView application runs as a native desktop app on <strong>macOS, Windows, and Linux</strong> — with notifications, dialogs, system tray, filesystem access and more, all driven from Elixir. No JavaScript required.</p>
+    <p class="lede">Run your Phoenix LiveView app as a native desktop application on <strong>macOS, Windows, and Linux</strong> — desktop APIs included, no JavaScript required.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#get-started">Get Started</a>
       <a class="btn btn-ghost" href="https://github.com/filipecabaco/ex_tauri">View on GitHub</a>
@@ -45,7 +43,6 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       </button>
     </div>
-    <p class="platforms"><b>MIT licensed</b> &nbsp;·&nbsp; Elixir ≥ 1.15 / OTP 27 &nbsp;·&nbsp; Powered by Tauri 2 &amp; Burrito</p>
 
     <div class="hero-shot">
       <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span>My Phoenix App — native window</span></div>
@@ -58,29 +55,24 @@
   <div class="wrap">
     <div class="sec-head center">
       <div class="eyebrow">Features</div>
-      <h2>Everything you need to go from LiveView to desktop</h2>
-      <p>Keep writing Phoenix the way you already do. ExTauri handles the native shell, the desktop APIs, the packaging, and the lifecycle.</p>
+      <h2>Keep writing Phoenix. Ship a desktop app.</h2>
     </div>
     <div class="feat-grid">
-      <div class="feat"><div class="icon">🖥️</div><h3>LiveView as a Desktop App</h3><p>Your Phoenix app renders inside a native Tauri window — same code, same components, now a real desktop application.</p></div>
-      <div class="feat"><div class="icon">🧩</div><h3>Desktop APIs from Elixir</h3><p>Notifications, dialogs, clipboard, filesystem, window management, global shortcuts — with callback-style responses via <code>use ExTauri.LiveView</code>. No JavaScript required.</p></div>
-      <div class="feat"><div class="icon">📡</div><h3>Server-Side Desktop Channel</h3><p><code>ExTauri.Desktop</code> sends notifications and drives the system tray from GenServers and background jobs — no browser involved.</p></div>
-      <div class="feat"><div class="icon">🔌</div><h3>One-Command Plugin Setup</h3><p><code>mix ex_tauri.add dialog fs</code> wires the Rust side for you: Cargo dependency, plugin registration, and permissions.</p></div>
-      <div class="feat"><div class="icon">🎯</div><h3>Native Events in LiveView</h3><p>Subscribe to drag-and-drop, deep links, or custom Rust events and handle them like any other LiveView event.</p></div>
-      <div class="feat"><div class="icon">🔥</div><h3>True Hot Reload</h3><p><code>mix ex_tauri.dev</code> runs your Phoenix dev server inside the native window — code reloading and live reload just work.</p></div>
-      <div class="feat"><div class="icon">🪟</div><h3>Multi-Window</h3><p>Open and close secondary native windows straight from your LiveView, no extra plumbing.</p></div>
-      <div class="feat"><div class="icon">📦</div><h3>Single Binary Distribution</h3><p>Uses Burrito to bundle the BEAM, your app, and its assets into one executable, then Tauri packages it per platform.</p></div>
-      <div class="feat"><div class="icon">💓</div><h3>Graceful Shutdown</h3><p>A heartbeat-based mechanism guarantees clean shutdown on CMD+Q, crashes, or force-quit — even on platforms without SIGTERM.</p></div>
+      <div class="feat"><div class="icon">🖥️</div><h3>LiveView as a Desktop App</h3><p>Your app renders inside a native window — same code, same components.</p></div>
+      <div class="feat"><div class="icon">🧩</div><h3>Desktop APIs from Elixir</h3><p>Notifications, dialogs, clipboard, filesystem, tray — with callback-style responses.</p></div>
+      <div class="feat"><div class="icon">🔥</div><h3>True Hot Reload</h3><p><code>mix ex_tauri.dev</code> runs your dev server inside the native window.</p></div>
+      <div class="feat"><div class="icon">📡</div><h3>Server-Side Channel</h3><p>Send notifications and drive the system tray from GenServers — no browser involved.</p></div>
+      <div class="feat"><div class="icon">📦</div><h3>Single Binary</h3><p>Burrito bundles the BEAM and your app into one executable per platform.</p></div>
+      <div class="feat"><div class="icon">💓</div><h3>Graceful Shutdown</h3><p>Heartbeat-based cleanup, even on force-quit or crash.</p></div>
     </div>
   </div>
 </section>
 
 <section id="get-started" class="alt">
-  <div class="wrap">
+  <div class="wrap narrow">
     <div class="sec-head">
       <div class="eyebrow">Get Started</div>
-      <h2>From Phoenix app to native window in three steps</h2>
-      <p>ExTauri uses <a href="https://hexdocs.pm/igniter">Igniter</a> for safe, AST-aware setup — it patches your config, supervision tree, layout, and JS for you.</p>
+      <h2>Three steps to a native window</h2>
     </div>
 
     <div class="steps">
@@ -88,28 +80,17 @@
         <div><div class="step-num">1</div></div>
         <div>
           <h3>Add the dependency</h3>
-          <p>Add ExTauri to your existing Phoenix project. You'll need Elixir ≥ 1.15 with OTP 27, plus <a href="https://www.rust-lang.org/tools/install">Rust</a> and the <a href="https://v2.tauri.app/start/prerequisites/">Tauri platform prerequisites</a>.</p>
-          <div class="code"><div class="code-label"><span>mix.exs</span></div><pre><code class="lang-elixir">def deps do
-  [
-    {:ex_tauri, git: "https://github.com/filipecabaco/ex_tauri.git"}
-  ]
-end</code></pre></div>
+          <div class="code"><div class="code-label"><span>mix.exs</span></div><pre><code class="lang-elixir">{:ex_tauri, git: "https://github.com/filipecabaco/ex_tauri.git"}</code></pre></div>
         </div>
       </div>
 
       <div class="step">
         <div><div class="step-num">2</div></div>
         <div>
-          <h3>Install and set up</h3>
-          <p>One command scaffolds everything.</p>
+          <h3>Install</h3>
           <div class="code"><div class="code-label"><span>shell</span></div><pre><code class="lang-bash">mix deps.get
 mix ex_tauri.install</code></pre></div>
-          <ul class="check-list">
-            <li>Sensible defaults for <code>app_name</code>, <code>host</code>, <code>port</code> and <code>version</code> in <code>config/config.exs</code></li>
-            <li>Installs the Tauri CLI via Cargo and scaffolds <code>src-tauri/</code> with Rust code, config, and capabilities</li>
-            <li>Adds <code>ExTauri.ShutdownManager</code> to your supervision tree and a <code>:desktop</code> release to <code>mix.exs</code></li>
-            <li>Generates the JS hook and auto-injects it into <code>assets/js/app.js</code> and your root layout</li>
-          </ul>
+          <p class="step-note">One command wires everything: config, Rust scaffolding, supervision tree, JS hook, and layout.</p>
         </div>
       </div>
 
@@ -117,12 +98,13 @@ mix ex_tauri.install</code></pre></div>
         <div><div class="step-num">3</div></div>
         <div>
           <h3>Run it</h3>
-          <p>Your app opens in a native window running the actual <code>mix phx.server</code> dev loop — live reload works exactly as in the browser.</p>
           <div class="code"><div class="code-label"><span>shell</span></div><pre><code class="lang-bash">mix ex_tauri.dev</code></pre></div>
-          <div class="note">💡 Use <code>--prod-sidecar</code> to test against a compiled release, and review the generated <code>config/config.exs</code> to customize your app name, port, or window settings.</div>
+          <p class="step-note">Your app opens in a native window with code reloading and live reload, exactly as in the browser.</p>
         </div>
       </div>
     </div>
+
+    <p class="prereqs">Requires Elixir ≥ 1.15 with OTP 27, <a href="https://www.rust-lang.org/tools/install">Rust</a>, and the <a href="https://v2.tauri.app/start/prerequisites/">Tauri prerequisites</a>.</p>
   </div>
 </section>
 
@@ -131,7 +113,7 @@ mix ex_tauri.install</code></pre></div>
     <div class="sec-head">
       <div class="eyebrow">Desktop APIs</div>
       <h2>Native capabilities, idiomatic Elixir</h2>
-      <p>Add <code style="font-family: var(--mono); font-size: 14px; color: var(--purple);">use ExTauri.LiveView</code> and every API accepts a trailing callback that receives the result — no manual event pattern-matching. The JS bridge uses Tauri's global API, so a stock Phoenix esbuild setup just works.</p>
+      <p>Add <code class="inline">use ExTauri.LiveView</code> and every API accepts a callback that receives the result — no manual event pattern-matching.</p>
     </div>
 
     <div class="tabs" role="tablist">
@@ -142,7 +124,6 @@ mix ex_tauri.install</code></pre></div>
     </div>
 
     <div class="tab-panel active" data-panel="dialog">
-      <p class="desc">Open native file pickers and handle the result inline with a callback — success and error branches, right where you need them.</p>
       <div class="code"><div class="code-label"><span>lib/my_app_web/live/home_live.ex</span></div><pre><code class="lang-elixir">defmodule MyAppWeb.HomeLive do
   use MyAppWeb, :live_view
   use ExTauri.LiveView
@@ -160,85 +141,35 @@ end</code></pre></div>
     </div>
 
     <div class="tab-panel" data-panel="notify">
-      <p class="desc">Send native desktop notifications from any LiveView event handler. Works out of the box after <code>mix ex_tauri.install</code>.</p>
       <div class="code"><div class="code-label"><span>lib/my_app_web/live/home_live.ex</span></div><pre><code class="lang-elixir">def handle_event("notify", _params, socket) do
   socket = ExTauri.Notification.send(socket, "Saved!", body: "Your file was saved.")
   {:noreply, socket}
-end
-
-def handle_event("tauri_response", %{"command" => "notification", "status" => status}, socket) do
-  {:noreply, assign(socket, :notification_status, status)}
 end</code></pre></div>
     </div>
 
     <div class="tab-panel" data-panel="events">
-      <p class="desc">Subscribe to native events — drag-and-drop, window focus, deep links, custom Rust events — and drive the native window from app state.</p>
       <div class="code"><div class="code-label"><span>lib/my_app_web/live/editor_live.ex</span></div><pre><code class="lang-elixir">def mount(_params, _session, socket) do
-  socket =
-    if connected?(socket) do
-      ExTauri.Event.subscribe(socket, "tauri://drag-drop")
-    else
-      socket
-    end
-
-  {:ok, socket}
+  {:ok, ExTauri.Event.subscribe(socket, "tauri://drag-drop")}
 end
 
 # React to files dropped onto the window
-def handle_event("tauri_event", %{"event" => "tauri://drag-drop", "payload" => %{"paths" => paths}}, socket) do
+def handle_event("tauri_event", %{"payload" => %{"paths" => paths}}, socket) do
   {:noreply, assign(socket, :dropped_files, paths)}
-end
-
-# Update the native window title as app state changes
-def handle_event("open_document", %{"name" => name}, socket) do
-  {:noreply, ExTauri.Window.set_title(socket, "#{name} — MyApp")}
 end</code></pre></div>
     </div>
 
     <div class="tab-panel" data-panel="desktop">
-      <p class="desc"><code>ExTauri.Desktop</code> talks to the frontend over ExTauri's internal channel, so it works from <em>any</em> process — background jobs, GenServers, PubSub handlers. No LiveView, no browser.</p>
-      <div class="code"><div class="code-label"><span>anywhere in your app</span></div><pre><code class="lang-elixir"># Notify from a background job
+      <div class="code"><div class="code-label"><span>anywhere in your app — no LiveView needed</span></div><pre><code class="lang-elixir"># Notify from a background job
 ExTauri.Desktop.notify("Sync complete", body: "128 records updated")
 
 # Define a system tray from Elixir; clicks arrive as messages
 ExTauri.Desktop.set_tray(
   tooltip: "My App",
   items: [%{id: "sync", label: "Sync now"}, %{id: "quit", label: "Quit"}]
-)
-
-ExTauri.Desktop.subscribe()
-# ... later, in handle_info:
-{:ex_tauri_event, "tray_menu_click", %{"id" => "sync"}}</code></pre></div>
+)</code></pre></div>
     </div>
 
-    <div class="api-cols">
-      <div class="api-card">
-        <h3>✅ Included by default</h3>
-        <p>These work out of the box after <code>mix ex_tauri.install</code>:</p>
-        <table>
-          <tr><td><code>ExTauri.Notification</code></td><td>Native desktop notifications</td></tr>
-          <tr><td><code>ExTauri.Shell</code></td><td>Open URLs, execute scoped commands</td></tr>
-          <tr><td><code>ExTauri.Window</code></td><td>Minimize, fullscreen, title, size, …</td></tr>
-          <tr><td><code>ExTauri.Event</code></td><td>Drag-and-drop, focus, custom Rust events</td></tr>
-          <tr><td><code>ExTauri.App</code></td><td>App name &amp; version info</td></tr>
-          <tr><td><code>ExTauri.Desktop</code></td><td>Server-side notifications &amp; system tray</td></tr>
-        </table>
-      </div>
-      <div class="api-card">
-        <h3>⚡ One command away</h3>
-        <p><code>mix ex_tauri.add &lt;plugin&gt;</code> wires the Cargo dep, plugin registration, and permissions:</p>
-        <table>
-          <tr><td><code>ExTauri.Dialog</code></td><td><code>mix ex_tauri.add dialog</code></td></tr>
-          <tr><td><code>ExTauri.Clipboard</code></td><td><code>mix ex_tauri.add clipboard</code></td></tr>
-          <tr><td><code>ExTauri.Filesystem</code></td><td><code>mix ex_tauri.add fs</code></td></tr>
-          <tr><td><code>ExTauri.OS</code></td><td><code>mix ex_tauri.add os</code></td></tr>
-          <tr><td><code>ExTauri.GlobalShortcut</code></td><td><code>mix ex_tauri.add global-shortcut</code></td></tr>
-          <tr><td><code>ExTauri.Autostart</code></td><td><code>mix ex_tauri.add autostart</code></td></tr>
-          <tr><td><code>ExTauri.Updater</code></td><td><code>mix ex_tauri.add updater</code></td></tr>
-          <tr><td>Deep links</td><td><code>mix ex_tauri.add deep-link</code></td></tr>
-        </table>
-      </div>
-    </div>
+    <p class="api-note"><b>Notification, Shell, Window, Event, App</b> and <b>Desktop</b> work out of the box. Dialogs, clipboard, filesystem, global shortcuts, autostart, updater, and deep links are one <code class="inline">mix ex_tauri.add &lt;plugin&gt;</code> away — see the <a href="https://github.com/filipecabaco/ex_tauri#using-desktop-apis">full list</a>.</p>
   </div>
 </section>
 
@@ -247,7 +178,6 @@ ExTauri.Desktop.subscribe()
     <div class="sec-head">
       <div class="eyebrow">Architecture</div>
       <h2>How it works</h2>
-      <p>Tauri launches your Phoenix app as a <b>sidecar process</b>. The WebView renders your LiveView UI over HTTP, while a separate local socket carries the shutdown heartbeat plus a duplex JSON channel for server-side desktop features.</p>
     </div>
     <div class="arch-grid">
       <div class="arch-diagram">
@@ -258,8 +188,8 @@ ExTauri.Desktop.subscribe()
         </div>
         <div class="arch-link">
           <span class="pipe">│</span>
-          <span><b style="color: var(--muted);">HTTP</b> — serves your Phoenix UI to the WebView</span>
-          <span><b style="color: var(--muted);">Local socket</b> — heartbeat + duplex desktop channel</span>
+          <span><b>HTTP</b> — serves your Phoenix UI to the WebView</span>
+          <span><b>Local socket</b> — heartbeat + desktop channel</span>
           <span class="pipe">│</span>
         </div>
         <div class="arch-box phoenix">
@@ -269,87 +199,37 @@ ExTauri.Desktop.subscribe()
       </div>
       <div class="arch-list">
         <div class="arch-item">
-          <h4>No port collisions in production</h4>
-          <p>The app binds Phoenix to an <b>OS-assigned free port</b>. The Rust shell passes <code>PORT</code>, <code>PHX_SERVER</code>, <code>PHX_HOST</code>, and a generated <code>SECRET_KEY_BASE</code> to the sidecar — standard Phoenix <code>runtime.exs</code> picks these up — and navigates the window once the server is up.</p>
+          <h4>A sidecar, not a rewrite</h4>
+          <p>Tauri launches your Phoenix app as a sidecar process on an OS-assigned free port and navigates the window once the server is up. Standard <code class="inline">runtime.exs</code> conventions apply.</p>
         </div>
         <div class="arch-item">
-          <h4>Heartbeat-based shutdown <span class="tag">crash-safe</span></h4>
-          <p>The Rust frontend sends a byte every 100&nbsp;ms over a local socket; <code>ExTauri.ShutdownManager</code> checks every 500&nbsp;ms. If nothing arrives for 1500&nbsp;ms, Phoenix closes connections, flushes logs, and exits cleanly — even on force-quit, crash, or platforms without SIGTERM like Windows.</p>
-        </div>
-        <div class="arch-item">
-          <h4>Unique per application</h4>
-          <p>On macOS/Linux the heartbeat rides a Unix domain socket; on Windows, a loopback TCP socket with a published port file. The path is derived from your <code>:app_name</code>, so multiple ExTauri apps never collide.</p>
-        </div>
-        <div class="arch-item">
-          <h4>Dev mode stays predictable</h4>
-          <p>In development, <code>EX_TAURI_PORT</code> pins the configured port so live-reload URLs always match.</p>
+          <h4>Crash-safe shutdown</h4>
+          <p>The frontend heartbeats over a local socket; if it stops — quit, crash, or force-kill — Phoenix shuts down cleanly. Works on every platform, including Windows.</p>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<section id="production">
-  <div class="wrap">
-    <div class="prod-grid">
-      <div>
-        <div class="sec-head" style="margin-bottom: 28px;">
-          <div class="eyebrow">Ship It</div>
-          <h2>One command to production bundles</h2>
-          <p>Add Burrito wrapping to your <code>:desktop</code> release, then <code>mix ex_tauri.build</code> produces signed-ready, platform-native packages under <code>src-tauri/target/release/bundle/</code>.</p>
-        </div>
-        <div class="code"><div class="code-label"><span>mix.exs</span></div><pre><code class="lang-elixir">releases: [
-  desktop: [
-    steps: [:assemble, &amp;Burrito.wrap/1],
-    burrito: [
-      targets: [
-        "aarch64-apple-darwin": [os: :darwin, cpu: :aarch64]
-      ]
-    ]
-  ]
-]</code></pre></div>
-        <div class="note" style="margin-top: 18px;">📖 Full guide — signing, notarization, auto-updates, CI matrix: <a href="https://github.com/filipecabaco/ex_tauri/blob/main/guides/releasing.md">guides/releasing.md</a></div>
-      </div>
-      <div>
-        <div class="code" style="margin-bottom: 18px;"><div class="code-label"><span>shell</span></div><pre><code class="lang-bash">mix ex_tauri.build</code></pre></div>
-        <ul class="bundle-list">
-          <li><span class="os">🍎 macOS</span><span class="fmt">.app · .dmg</span></li>
-          <li><span class="os">🐧 Linux</span><span class="fmt">.deb · .appimage</span></li>
-          <li><span class="os">🪟 Windows</span><span class="fmt">.msi · .exe</span></li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="demos" class="alt">
-  <div class="wrap">
+<section id="ship">
+  <div class="wrap narrow center-text">
     <div class="sec-head center">
-      <div class="eyebrow">Demos</div>
-      <h2>See it in action</h2>
-      <p>The repository ships standalone demo apps — each one a full Phoenix LiveView project that runs as a native window — plus a complete <a href="https://github.com/filipecabaco/ex_tauri/tree/main/example">example app</a> with SQLite, LiveView, and Tailwind CSS.</p>
+      <div class="eyebrow">Ship It</div>
+      <h2>One command to production bundles</h2>
     </div>
-    <div class="demo-grid">
-      <div class="demo-card">
-        <div class="demo-emoji">📬</div>
-        <h3><code>notification_hub</code> — Unified Notification Inbox</h3>
-        <p>A realtime inbox aggregating notifications from GitHub, Linear, Gmail and Slack. Each provider is its own supervised GenServer — kill one in IEx and the rest keep streaming. The LiveView never polls: it subscribes to PubSub and re-renders on broadcasts.</p>
-        <div class="run"><b>cd demos/notification_hub &amp;&amp; mix setup &amp;&amp; mix ex_tauri.dev</b></div>
-      </div>
-      <div class="demo-card">
-        <div class="demo-emoji">🍅</div>
-        <h3><code>pomodoro_farm</code> — Concurrent Timer Board</h3>
-        <p>Fire up any number of focus/break timers and watch them tick in parallel. Every timer is its own GenServer under a DynamicSupervisor, found via a Registry — true BEAM concurrency, not fake setInterval. Crash one and the rest are unaffected.</p>
-        <div class="run"><b>cd demos/pomodoro_farm &amp;&amp; mix setup &amp;&amp; mix ex_tauri.dev</b></div>
-      </div>
-    </div>
+    <div class="code ship-code"><div class="code-label"><span>shell</span></div><pre><code class="lang-bash">mix ex_tauri.build</code></pre></div>
+    <ul class="bundle-row">
+      <li>🍎 macOS <span class="fmt">.app · .dmg</span></li>
+      <li>🐧 Linux <span class="fmt">.deb · .appimage</span></li>
+      <li>🪟 Windows <span class="fmt">.msi · .exe</span></li>
+    </ul>
+    <p class="prereqs">Signing, notarization, auto-updates, CI matrix: <a href="https://github.com/filipecabaco/ex_tauri/blob/main/guides/releasing.md">release guide</a>. Working demos in <a href="https://github.com/filipecabaco/ex_tauri/tree/main/demos">demos/</a> and <a href="https://github.com/filipecabaco/ex_tauri/tree/main/example">example/</a>.</p>
   </div>
 </section>
 
 <div class="final-cta">
   <div class="wrap">
-    <h2>Your LiveView app, <span style="background: linear-gradient(92deg, var(--purple), var(--amber)); -webkit-background-clip: text; background-clip: text; color: transparent;">on the desktop</span></h2>
-    <p>Two commands stand between your Phoenix project and a native app.</p>
+    <h2>Your LiveView app, <span class="grad">on the desktop</span></h2>
     <div class="cta-row">
       <a class="btn btn-primary" href="#get-started">Get Started</a>
       <a class="btn btn-ghost" href="https://github.com/filipecabaco/ex_tauri">Star on GitHub ★</a>
@@ -365,7 +245,6 @@ ExTauri.Desktop.subscribe()
       <a href="https://github.com/filipecabaco/ex_tauri/blob/main/guides/releasing.md">Release Guide</a>
       <a href="https://tauri.app">Tauri</a>
       <a href="https://github.com/burrito-elixir/burrito">Burrito</a>
-      <a href="https://hexdocs.pm/igniter">Igniter</a>
       <a href="https://francis.build">Francis</a>
     </div>
   </div>

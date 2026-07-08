@@ -32,8 +32,8 @@ defmodule ExTauri.App do
   The result arrives as a `"tauri_response"` event with
   `%{"command" => "app_info", "name" => ..., "version" => ..., "tauri_version" => ...}`.
   """
-  def info(socket) do
-    Hook.push_command(socket, "app_info", %{})
+  def info(socket, on_reply \\ nil) do
+    Hook.push_command(socket, "app_info", %{}, on_reply)
   end
 
   @doc """

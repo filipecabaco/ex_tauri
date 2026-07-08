@@ -32,6 +32,7 @@ defmodule Mix.Tasks.ExTauri.Add do
   | `autostart`       | `ExTauri.Autostart`      | Launch at login                        |
   | `process`         | `ExTauri.App`            | Exit/relaunch the app                  |
   | `updater`         | `ExTauri.Updater`        | Check for and install updates          |
+  | `deep-link`       | `ExTauri.Event`          | Handle `myapp://` URLs                 |
   | `window`          | `ExTauri.Window`         | Runtime window management permissions  |
 
   After adding a plugin, rebuild with `mix ex_tauri.dev` (the Rust side
@@ -59,6 +60,10 @@ defmodule Mix.Tasks.ExTauri.Add do
 
     for {name, plugin} <- installed do
       Mix.shell().info("* #{name} — ready. Use #{plugin.api} from your LiveView.")
+
+      if note = plugin[:note] do
+        Mix.shell().info("\n" <> note)
+      end
     end
 
     Mix.shell().info("""

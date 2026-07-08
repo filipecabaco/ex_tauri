@@ -15,6 +15,9 @@ defmodule Mix.Tasks.ExTauri.Dev do
   ## Options
 
     * `--release` / `-r` - Run in release mode instead of debug mode
+    * `--prod-sidecar` - Run a compiled Elixir release as the sidecar instead
+      of `mix phx.server`. Slower, but exercises release boot, runtime config,
+      and migrations. (Default is the dev server, with full hot reload.)
     * `--target <TARGET>` - Build for the specified target triple
     * `--runner <RUNNER>` - Use the specified runner for the binary
     * `--config <CONFIG>` - Use a custom tauri.conf.json file
@@ -71,6 +74,7 @@ defmodule Mix.Tasks.ExTauri.Dev do
       OptionParser.parse!(args,
         strict: [
           release: :boolean,
+          prod_sidecar: :boolean,
           target: :string,
           runner: :string,
           config: :string,
@@ -82,7 +86,10 @@ defmodule Mix.Tasks.ExTauri.Dev do
         aliases: [r: :release]
       )
 
-    ExTauri.run_dev(["dev" | build_tauri_args(opts, extra_args)])
+    sidecar = if opts[:prod_sidecar], do: :release, else: :phx_server
+    tauri_opts = Keyword.delete(opts, :prod_sidecar)
+
+    ExTauri.run_dev(["dev" | build_tauri_args(tauri_opts, extra_args)], sidecar: sidecar)
   end
 
   @doc false

@@ -20,6 +20,7 @@ defmodule ExTauri.Plugins do
   | `autostart`       | `ExTauri.Autostart`      | Launch at login                        |
   | `process`         | `ExTauri.App`            | Exit/relaunch the app                  |
   | `updater`         | `ExTauri.Updater`        | Check for and install updates          |
+  | `deep-link`       | `ExTauri.Event`          | Handle `myapp://` URLs                 |
   | `window`          | `ExTauri.Window`         | Runtime window management permissions  |
 
   `window` is a pseudo-plugin: window management is part of Tauri core, so it
@@ -88,6 +89,25 @@ defmodule ExTauri.Plugins do
       permissions: ["updater:default"],
       api: "ExTauri.Updater"
     },
+    "deep-link" => %{
+      crate: "tauri-plugin-deep-link",
+      init: "tauri_plugin_deep_link::init()",
+      permissions: ["deep-link:default"],
+      api: "ExTauri.Event",
+      note: """
+      Deep linking needs your URL scheme declared in src-tauri/tauri.conf.json:
+
+          "plugins": {
+            "deep-link": {
+              "desktop": { "schemes": ["myapp"] }
+            }
+          }
+
+      Incoming links then arrive in LiveView via:
+
+          ExTauri.Event.subscribe(socket, "deep-link://new-url", fn payload, socket -> ... end)
+      """
+    },
     "window" => %{
       crate: nil,
       init: nil,
@@ -106,7 +126,9 @@ defmodule ExTauri.Plugins do
         "core:window:allow-show",
         "core:window:allow-set-always-on-top",
         "core:window:allow-set-resizable",
-        "core:window:allow-start-dragging"
+        "core:window:allow-start-dragging",
+        "core:window:allow-close",
+        "core:webview:allow-create-webview-window"
       ],
       api: "ExTauri.Window"
     }
@@ -118,6 +140,8 @@ defmodule ExTauri.Plugins do
     "global_shortcut" => "global-shortcut",
     "globalshortcut" => "global-shortcut",
     "filesystem" => "fs",
+    "deep_link" => "deep-link",
+    "deeplink" => "deep-link",
     "app" => "process"
   }
 

@@ -1,0 +1,80 @@
+# Example GitHub Actions release workflow for an ExTauri app.
+# Copy to .github/workflows/release.yml in YOUR application repository.
+# Triggers on version tags (v1.2.3) and uploads bundles to a GitHub release.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            bundles: "app,dmg"
+          - os: ubuntu-latest
+            bundles: "deb,appimage"
+          - os: windows-latest
+            bundles: "msi,nsis"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Elixir (Linux/Windows)
+        if: runner.os != 'macOS'
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.17"
+          otp-version: "27"
+
+      - name: Set up Elixir (macOS)
+        if: runner.os == 'macOS'
+        run: brew install elixir
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf \
+            libssl-dev libgtk-3-dev libayatana-appindicator3-dev
+
+      - name: Install dependencies
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+
+      - name: Build desktop bundles
+        run: mix ex_tauri.build --ci --bundles "${{ matrix.bundles }}"
+        env:
+          # Updater artifact signing (mix ex_tauri.signer generate)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS code signing + notarization (optional; omit to skip)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload bundles to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.app.tar.gz
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.sig

@@ -62,13 +62,15 @@ defmodule ExTauri.PluginsTest do
 
   describe "registry" do
     test "knows the documented plugins" do
-      for name <- ~w(dialog fs clipboard os global-shortcut autostart process updater window) do
+      for name <-
+            ~w(dialog fs clipboard os global-shortcut autostart process updater deep-link window) do
         assert name in Plugins.known(), "missing plugin: #{name}"
       end
     end
 
     test "normalize/1 resolves aliases and rejects unknowns" do
       assert Plugins.normalize("dialog") == "dialog"
+      assert Plugins.normalize("deep_link") == "deep-link"
       assert Plugins.normalize("DIALOG") == "dialog"
       assert Plugins.normalize("clipboard-manager") == "clipboard"
       assert Plugins.normalize("global_shortcut") == "global-shortcut"
@@ -148,6 +150,15 @@ defmodule ExTauri.PluginsTest do
 
       assert main_rs(ctx) =~
                ".plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))"
+    end
+
+    test "deep-link installs the plugin and carries a schemes note", ctx do
+      [{"deep-link", plugin}] = Plugins.add!(["deep-link"], ctx.base_dir)
+
+      assert cargo(ctx) =~ ~s(tauri-plugin-deep-link = "2")
+      assert main_rs(ctx) =~ ".plugin(tauri_plugin_deep_link::init())"
+      assert "deep-link:default" in permissions(ctx)
+      assert plugin.note =~ "schemes"
     end
 
     test "raises on unknown plugin names", ctx do

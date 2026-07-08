@@ -54,15 +54,25 @@ defmodule ExTauri.Event do
   `%{"command" => "event_listen", "status" => "listening"}`. Each occurrence is
   then delivered as `"tauri_event"` with `%{"event" => name, "payload" => ...}`.
   """
-  def subscribe(socket, event) when is_binary(event) do
+  def subscribe(socket, event, handler \\ nil)
+
+  def subscribe(socket, event, nil) when is_binary(event) do
     Hook.push_command(socket, "event_listen", %{event: event})
+  end
+
+  def subscribe(socket, event, handler) when is_binary(event) and is_function(handler, 2) do
+    socket
+    |> ExTauri.LiveView.put_handler(event, handler)
+    |> Hook.push_command("event_listen", %{event: event})
   end
 
   @doc """
   Unsubscribes from a previously subscribed event.
   """
   def unsubscribe(socket, event) when is_binary(event) do
-    Hook.push_command(socket, "event_unlisten", %{event: event})
+    socket
+    |> ExTauri.LiveView.delete_handler(event)
+    |> Hook.push_command("event_unlisten", %{event: event})
   end
 
   @doc """

@@ -9,11 +9,13 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 ## Features
 
 - **Phoenix LiveView as Desktop Apps** — Turn your Phoenix app into a native desktop application
-- **Desktop APIs from Elixir** — Notifications, dialogs, clipboard, filesystem, window management, global shortcuts, and more — all driven from your LiveView, no JavaScript required
+- **Desktop APIs from Elixir** — Notifications, dialogs, clipboard, filesystem, window management, global shortcuts, and more — with callback-style responses (`use ExTauri.LiveView`), no JavaScript required
+- **Server-Side Desktop Channel** — `ExTauri.Desktop` sends notifications and drives the system tray from GenServers and background jobs, no browser involved
 - **One-Command Plugin Setup** — `mix ex_tauri.add dialog fs` wires the Rust side for you (Cargo dep, plugin registration, permissions)
-- **Native Events in LiveView** — Subscribe to drag-and-drop, focus, or custom Rust events and handle them in `handle_event/3`
+- **Native Events in LiveView** — Subscribe to drag-and-drop, deep links, or custom Rust events and handle them like any other LiveView event
+- **True Hot Reload** — `mix ex_tauri.dev` runs your Phoenix dev server inside the native window: code reloading and live reload just work
+- **Multi-Window** — Open and close secondary native windows from LiveView
 - **Single Binary Distribution** — Uses [Burrito](https://github.com/burrito-elixir/burrito) to bundle everything into one executable
-- **Hot Reload in Dev Mode** — Full Phoenix development experience with live reload
 - **Graceful Shutdown** — Heartbeat-based mechanism ensures clean shutdown on CMD+Q, crashes, or force-quit
 - **Automated Setup** — Uses [Igniter](https://hexdocs.pm/igniter) for safe, AST-aware project configuration
 - **Cross-Platform** — Build for macOS, Windows, and Linux
@@ -62,11 +64,16 @@ That's it! `mix ex_tauri.install` handles everything automatically:
 mix ex_tauri.dev
 ```
 
-This starts your Phoenix app as a native desktop window with full hot-reload support.
+This opens your Phoenix app in a native desktop window, running the actual
+`mix phx.server` dev loop inside it — code reloading and live reload work
+exactly as in the browser. (Use `--prod-sidecar` to test against a compiled
+release instead.)
 
 > **Tip:** Review the generated config in `config/config.exs` to customize your app name, port, or window settings.
 
 ## Building for Production
+
+> Full guide — signing, notarization, auto-updates, CI matrix: [guides/releasing.md](guides/releasing.md)
 
 ### 1. Add Burrito wrapping
 
@@ -131,6 +138,26 @@ ExTauri provides Elixir modules for desktop features, all driven from your
 LiveView. The JS bridge uses Tauri's global API, so **no npm packages are
 required** — a stock Phoenix esbuild setup just works.
 
+Add `use ExTauri.LiveView` to your LiveView and every API accepts a trailing
+callback that receives the result — no manual event pattern-matching:
+
+```elixir
+defmodule MyAppWeb.HomeLive do
+  use MyAppWeb, :live_view
+  use ExTauri.LiveView
+
+  def handle_event("pick_file", _params, socket) do
+    socket =
+      ExTauri.Dialog.open(socket, [title: "Pick a file"], fn
+        {:ok, %{"path" => path}}, socket -> assign(socket, :file, path)
+        {:error, _reason}, socket -> put_flash(socket, :error, "No file selected")
+      end)
+
+    {:noreply, socket}
+  end
+end
+```
+
 ### Included by default
 
 These work out of the box after `mix ex_tauri.install`:
@@ -156,6 +183,28 @@ everything (Cargo dependency, plugin registration, permissions):
 | **`ExTauri.Autostart`** — Launch at login | `mix ex_tauri.add autostart` |
 | **`ExTauri.App.exit/relaunch`** — App lifecycle control | `mix ex_tauri.add process` |
 | **`ExTauri.Updater`** — Check for and install updates | `mix ex_tauri.add updater` |
+| **Deep links** (`myapp://` URLs, via `ExTauri.Event`) | `mix ex_tauri.add deep-link` |
+
+### Server-side: notifications and system tray without a LiveView
+
+`ExTauri.Desktop` talks to the frontend over ExTauri's internal channel (the
+same local socket that carries the shutdown heartbeat), so it works from any
+process — background jobs, GenServers, PubSub handlers:
+
+```elixir
+# Notify from a background job
+ExTauri.Desktop.notify("Sync complete", body: "128 records updated")
+
+# Define a system tray from Elixir; clicks arrive as messages
+ExTauri.Desktop.set_tray(
+  tooltip: "My App",
+  items: [%{id: "sync", label: "Sync now"}, %{id: "quit", label: "Quit"}]
+)
+
+ExTauri.Desktop.subscribe()
+# ... later, in handle_info:
+{:ex_tauri_event, "tray_menu_click", %{"id" => "sync"}}
+```
 
 ### Example: sending a notification from LiveView
 
@@ -226,7 +275,7 @@ end
 └─────────┬────────────┘
           │
           │  HTTP — serves your Phoenix UI to the WebView
-          │  Unix Socket — heartbeat for lifecycle management
+          │  Local socket — heartbeat + duplex desktop channel
           │
 ┌─────────┴────────────┐
 │   Phoenix Server     │  Your Elixir app (Burrito-wrapped sidecar)
@@ -234,7 +283,13 @@ end
 └──────────────────────┘
 ```
 
-Tauri launches your Phoenix app as a **sidecar process**. The WebView connects to Phoenix over HTTP to render your LiveView UI. A separate local socket carries heartbeat signals for lifecycle management.
+Tauri launches your Phoenix app as a **sidecar process**. The WebView connects to Phoenix over HTTP to render your LiveView UI. A separate local socket carries the heartbeat plus a duplex JSON channel used by `ExTauri.Desktop` (server-side notifications, tray, native events).
+
+In production the app binds Phoenix to an **OS-assigned free port** — no port
+collisions with other software. The Rust shell passes `PORT`, `PHX_SERVER`,
+`PHX_HOST`, and a generated `SECRET_KEY_BASE` to the sidecar (standard Phoenix
+`runtime.exs` picks these up) and navigates the window once the server is up.
+In dev, `EX_TAURI_PORT` pins the configured port so live reload URLs match.
 
 ### Heartbeat-Based Shutdown
 

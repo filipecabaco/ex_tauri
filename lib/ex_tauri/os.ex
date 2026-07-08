@@ -47,7 +47,7 @@ defmodule ExTauri.OS do
 
       ExTauri.OS.info(socket)
   """
-  def info(socket) do
-    ExTauri.Hook.push_command(socket, "os_info", %{})
+  def info(socket, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "os_info", %{}, on_reply)
   end
 end

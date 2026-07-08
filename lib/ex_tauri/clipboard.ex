@@ -43,8 +43,8 @@ defmodule ExTauri.Clipboard do
 
       ExTauri.Clipboard.write(socket, "Hello, clipboard!")
   """
-  def write(socket, text) do
-    ExTauri.Hook.push_command(socket, "clipboard_write", %{text: text})
+  def write(socket, text, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "clipboard_write", %{text: text}, on_reply)
   end
 
   @doc """
@@ -57,7 +57,7 @@ defmodule ExTauri.Clipboard do
 
       ExTauri.Clipboard.read(socket)
   """
-  def read(socket) do
-    ExTauri.Hook.push_command(socket, "clipboard_read", %{})
+  def read(socket, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "clipboard_read", %{}, on_reply)
   end
 end

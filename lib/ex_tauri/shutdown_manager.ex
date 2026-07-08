@@ -57,6 +57,13 @@ defmodule ExTauri.ShutdownManager do
   The transport is selected automatically from the OS (`:unix` on macOS/Linux,
   `:tcp` on Windows). It can be forced with the `:heartbeat_transport` config
   key or the `:transport` start option, which is mainly useful for tests.
+
+  ## The desktop channel
+
+  Beyond liveness, the socket carries a newline-delimited JSON protocol in both
+  directions: the Rust frontend sends heartbeats and native events (menu and
+  tray clicks), and Elixir sends desktop commands (notifications, tray setup).
+  Use `ExTauri.Desktop` rather than talking to this server directly.
   """
 
   use GenServer
@@ -122,7 +129,12 @@ defmodule ExTauri.ShutdownManager do
        shutdown_initiated: false,
        heartbeat_interval: heartbeat_interval,
        heartbeat_timeout: heartbeat_timeout,
-       shutdown_fun: shutdown_fun
+       shutdown_fun: shutdown_fun,
+       # Duplex channel state: the currently connected frontend socket (for
+       # outbound ExTauri.Desktop commands) and processes subscribed to
+       # native events (pid => monitor ref).
+       client_socket: nil,
+       subscribers: %{}
      }}
   end
 
@@ -130,6 +142,62 @@ defmodule ExTauri.ShutdownManager do
   def handle_cast(:heartbeat, state) do
     # Record the heartbeat and mark the frontend as having connected at least once.
     {:noreply, %{state | last_heartbeat: System.monotonic_time(:millisecond), connected: true}}
+  end
+
+  def handle_cast({:client_connected, socket}, state) do
+    {:noreply, %{state | client_socket: socket}}
+  end
+
+  def handle_cast({:client_disconnected, socket}, state) do
+    if state.client_socket == socket do
+      {:noreply, %{state | client_socket: nil}}
+    else
+      {:noreply, state}
+    end
+  end
+
+  def handle_cast({:channel_event, name, payload}, state) do
+    for {pid, _ref} <- state.subscribers do
+      send(pid, {:ex_tauri_event, name, payload})
+    end
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_call({:desktop_command, name, payload}, _from, state) do
+    case state.client_socket do
+      nil ->
+        {:reply, {:error, :not_connected}, state}
+
+      socket ->
+        line = Jason.encode!(%{type: "command", name: name, payload: payload}) <> "\n"
+
+        case :gen_tcp.send(socket, line) do
+          :ok -> {:reply, :ok, state}
+          {:error, reason} -> {:reply, {:error, reason}, %{state | client_socket: nil}}
+        end
+    end
+  end
+
+  def handle_call({:subscribe, pid}, _from, state) do
+    if Map.has_key?(state.subscribers, pid) do
+      {:reply, :ok, state}
+    else
+      ref = Process.monitor(pid)
+      {:reply, :ok, %{state | subscribers: Map.put(state.subscribers, pid, ref)}}
+    end
+  end
+
+  def handle_call({:unsubscribe, pid}, _from, state) do
+    case Map.pop(state.subscribers, pid) do
+      {nil, _subscribers} ->
+        {:reply, :ok, state}
+
+      {ref, subscribers} ->
+        Process.demonitor(ref, [:flush])
+        {:reply, :ok, %{state | subscribers: subscribers}}
+    end
   end
 
   @impl true
@@ -167,6 +235,10 @@ defmodule ExTauri.ShutdownManager do
   end
 
   @impl true
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    {:noreply, %{state | subscribers: Map.delete(state.subscribers, pid)}}
+  end
+
   def handle_info(msg, state) do
     Logger.debug("[ExTauri.ShutdownManager] Received unexpected message: #{inspect(msg)}")
     {:noreply, state}
@@ -246,7 +318,13 @@ defmodule ExTauri.ShutdownManager do
         # the heartbeat elsewhere silently drops every byte and the frontend never
         # registers as connected. The frontend holds one connection at a time
         # (reconnecting on drop), so handling them sequentially is enough.
+        #
+        # The manager keeps the socket for outbound ExTauri.Desktop commands
+        # (gen_tcp.send is allowed from other processes; only recv is
+        # restricted to this one).
+        GenServer.cast(__MODULE__, {:client_connected, client_socket})
         recv_loop(client_socket)
+        GenServer.cast(__MODULE__, {:client_disconnected, client_socket})
         accept_loop(listen_socket)
 
       {:error, :timeout} ->
@@ -261,11 +339,13 @@ defmodule ExTauri.ShutdownManager do
     end
   end
 
-  defp recv_loop(client_socket) do
+  defp recv_loop(client_socket, buffer \\ "") do
     case :gen_tcp.recv(client_socket, 0) do
-      {:ok, _data} ->
+      {:ok, data} ->
+        # Any traffic counts as liveness, whatever its content.
         GenServer.cast(__MODULE__, :heartbeat)
-        recv_loop(client_socket)
+        buffer = process_channel_data(buffer <> data)
+        recv_loop(client_socket, buffer)
 
       {:error, reason} ->
         unless reason == :closed do
@@ -273,6 +353,36 @@ defmodule ExTauri.ShutdownManager do
         end
 
         :gen_tcp.close(client_socket)
+    end
+  end
+
+  # The channel protocol is newline-delimited JSON. Complete lines are
+  # dispatched; the trailing partial line is returned as the new buffer.
+  defp process_channel_data(buffer) do
+    case String.split(buffer, "\n") do
+      [incomplete] ->
+        # Legacy frontends send bare heartbeat bytes with no newlines — don't
+        # let them accumulate. Anything protocol-shaped is far smaller.
+        if byte_size(incomplete) > 4096, do: "", else: incomplete
+
+      parts ->
+        {lines, [rest]} = Enum.split(parts, -1)
+        Enum.each(lines, &dispatch_channel_line/1)
+        rest
+    end
+  end
+
+  defp dispatch_channel_line(line) do
+    case Jason.decode(line) do
+      {:ok, %{"type" => "heartbeat"}} ->
+        :ok
+
+      {:ok, %{"type" => "event", "name" => name} = message} ->
+        GenServer.cast(__MODULE__, {:channel_event, name, message["payload"]})
+
+      _other ->
+        # Unknown or legacy content — already counted as a heartbeat.
+        :ok
     end
   end
 

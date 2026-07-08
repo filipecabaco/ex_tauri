@@ -102,7 +102,8 @@ defmodule ExTauri.HookTest do
 
       # Namespaces resolved off window.__TAURI__ via tauriApi(...)
       for namespace <- ~w(notification clipboardManager dialog os fs shell core
-                          window app event globalShortcut autostart process updater dpi) do
+                          window webviewWindow app event globalShortcut autostart process
+                          updater dpi) do
         assert source =~ ~s(tauriApi("#{namespace}")),
                "expected tauriApi(\"#{namespace}\") in hook source"
       end
@@ -123,6 +124,14 @@ defmodule ExTauri.HookTest do
                        start_dragging info) do
         assert source =~ ~s(case "#{action}"), "expected window action: #{action}"
       end
+    end
+
+    test "supports multi-window commands" do
+      source = Hook.js_source()
+      assert source =~ ~s(case "window_open")
+      assert source =~ ~s(case "window_close")
+      assert source =~ "WebviewWindow"
+      assert source =~ "getByLabel"
     end
 
     test "supports app info command" do

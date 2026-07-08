@@ -12,7 +12,8 @@
         "height": 600,
         "resizable": true
       }
-    ]
+    ],
+    "withGlobalTauri": true
   },
   "build": {
     "devUrl": "http://localhost:4000",

@@ -91,6 +91,9 @@ defmodule ExTauri.Hook do
     * `socket` - The LiveView socket
     * `command` - The command type (e.g., "notification", "clipboard_write")
     * `payload` - A map of command parameters
+    * `on_reply` - Optional 2-arity callback `(result, socket) -> socket` invoked
+      with `{:ok, payload}` or `{:error, reason}` when the response arrives.
+      Requires `use ExTauri.LiveView` in the LiveView (see that module's docs).
 
   ## Examples
 
@@ -111,15 +114,29 @@ defmodule ExTauri.Hook do
   """
   @compile {:no_warn_undefined, Phoenix.LiveView}
 
-  def push_command(socket, command, payload \\ %{}) do
-    ref = System.unique_integer([:positive]) |> to_string()
+  def push_command(socket, command, payload \\ %{}, on_reply \\ nil)
 
+  def push_command(socket, command, payload, nil) do
+    do_push(socket, command, payload)
+  end
+
+  def push_command(socket, command, payload, on_reply) when is_function(on_reply, 2) do
+    ref = new_ref()
+
+    socket
+    |> ExTauri.LiveView.put_reply(ref, on_reply)
+    |> do_push(command, payload, ref)
+  end
+
+  defp do_push(socket, command, payload, ref \\ nil) do
     Phoenix.LiveView.push_event(socket, "tauri_command", %{
-      ref: ref,
+      ref: ref || new_ref(),
       command: command,
       payload: payload
     })
   end
+
+  defp new_ref, do: System.unique_integer([:positive]) |> to_string()
 
   @doc """
   Pushes a Tauri command and tracks the `ref` in socket assigns for correlation.

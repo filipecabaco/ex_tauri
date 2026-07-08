@@ -43,6 +43,51 @@ defmodule ExTauri.ApiModulesTest do
     end
   end
 
+  describe "ExTauri.Window multi-window API" do
+    test "open and close are defined" do
+      assert function_exported?(ExTauri.Window, :open, 3)
+      assert function_exported?(ExTauri.Window, :open, 4)
+      assert function_exported?(ExTauri.Window, :open, 5)
+      assert function_exported?(ExTauri.Window, :close, 2)
+    end
+  end
+
+  describe "callback arities" do
+    test "reply callbacks are accepted as a trailing argument" do
+      assert function_exported?(ExTauri.Dialog, :open, 3)
+      assert function_exported?(ExTauri.Clipboard, :read, 2)
+      assert function_exported?(ExTauri.Filesystem, :read, 4)
+      assert function_exported?(ExTauri.OS, :info, 2)
+      assert function_exported?(ExTauri.Notification, :send, 4)
+      assert function_exported?(ExTauri.Shell, :execute, 4)
+      assert function_exported?(ExTauri.Window, :info, 2)
+      assert function_exported?(ExTauri.App, :info, 2)
+      assert function_exported?(ExTauri.Autostart, :status, 2)
+      assert function_exported?(ExTauri.Updater, :check, 2)
+      assert function_exported?(ExTauri.GlobalShortcut, :registered?, 3)
+    end
+
+    test "persistent event handlers are accepted on subscribe/register" do
+      assert function_exported?(ExTauri.Event, :subscribe, 3)
+      assert function_exported?(ExTauri.GlobalShortcut, :register, 3)
+    end
+  end
+
+  describe "ExTauri.Desktop API" do
+    setup do
+      Code.ensure_loaded!(ExTauri.Desktop)
+      :ok
+    end
+
+    test "server-side desktop functions are defined" do
+      assert function_exported?(ExTauri.Desktop, :notify, 1)
+      assert function_exported?(ExTauri.Desktop, :notify, 2)
+      assert function_exported?(ExTauri.Desktop, :set_tray, 1)
+      assert function_exported?(ExTauri.Desktop, :subscribe, 0)
+      assert function_exported?(ExTauri.Desktop, :unsubscribe, 0)
+    end
+  end
+
   describe "ExTauri.App API" do
     test "app functions are defined" do
       assert function_exported?(ExTauri.App, :info, 1)

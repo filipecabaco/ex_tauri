@@ -32,13 +32,13 @@ defmodule ExTauri.Autostart do
   alias ExTauri.Hook
 
   @doc "Enables launching the app at login."
-  def enable(socket) do
-    Hook.push_command(socket, "autostart_enable", %{})
+  def enable(socket, on_reply \\ nil) do
+    Hook.push_command(socket, "autostart_enable", %{}, on_reply)
   end
 
   @doc "Disables launching the app at login."
-  def disable(socket) do
-    Hook.push_command(socket, "autostart_disable", %{})
+  def disable(socket, on_reply \\ nil) do
+    Hook.push_command(socket, "autostart_disable", %{}, on_reply)
   end
 
   @doc """
@@ -47,7 +47,7 @@ defmodule ExTauri.Autostart do
   The result arrives as a `"tauri_response"` event with
   `%{"command" => "autostart_status", "enabled" => true | false}`.
   """
-  def status(socket) do
-    Hook.push_command(socket, "autostart_status", %{})
+  def status(socket, on_reply \\ nil) do
+    Hook.push_command(socket, "autostart_status", %{}, on_reply)
   end
 end

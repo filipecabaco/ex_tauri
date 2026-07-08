@@ -60,15 +60,26 @@ defmodule ExTauri.GlobalShortcut do
   Registering a shortcut that is already registered (by this app or another)
   fails with a `"tauri_error"` event.
   """
-  def register(socket, shortcut) when is_binary(shortcut) do
+  def register(socket, shortcut, handler \\ nil)
+
+  def register(socket, shortcut, nil) when is_binary(shortcut) do
     Hook.push_command(socket, "shortcut_register", %{shortcut: shortcut})
+  end
+
+  def register(socket, shortcut, handler)
+      when is_binary(shortcut) and is_function(handler, 2) do
+    socket
+    |> ExTauri.LiveView.put_handler({:shortcut, shortcut}, handler)
+    |> Hook.push_command("shortcut_register", %{shortcut: shortcut})
   end
 
   @doc """
   Unregisters a previously registered global shortcut.
   """
   def unregister(socket, shortcut) when is_binary(shortcut) do
-    Hook.push_command(socket, "shortcut_unregister", %{shortcut: shortcut})
+    socket
+    |> ExTauri.LiveView.delete_handler({:shortcut, shortcut})
+    |> Hook.push_command("shortcut_unregister", %{shortcut: shortcut})
   end
 
   @doc """
@@ -77,7 +88,7 @@ defmodule ExTauri.GlobalShortcut do
   The result arrives as a `"tauri_response"` with
   `%{"command" => "shortcut_is_registered", "registered" => true | false}`.
   """
-  def registered?(socket, shortcut) when is_binary(shortcut) do
-    Hook.push_command(socket, "shortcut_is_registered", %{shortcut: shortcut})
+  def registered?(socket, shortcut, on_reply \\ nil) when is_binary(shortcut) do
+    Hook.push_command(socket, "shortcut_is_registered", %{shortcut: shortcut}, on_reply)
   end
 end

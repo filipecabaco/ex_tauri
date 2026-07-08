@@ -65,7 +65,7 @@ defmodule ExTauri.Shell do
       ExTauri.Shell.open_url(socket, "https://example.com")
       ExTauri.Shell.open_url(socket, "/path/to/document.pdf")
   """
-  def open_url(socket, url) when is_binary(url) do
+  def open_url(socket, url, on_reply \\ nil) when is_binary(url) do
     uri = URI.parse(url)
 
     unless uri.scheme in ["http", "https", "mailto"] do
@@ -73,7 +73,7 @@ defmodule ExTauri.Shell do
             "open_url only allows http, https, and mailto schemes, got: #{inspect(uri.scheme)}"
     end
 
-    ExTauri.Hook.push_command(socket, "shell_open", %{url: url})
+    ExTauri.Hook.push_command(socket, "shell_open", %{url: url}, on_reply)
   end
 
   @doc """
@@ -88,7 +88,7 @@ defmodule ExTauri.Shell do
       ExTauri.Shell.execute(socket, "git", ["status"])
       ExTauri.Shell.execute(socket, "node", ["--version"])
   """
-  def execute(socket, program, args \\ []) do
-    ExTauri.Hook.push_command(socket, "shell_exec", %{program: program, args: args})
+  def execute(socket, program, args \\ [], on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "shell_exec", %{program: program, args: args}, on_reply)
   end
 end

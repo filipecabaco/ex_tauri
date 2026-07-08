@@ -81,8 +81,8 @@ defmodule ExTauri.Updater do
   `%{"command" => "updater_check", "available" => true, "version" => ..., "notes" => ...}`
   or `%{"command" => "updater_check", "available" => false}`.
   """
-  def check(socket) do
-    ExTauri.Hook.push_command(socket, "updater_check", %{})
+  def check(socket, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "updater_check", %{}, on_reply)
   end
 
   @doc """
@@ -92,8 +92,8 @@ defmodule ExTauri.Updater do
   `%{"command" => "updater_install", "status" => "installed"}`; calling this
   without a prior successful check produces a `"tauri_error"` event.
   """
-  def install(socket) do
-    ExTauri.Hook.push_command(socket, "updater_install", %{})
+  def install(socket, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "updater_install", %{}, on_reply)
   end
 
   @doc """

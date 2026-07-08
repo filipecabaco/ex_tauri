@@ -48,13 +48,13 @@ defmodule ExTauri.Notification do
       ExTauri.Notification.send(socket, "Download Complete")
       ExTauri.Notification.send(socket, "New Message", body: "You have 3 new messages")
   """
-  def send(socket, title, opts \\ []) do
+  def send(socket, title, opts \\ [], on_reply \\ nil) do
     payload =
       %{title: title}
       |> maybe_put(:body, opts[:body])
       |> maybe_put(:icon, opts[:icon])
 
-    ExTauri.Hook.push_command(socket, "notification", payload)
+    ExTauri.Hook.push_command(socket, "notification", payload, on_reply)
   end
 
   defp maybe_put(map, _key, nil), do: map

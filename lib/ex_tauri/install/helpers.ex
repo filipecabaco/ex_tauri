@@ -137,7 +137,7 @@ defmodule ExTauri.Install.Helpers do
 
     File.write!(
       Path.join([src_tauri, "src", "main.rs"]),
-      main_src(config.host, config.port, config.sanitized_name, config.app_name)
+      main_src(config.host, config.port, config.sanitized_name, config.app_name, config.scheme)
     )
   end
 
@@ -365,7 +365,7 @@ defmodule ExTauri.Install.Helpers do
     log = "0.4"
     serde_json = "1.0"
     serde = { version = "1.0", features = ["derive"] }
-    tauri = { version = "#{major}", features = [] }
+    tauri = { version = "#{major}", features = ["tray-icon"] }
     tauri-plugin-shell = "#{major}"
     tauri-plugin-log = "#{major}"
     tauri-plugin-notification = "#{major}"
@@ -380,15 +380,20 @@ defmodule ExTauri.Install.Helpers do
   end
 
   @doc false
-  def main_src(host, port, socket_name, app_name \\ "App") do
+  def main_src(host, port, socket_name, app_name \\ "App", scheme \\ "http") do
     validate_rust_interpolations!(host, port, socket_name)
     validate_rust_string!(app_name)
+
+    unless to_string(scheme) in ["http", "https"] do
+      raise ArgumentError, "scheme must be http or https, got: #{inspect(scheme)}"
+    end
 
     EEx.eval_file(@main_rs_template,
       host: to_string(host),
       port: to_string(port),
       socket_name: to_string(socket_name),
-      app_name: to_string(app_name)
+      app_name: to_string(app_name),
+      scheme: to_string(scheme)
     )
   end
 
@@ -422,7 +427,7 @@ defmodule ExTauri.Install.Helpers do
       "$schema": "../gen/schemas/desktop-schema.json",
       "identifier": "default",
       "description": "Capability for the main application window",
-      "windows": ["main"],
+      "windows": ["main", "*"],
       "permissions": [
         "core:default",
         "notification:default",
@@ -440,6 +445,8 @@ defmodule ExTauri.Install.Helpers do
         "core:window:allow-set-always-on-top",
         "core:window:allow-set-resizable",
         "core:window:allow-start-dragging",
+        "core:window:allow-close",
+        "core:webview:allow-create-webview-window",
         {
           "identifier": "shell:allow-execute",
           "allow": [

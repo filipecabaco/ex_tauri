@@ -32,7 +32,7 @@ defmodule ExTauriIntegrationTest do
       assert cargo_toml =~ ~r/serde = \{ version = "1\.0", features = \["derive"\] \}/
 
       # Core tauri should use semver major version
-      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \[\] \}/
+      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \["tray-icon"\] \}/
 
       # Plugins should use semver major version (not exact version like "2.5.1")
       # This is critical because plugins have independent versioning
@@ -71,7 +71,8 @@ defmodule ExTauriIntegrationTest do
         assert cargo_toml =~ ~r/tauri-plugin-log = "#{expected_major}"/,
                "Failed for version #{tauri_version}: expected major version #{expected_major}"
 
-        assert cargo_toml =~ ~r/tauri = \{ version = "#{expected_major}", features = \[\] \}/,
+        assert cargo_toml =~
+                 ~r/tauri = \{ version = "#{expected_major}", features = \["tray-icon"\] \}/,
                "Failed for version #{tauri_version}: expected major version #{expected_major}"
 
         assert cargo_toml =~
@@ -94,12 +95,12 @@ defmodule ExTauriIntegrationTest do
       assert cargo_toml =~ ~r/name = "my_test_app"/
     end
 
-    test "includes features = [] for tauri and tauri-build" do
+    test "includes expected features for tauri and tauri-build" do
       cargo_toml = Helpers.cargo_toml("test_app", "2.5.1")
 
-      # Verify empty features array to match working example
       assert cargo_toml =~ ~r/tauri-build = \{ version = "2", features = \[\] \}/
-      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \[\] \}/
+      # tray-icon enables ExTauri.Desktop.set_tray/1
+      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \["tray-icon"\] \}/
     end
   end
 
@@ -131,9 +132,12 @@ defmodule ExTauriIntegrationTest do
       assert main_src =~ ~r/if let CommandEvent::Stdout\(line_bytes\) = event/
       assert main_src =~ ~r/let line = String::from_utf8_lossy\(&line_bytes\);/
 
-      # Verify server check with correct host and port
+      # Verify server check with correct host; the port is resolved at runtime
+      # (EX_TAURI_PORT in dev, an OS-assigned free port in production).
       assert main_src =~ ~r/let host = "#{host}"\.to_string\(\);/
-      assert main_src =~ ~r/let port = "#{port}"\.to_string\(\);/
+      assert main_src =~ "fn resolve_port()"
+      assert main_src =~ "EX_TAURI_PORT"
+      assert main_src =~ ".unwrap_or(#{port})"
 
       # Ensure NO V1 API usage
       refute main_src =~ ~r/use tauri::api::process/
@@ -152,7 +156,7 @@ defmodule ExTauriIntegrationTest do
     test "generates main.rs with server startup check" do
       main_src = Helpers.main_src("localhost", "4000", "test_app")
 
-      assert main_src =~ ~r/fn check_server_started\(\)/
+      assert main_src =~ ~r/fn check_server_started\(port: u16\)/
       assert main_src =~ ~r/TcpStream::connect/
       assert main_src =~ ~r/std::time::Duration::from_millis\(200\)/
     end
@@ -161,7 +165,7 @@ defmodule ExTauriIntegrationTest do
       main_src = Helpers.main_src("127.0.0.1", "8080", "test_app")
 
       assert main_src =~ ~r/let host = "127\.0\.0\.1"\.to_string\(\);/
-      assert main_src =~ ~r/let port = "8080"\.to_string\(\);/
+      assert main_src =~ ".unwrap_or(8080)"
     end
   end
 
@@ -178,7 +182,7 @@ defmodule ExTauriIntegrationTest do
       # Verify basic metadata
       assert capabilities["identifier"] == "default"
       assert capabilities["description"] == "Capability for the main application window"
-      assert capabilities["windows"] == ["main"]
+      assert capabilities["windows"] == ["main", "*"]
 
       # Verify permissions array exists
       assert is_list(capabilities["permissions"])
@@ -280,7 +284,7 @@ defmodule ExTauriIntegrationTest do
       assert capabilities =~ "shell:allow-execute"
 
       # Verify semver ranges are used (not exact versions)
-      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \[\] \}/
+      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \["tray-icon"\] \}/
       assert cargo_toml =~ ~r/tauri-plugin-shell = "2"/
       assert cargo_toml =~ ~r/tauri-plugin-log = "2"/
 

@@ -49,6 +49,16 @@ The following issues from prior reviews have been addressed:
 | `cargo install` failures ignored | `install_tauri_cli` raises with an actionable message on non-zero exit |
 | Cryptic `:enoent` when CLI missing | `run_tauri_cli` resolves the binary (including `.exe` on Windows) and points to `mix ex_tauri.install` |
 | No Hex metadata or LICENSE | `mix.exs` has `description`/`package`/`docs`; MIT `LICENSE` file added |
+| Fire-and-forget response handling | `use ExTauri.LiveView` routes responses to per-call callbacks; every API accepts a trailing `(result, socket) -> socket` fun. Manual `handle_event` clauses keep working |
+| Dev mode was not hot reload | `mix ex_tauri.dev` now runs `mix phx.server` as the sidecar (code reloading + live reload in the native window); `--prod-sidecar` keeps the release path |
+| Fixed port baked in at install | Rust picks an OS-assigned free port in production and passes `PORT`/`PHX_SERVER`/`PHX_HOST`/`SECRET_KEY_BASE` to the sidecar; window navigates to the real port. `EX_TAURI_PORT` pins it in dev |
+| No sidecar→Tauri path without WebView | Heartbeat socket upgraded to a duplex NDJSON channel; `ExTauri.Desktop` sends notifications/tray commands from any process, native events delivered as messages |
+| System tray | `ExTauri.Desktop.set_tray/1` builds/replaces the tray from Elixir; clicks arrive as `tray_menu_click` events |
+| Multi-window | `ExTauri.Window.open/5` + `close/3` create and close labeled secondary windows |
+| Deep linking | `mix ex_tauri.add deep-link` + `ExTauri.Event.subscribe(socket, "deep-link://new-url")` |
+| No shipping guidance | `guides/releasing.md` (signing, notarization, updater manifests) + `guides/github-release-workflow.yml` CI matrix template |
+| Example app predated the bridge | Example wired to the vendored hook, `withGlobalTauri`, and window/event capabilities |
+| Linux-only CI | Added a macOS unit/integration test job |
 | JS hook required npm packages | Bridge rewritten on the global Tauri API (`window.__TAURI__`, `withGlobalTauri: true` set by install) — a stock Phoenix esbuild setup bundles it with zero JS dependencies |
 | Manual 3-file plugin setup | `mix ex_tauri.add <plugin>` patches Cargo.toml, main.rs, and capabilities idempotently for dialog, fs, clipboard, os, global-shortcut, autostart, process, updater |
 | Runtime window management | `ExTauri.Window` — minimize/maximize/fullscreen/title/size/center/focus/hide/show/always-on-top/resizable/start-dragging/info |
@@ -65,21 +75,21 @@ The following issues from prior reviews have been addressed:
 
 | Feature | Details |
 |---------|---------|
-| Windows end-to-end validation | The Windows heartbeat path (TCP transport + port file) is implemented and unit-tested, but no Windows CI job builds and runs a real app yet. Add a `windows-latest` job. |
+| Hex publication | Package metadata is ready; remaining step is `mix hex.publish` (requires maintainer credentials). |
 
 ### P1 — Important for Adoption
 
 | Feature | Details |
 |---------|---------|
-| Hex publication | Package metadata is now in mix.exs; remaining step is `mix hex.publish` (and a docs review on hexdocs). |
-| System tray | Tauri V2 supports tray icons/menus. No integration exists. Important for long-running desktop apps. |
-| Deep linking | `tauri-plugin-deep-link` for `myapp://` URL handling (OAuth, inter-app). Event delivery to LiveView already works via `ExTauri.Event` once the plugin is registered. |
+| Windows end-to-end validation | The Windows heartbeat/channel path (TCP transport + port file) is implemented and unit-tested, but no Windows CI job builds and runs a real app yet. |
+| `mix ex_tauri.new` scaffold | One-command project creation (phx.new + install) — likely a separate archive package. |
+| Richer desktop channel commands | The channel carries `notify` and `set_tray` today; native app menus defined from Elixir, dock badges, and window control without a LiveView are natural extensions. |
 
 ### P2 — Nice to Have
 
 | Feature | Details |
 |---------|---------|
-| Multi-window support | `ExTauri.Window` manages the current window; creating/addressing additional windows from LiveView is not yet exposed. |
+| Targeting secondary windows | `ExTauri.Window` actions target the current window; addressing other labels (set title of the settings window from the main one) is not yet exposed. |
 | Compile-time config validation | Catch missing `:host`/`:port` at compile time, not runtime. |
 
 ### Architecture Considerations (Resolved)

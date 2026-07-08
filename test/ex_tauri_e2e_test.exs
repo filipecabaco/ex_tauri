@@ -131,7 +131,7 @@ defmodule ExTauri.E2ETest do
       assert main_rs =~ "fn main()"
       assert main_rs =~ "fn start_server"
       assert main_rs =~ "fn check_server_started"
-      assert main_rs =~ "fn start_heartbeat"
+      assert main_rs =~ "fn start_channel"
       assert main_rs =~ "fn kill_sidecar"
 
       assert main_rs =~ "tauri::Builder::default()"

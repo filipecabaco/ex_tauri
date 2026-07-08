@@ -73,7 +73,16 @@ defmodule ExTauri.Install.Helpers do
       stderr_to_stdout: true
     ]
 
-    System.cmd("cargo", build_cli_install_args(version), cmd_opts)
+    {_output, exit_code} = System.cmd("cargo", build_cli_install_args(version), cmd_opts)
+
+    unless exit_code == 0 do
+      raise """
+      Failed to install the Tauri CLI (cargo install exited with status #{exit_code}).
+
+      Check the cargo output above for details — common causes are network
+      failures and an outdated Rust toolchain (try `rustup update`).
+      """
+    end
   end
 
   defp init_tauri_project(config, extra_args) do
@@ -103,12 +112,17 @@ defmodule ExTauri.Install.Helpers do
     cmd_opts = [into: IO.stream(:stdio, :line), stderr_to_stdout: true]
 
     {_output, exit_code} =
-      Path.join([config.installation_path, "bin", "cargo-tauri"])
-      |> System.cmd(tauri_args, cmd_opts)
+      System.cmd(tauri_cli_path(config.installation_path), tauri_args, cmd_opts)
 
     unless exit_code == 0 do
       raise "tauri unable to install. exited with status #{exit_code}"
     end
+  end
+
+  # cargo installs the CLI as cargo-tauri.exe on Windows.
+  defp tauri_cli_path(installation_path) do
+    base = Path.join([installation_path, "bin", "cargo-tauri"])
+    Enum.find([base, base <> ".exe"], &File.exists?/1) || base
   end
 
   # ── Rust file generation ───────────────────────────────────────────────────
@@ -123,7 +137,7 @@ defmodule ExTauri.Install.Helpers do
 
     File.write!(
       Path.join([src_tauri, "src", "main.rs"]),
-      main_src(config.host, config.port, config.sanitized_name, config.app_name)
+      main_src(config.host, config.port, config.sanitized_name, config.app_name, config.scheme)
     )
   end
 
@@ -159,6 +173,10 @@ defmodule ExTauri.Install.Helpers do
           resizable: config.resize
         }
       ])
+      # Expose the Tauri API on window.__TAURI__. The generated LiveView hook
+      # relies on this global — it means no @tauri-apps npm packages are needed,
+      # so a stock Phoenix esbuild setup can bundle the hook as-is.
+      |> put_in(["app", "withGlobalTauri"], true)
 
     # Merge updater config if enabled
     tauri_conf =
@@ -231,11 +249,17 @@ defmodule ExTauri.Install.Helpers do
         {last_pos, last_len} = matches |> List.last() |> List.first()
         insert_at = last_pos + last_len
 
-        String.slice(content, 0, insert_at) <>
-          "\n" <>
-          import_line <>
-          String.slice(content, insert_at..-1//1)
+        insert_at_byte_offset(content, insert_at, "\n" <> import_line)
     end
+  end
+
+  # Regex `return: :index` yields BYTE offsets, so the split must use
+  # binary_part — String.slice counts graphemes and would corrupt files
+  # containing multibyte characters before the insertion point.
+  defp insert_at_byte_offset(content, insert_at, insertion) do
+    binary_part(content, 0, insert_at) <>
+      insertion <>
+      binary_part(content, insert_at, byte_size(content) - insert_at)
   end
 
   defp inject_tauri_hooks(content) do
@@ -303,10 +327,7 @@ defmodule ExTauri.Install.Helpers do
           insert_at = pos + len
           hook_element = "\n    <div id=\"tauri-bridge\" phx-hook=\"TauriHook\"></div>"
 
-          new_content =
-            String.slice(content, 0, insert_at) <>
-              hook_element <>
-              String.slice(content, insert_at..-1//1)
+          new_content = insert_at_byte_offset(content, insert_at, hook_element)
 
           File.write!(path, new_content)
           Mix.shell().info("Injected tauri-bridge element into #{Path.relative_to_cwd(path)}")
@@ -344,7 +365,7 @@ defmodule ExTauri.Install.Helpers do
     log = "0.4"
     serde_json = "1.0"
     serde = { version = "1.0", features = ["derive"] }
-    tauri = { version = "#{major}", features = [] }
+    tauri = { version = "#{major}", features = ["tray-icon"] }
     tauri-plugin-shell = "#{major}"
     tauri-plugin-log = "#{major}"
     tauri-plugin-notification = "#{major}"
@@ -359,15 +380,20 @@ defmodule ExTauri.Install.Helpers do
   end
 
   @doc false
-  def main_src(host, port, socket_name, app_name \\ "App") do
+  def main_src(host, port, socket_name, app_name \\ "App", scheme \\ "http") do
     validate_rust_interpolations!(host, port, socket_name)
     validate_rust_string!(app_name)
+
+    unless to_string(scheme) in ["http", "https"] do
+      raise ArgumentError, "scheme must be http or https, got: #{inspect(scheme)}"
+    end
 
     EEx.eval_file(@main_rs_template,
       host: to_string(host),
       port: to_string(port),
       socket_name: to_string(socket_name),
-      app_name: to_string(app_name)
+      app_name: to_string(app_name),
+      scheme: to_string(scheme)
     )
   end
 
@@ -401,9 +427,26 @@ defmodule ExTauri.Install.Helpers do
       "$schema": "../gen/schemas/desktop-schema.json",
       "identifier": "default",
       "description": "Capability for the main application window",
-      "windows": ["main"],
+      "windows": ["main", "*"],
       "permissions": [
+        "core:default",
         "notification:default",
+        "core:window:allow-minimize",
+        "core:window:allow-maximize",
+        "core:window:allow-unmaximize",
+        "core:window:allow-toggle-maximize",
+        "core:window:allow-set-fullscreen",
+        "core:window:allow-set-title",
+        "core:window:allow-set-size",
+        "core:window:allow-center",
+        "core:window:allow-set-focus",
+        "core:window:allow-hide",
+        "core:window:allow-show",
+        "core:window:allow-set-always-on-top",
+        "core:window:allow-set-resizable",
+        "core:window:allow-start-dragging",
+        "core:window:allow-close",
+        "core:webview:allow-create-webview-window",
         {
           "identifier": "shell:allow-execute",
           "allow": [

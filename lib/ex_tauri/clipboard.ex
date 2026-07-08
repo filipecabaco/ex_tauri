@@ -11,18 +11,10 @@ defmodule ExTauri.Clipboard do
 
   ## Plugin Setup
 
-  Add the dependency to `src-tauri/Cargo.toml`:
+      mix ex_tauri.add clipboard
 
-      [dependencies]
-      tauri-plugin-clipboard-manager = "2"
-
-  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
-
-      .plugin(tauri_plugin_clipboard_manager::init())
-
-  Add the capability to `src-tauri/capabilities/default.json`:
-
-      "permissions": ["clipboard-manager:allow-write-text", "clipboard-manager:allow-read-text"]
+  This adds the Cargo dependency, registers the plugin in `main.rs`, and adds
+  the read/write-text capabilities. See `Mix.Tasks.ExTauri.Add` for details.
 
   ## Examples
 
@@ -51,8 +43,8 @@ defmodule ExTauri.Clipboard do
 
       ExTauri.Clipboard.write(socket, "Hello, clipboard!")
   """
-  def write(socket, text) do
-    ExTauri.Hook.push_command(socket, "clipboard_write", %{text: text})
+  def write(socket, text, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "clipboard_write", %{text: text}, on_reply)
   end
 
   @doc """
@@ -65,7 +57,7 @@ defmodule ExTauri.Clipboard do
 
       ExTauri.Clipboard.read(socket)
   """
-  def read(socket) do
-    ExTauri.Hook.push_command(socket, "clipboard_read", %{})
+  def read(socket, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "clipboard_read", %{}, on_reply)
   end
 end

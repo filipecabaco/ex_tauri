@@ -44,23 +44,57 @@ defmodule ExTauri.Updater do
 
   ## Check for Updates from LiveView
 
-  Use the command bridge to check for updates from your LiveView:
+  Install the updater plugin (`mix ex_tauri.add updater`), then use `check/1`
+  and `install/1`:
 
       ```elixir
-      # In your LiveView
       def handle_event("check_updates", _params, socket) do
-        socket = ExTauri.Hook.push_command(socket, "invoke", %{
-          cmd: "plugin:updater|check",
-          args: %{}
-        })
-        {:noreply, socket}
+        {:noreply, ExTauri.Updater.check(socket)}
+      end
+
+      def handle_event("tauri_response", %{"command" => "updater_check", "available" => true} = params, socket) do
+        {:noreply, assign(socket, update_version: params["version"], update_available: true)}
+      end
+
+      def handle_event("tauri_response", %{"command" => "updater_check"}, socket) do
+        {:noreply, assign(socket, :update_available, false)}
+      end
+
+      def handle_event("install_update", _params, socket) do
+        {:noreply, ExTauri.Updater.install(socket)}
       end
       ```
+
+  After a successful install, relaunch with `ExTauri.App.relaunch/1`
+  (requires `mix ex_tauri.add process`).
 
   For more information, see:
   - https://v2.tauri.app/plugin/updater/
   - `Mix.Tasks.ExTauri.Signer` for key management
   """
+
+  @doc """
+  Checks for an available update from your LiveView.
+
+  Requires `tauri-plugin-updater` (`mix ex_tauri.add updater`) and a configured
+  endpoint (see module docs). The result arrives as a `"tauri_response"` event:
+  `%{"command" => "updater_check", "available" => true, "version" => ..., "notes" => ...}`
+  or `%{"command" => "updater_check", "available" => false}`.
+  """
+  def check(socket, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "updater_check", %{}, on_reply)
+  end
+
+  @doc """
+  Downloads and installs the update found by the last `check/1`.
+
+  Completion arrives as a `"tauri_response"` event with
+  `%{"command" => "updater_install", "status" => "installed"}`; calling this
+  without a prior successful check produces a `"tauri_error"` event.
+  """
+  def install(socket, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "updater_install", %{}, on_reply)
+  end
 
   @doc """
   Returns the updater configuration from the application env.

@@ -11,18 +11,10 @@ defmodule ExTauri.OS do
 
   ## Plugin Setup
 
-  Add the dependency to `src-tauri/Cargo.toml`:
+      mix ex_tauri.add os
 
-      [dependencies]
-      tauri-plugin-os = "2"
-
-  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
-
-      .plugin(tauri_plugin_os::init())
-
-  Add the capability to `src-tauri/capabilities/default.json`:
-
-      "permissions": ["os:default"]
+  This adds the Cargo dependency, registers the plugin in `main.rs`, and adds
+  the `os:default` capability. See `Mix.Tasks.ExTauri.Add` for details.
 
   ## Examples
 
@@ -55,7 +47,7 @@ defmodule ExTauri.OS do
 
       ExTauri.OS.info(socket)
   """
-  def info(socket) do
-    ExTauri.Hook.push_command(socket, "os_info", %{})
+  def info(socket, on_reply \\ nil) do
+    ExTauri.Hook.push_command(socket, "os_info", %{}, on_reply)
   end
 end

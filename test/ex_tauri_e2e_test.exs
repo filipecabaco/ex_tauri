@@ -38,9 +38,21 @@ defmodule ExTauri.E2ETest do
       src_tauri = Path.join(tmp_dir, "src-tauri")
       src_dir = Path.join(src_tauri, "src")
       capabilities_dir = Path.join(src_tauri, "capabilities")
+      icons_dir = Path.join(src_tauri, "icons")
 
       File.mkdir_p!(src_dir)
       File.mkdir_p!(capabilities_dir)
+      File.mkdir_p!(icons_dir)
+
+      # generate_context! embeds a default window icon (required with the
+      # tray-icon feature); a real install gets icons from `cargo tauri init`,
+      # so provide a minimal valid 1x1 PNG here.
+      png =
+        Base.decode64!(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        )
+
+      File.write!(Path.join(icons_dir, "icon.png"), png)
 
       socket_name = ExTauri.Paths.sanitize_name(@app_name)
 
@@ -80,7 +92,8 @@ defmodule ExTauri.E2ETest do
               ]
             },
             "bundle" => %{
-              "externalBin" => ["../burrito_out/desktop"]
+              "externalBin" => ["../burrito_out/desktop"],
+              "icon" => ["icons/icon.png"]
             }
           },
           pretty: true
@@ -91,6 +104,16 @@ defmodule ExTauri.E2ETest do
       File.write!(Path.join(src_tauri, "build.rs"), build_rs)
       File.write!(Path.join(src_tauri, "tauri.conf.json"), tauri_conf)
       File.write!(Path.join(capabilities_dir, "default.json"), capabilities)
+
+      # tauri-build validates that externalBin resources exist, so provide a
+      # placeholder sidecar binary the way a real build would have one.
+      {rustc_output, 0} = System.cmd("rustc", ["-Vv"])
+      [_, triplet] = Regex.run(~r/host: (.+)/, rustc_output)
+      burrito_out = Path.join(tmp_dir, "burrito_out")
+      File.mkdir_p!(burrito_out)
+      sidecar = Path.join(burrito_out, "desktop-#{String.trim(triplet)}")
+      File.write!(sidecar, "#!/bin/sh\nexit 0\n")
+      File.chmod!(sidecar, 0o755)
 
       # Build (not just check) to produce a real binary
       {build_output, build_exit} =
@@ -131,7 +154,7 @@ defmodule ExTauri.E2ETest do
       assert main_rs =~ "fn main()"
       assert main_rs =~ "fn start_server"
       assert main_rs =~ "fn check_server_started"
-      assert main_rs =~ "fn start_heartbeat"
+      assert main_rs =~ "fn start_channel"
       assert main_rs =~ "fn kill_sidecar"
 
       assert main_rs =~ "tauri::Builder::default()"
@@ -142,6 +165,24 @@ defmodule ExTauri.E2ETest do
 
       assert main_rs =~ "tauri_heartbeat_#{socket_name}.sock"
       assert main_rs =~ "std::env::temp_dir()"
+    end
+
+    test "generated main.rs implements the heartbeat for both Unix and Windows" do
+      socket_name = ExTauri.Paths.sanitize_name(@app_name)
+      main_rs = ExTauri.Install.Helpers.main_src(@host, @port, socket_name)
+
+      # Unix: heartbeat over the Unix domain socket
+      assert main_rs =~ "UnixStream::connect"
+      assert main_rs =~ "tauri_heartbeat_#{socket_name}.sock"
+
+      # Windows: heartbeat over localhost TCP, discovered via the port file
+      # written by ExTauri.ShutdownManager's :tcp transport
+      assert main_rs =~ "tauri_heartbeat_#{socket_name}.port"
+      assert main_rs =~ ~s{TcpStream::connect(("127.0.0.1", p))}
+      refute main_rs =~ "Heartbeat not yet supported on Windows"
+
+      # Quitting stops the heartbeat so the sidecar can shut down gracefully
+      assert main_rs =~ "HEARTBEAT_ACTIVE"
     end
 
     test "generated capabilities.json is valid JSON with required permissions" do

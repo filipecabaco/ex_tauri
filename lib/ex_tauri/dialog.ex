@@ -11,18 +11,10 @@ defmodule ExTauri.Dialog do
 
   ## Plugin Setup
 
-  Add the dependency to `src-tauri/Cargo.toml`:
+      mix ex_tauri.add dialog
 
-      [dependencies]
-      tauri-plugin-dialog = "2"
-
-  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
-
-      .plugin(tauri_plugin_dialog::init())
-
-  Add the capability to `src-tauri/capabilities/default.json`:
-
-      "permissions": ["dialog:default"]
+  This adds the Cargo dependency, registers the plugin in `main.rs`, and adds
+  the `dialog:default` capability. See `Mix.Tasks.ExTauri.Add` for details.
 
   ## Examples
 
@@ -54,7 +46,7 @@ defmodule ExTauri.Dialog do
       ExTauri.Dialog.open(socket, title: "Select an image", filters: [%{name: "Images", extensions: ["png", "jpg"]}])
       ExTauri.Dialog.open(socket, directory: true, title: "Select folder")
   """
-  def open(socket, opts \\ []) do
+  def open(socket, opts \\ [], on_reply \\ nil) do
     payload =
       %{}
       |> maybe_put(:title, opts[:title])
@@ -63,7 +55,7 @@ defmodule ExTauri.Dialog do
       |> maybe_put(:directory, opts[:directory])
       |> maybe_put(:filters, opts[:filters])
 
-    ExTauri.Hook.push_command(socket, "dialog_open", payload)
+    ExTauri.Hook.push_command(socket, "dialog_open", payload, on_reply)
   end
 
   @doc """
@@ -79,14 +71,14 @@ defmodule ExTauri.Dialog do
 
       ExTauri.Dialog.save(socket, title: "Save as", default_path: "document.txt")
   """
-  def save(socket, opts \\ []) do
+  def save(socket, opts \\ [], on_reply \\ nil) do
     payload =
       %{}
       |> maybe_put(:title, opts[:title])
       |> maybe_put(:defaultPath, opts[:default_path])
       |> maybe_put(:filters, opts[:filters])
 
-    ExTauri.Hook.push_command(socket, "dialog_save", payload)
+    ExTauri.Hook.push_command(socket, "dialog_save", payload, on_reply)
   end
 
   @doc """
@@ -101,13 +93,13 @@ defmodule ExTauri.Dialog do
 
       ExTauri.Dialog.message(socket, "Operation completed successfully!")
   """
-  def message(socket, message, opts \\ []) do
+  def message(socket, message, opts \\ [], on_reply \\ nil) do
     payload =
       %{message: message}
       |> maybe_put(:title, opts[:title])
       |> maybe_put(:okLabel, opts[:ok_label])
 
-    ExTauri.Hook.push_command(socket, "dialog_message", payload)
+    ExTauri.Hook.push_command(socket, "dialog_message", payload, on_reply)
   end
 
   @doc """
@@ -126,14 +118,14 @@ defmodule ExTauri.Dialog do
 
       ExTauri.Dialog.confirm(socket, "Are you sure you want to delete this?")
   """
-  def confirm(socket, message, opts \\ []) do
+  def confirm(socket, message, opts \\ [], on_reply \\ nil) do
     payload =
       %{message: message, type: "confirm"}
       |> maybe_put(:title, opts[:title])
       |> maybe_put(:okLabel, opts[:ok_label])
       |> maybe_put(:cancelLabel, opts[:cancel_label])
 
-    ExTauri.Hook.push_command(socket, "dialog_message", payload)
+    ExTauri.Hook.push_command(socket, "dialog_message", payload, on_reply)
   end
 
   @doc """
@@ -151,14 +143,14 @@ defmodule ExTauri.Dialog do
 
       ExTauri.Dialog.ask(socket, "Do you want to save changes before closing?")
   """
-  def ask(socket, message, opts \\ []) do
+  def ask(socket, message, opts \\ [], on_reply \\ nil) do
     payload =
       %{message: message, type: "ask"}
       |> maybe_put(:title, opts[:title])
       |> maybe_put(:okLabel, opts[:ok_label])
       |> maybe_put(:cancelLabel, opts[:cancel_label])
 
-    ExTauri.Hook.push_command(socket, "dialog_message", payload)
+    ExTauri.Hook.push_command(socket, "dialog_message", payload, on_reply)
   end
 
   defp maybe_put(map, _key, nil), do: map

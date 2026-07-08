@@ -13,20 +13,13 @@ defmodule ExTauri.Filesystem do
 
   ## Plugin Setup
 
-  Add the dependency to `src-tauri/Cargo.toml`:
+      mix ex_tauri.add fs
 
-      [dependencies]
-      tauri-plugin-fs = "2"
+  This adds the Cargo dependency, registers the plugin in `main.rs`, and adds
+  the `fs:default` capability. See `Mix.Tasks.ExTauri.Add` for details.
 
-  Register the plugin in `src-tauri/src/main.rs` inside `tauri::Builder`:
-
-      .plugin(tauri_plugin_fs::init())
-
-  Add the capability to `src-tauri/capabilities/default.json`:
-
-      "permissions": ["fs:default"]
-
-  For broader access, use scoped permissions:
+  For broader access, add scoped permissions to
+  `src-tauri/capabilities/default.json`:
 
       {
         "identifier": "fs:allow-read-text-file",
@@ -62,12 +55,12 @@ defmodule ExTauri.Filesystem do
       ExTauri.Filesystem.read(socket, "/path/to/file.txt")
       ExTauri.Filesystem.read(socket, "config.json", base_dir: "AppData")
   """
-  def read(socket, path, opts \\ []) do
+  def read(socket, path, opts \\ [], on_reply \\ nil) do
     payload =
       %{path: path}
       |> maybe_put(:baseDir, opts[:base_dir])
 
-    ExTauri.Hook.push_command(socket, "fs_read", payload)
+    ExTauri.Hook.push_command(socket, "fs_read", payload, on_reply)
   end
 
   @doc """
@@ -83,13 +76,13 @@ defmodule ExTauri.Filesystem do
       ExTauri.Filesystem.write(socket, "/path/to/file.txt", "Hello, world!")
       ExTauri.Filesystem.write(socket, "log.txt", "entry\\n", base_dir: "AppData", append: true)
   """
-  def write(socket, path, contents, opts \\ []) do
+  def write(socket, path, contents, opts \\ [], on_reply \\ nil) do
     payload =
       %{path: path, contents: contents}
       |> maybe_put(:baseDir, opts[:base_dir])
       |> maybe_put(:append, opts[:append])
 
-    ExTauri.Hook.push_command(socket, "fs_write", payload)
+    ExTauri.Hook.push_command(socket, "fs_write", payload, on_reply)
   end
 
   @doc """
@@ -106,12 +99,12 @@ defmodule ExTauri.Filesystem do
 
       ExTauri.Filesystem.exists?(socket, "/path/to/file.txt")
   """
-  def exists?(socket, path, opts \\ []) do
+  def exists?(socket, path, opts \\ [], on_reply \\ nil) do
     payload =
       %{path: path}
       |> maybe_put(:baseDir, opts[:base_dir])
 
-    ExTauri.Hook.push_command(socket, "fs_exists", payload)
+    ExTauri.Hook.push_command(socket, "fs_exists", payload, on_reply)
   end
 
   @doc """
@@ -128,12 +121,12 @@ defmodule ExTauri.Filesystem do
 
       ExTauri.Filesystem.readdir(socket, "/path/to/directory")
   """
-  def readdir(socket, path, opts \\ []) do
+  def readdir(socket, path, opts \\ [], on_reply \\ nil) do
     payload =
       %{path: path}
       |> maybe_put(:baseDir, opts[:base_dir])
 
-    ExTauri.Hook.push_command(socket, "fs_readdir", payload)
+    ExTauri.Hook.push_command(socket, "fs_readdir", payload, on_reply)
   end
 
   @doc """
@@ -147,12 +140,12 @@ defmodule ExTauri.Filesystem do
 
       ExTauri.Filesystem.remove(socket, "/path/to/file.txt")
   """
-  def remove(socket, path, opts \\ []) do
+  def remove(socket, path, opts \\ [], on_reply \\ nil) do
     payload =
       %{path: path}
       |> maybe_put(:baseDir, opts[:base_dir])
 
-    ExTauri.Hook.push_command(socket, "fs_remove", payload)
+    ExTauri.Hook.push_command(socket, "fs_remove", payload, on_reply)
   end
 
   @doc """
@@ -167,12 +160,12 @@ defmodule ExTauri.Filesystem do
 
       ExTauri.Filesystem.mkdir(socket, "/path/to/new/directory")
   """
-  def mkdir(socket, path, opts \\ []) do
+  def mkdir(socket, path, opts \\ [], on_reply \\ nil) do
     payload =
       %{path: path, recursive: Keyword.get(opts, :recursive, true)}
       |> maybe_put(:baseDir, opts[:base_dir])
 
-    ExTauri.Hook.push_command(socket, "fs_mkdir", payload)
+    ExTauri.Hook.push_command(socket, "fs_mkdir", payload, on_reply)
   end
 
   defp maybe_put(map, _key, nil), do: map

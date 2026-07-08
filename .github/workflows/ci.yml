@@ -47,6 +47,30 @@ jobs:
       - name: Run unit & integration tests
         run: mix test --trace
 
+  unit-tests-macos:
+    name: Unit & Integration Tests (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # erlef/setup-beam doesn't support macOS runners; Homebrew's Elixir is
+      # current enough for the unit suite (OTP-version warnings are expected).
+      - name: Set up Elixir
+        run: brew install elixir
+
+      - name: Install dependencies
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+
+      - name: Compile
+        run: mix compile
+
+      - name: Run unit & integration tests
+        run: mix test --trace
+
   e2e-tests:
     name: E2E Tests (Linux)
     runs-on: ubuntu-latest

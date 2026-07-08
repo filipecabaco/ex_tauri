@@ -182,7 +182,7 @@ test -f src-tauri/capabilities/default.json || fail "Missing capabilities/defaul
 test -f assets/vendor/ex_tauri.js  || fail "Missing assets/vendor/ex_tauri.js"
 
 grep -q "let host = \"$HOST\"" src-tauri/src/main.rs || fail "main.rs missing host"
-grep -q "let port = \"$PORT\"" src-tauri/src/main.rs || fail "main.rs missing port"
+grep -q "unwrap_or($PORT)" src-tauri/src/main.rs || fail "main.rs missing default port"
 grep -q "tauri_heartbeat_test_cli_app" src-tauri/src/main.rs || fail "main.rs missing heartbeat socket"
 grep -q '"csp"' src-tauri/tauri.conf.json || fail "tauri.conf.json missing CSP"
 grep -q "TauriHook" assets/vendor/ex_tauri.js || fail "JS hook missing TauriHook"

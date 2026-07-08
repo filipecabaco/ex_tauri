@@ -1,0 +1,9 @@
+/_build/
+/cover/
+/deps/
+/doc/
+erl_crash.dump
+*.ez
+ex_tauri_website-*.tar
+/priv/static/cache_manifest.json
+/priv/static/**/*.gz

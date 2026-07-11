@@ -1,7 +1,5 @@
-_build/
-deps/
-doc/
-test/
-README.md
-.gitignore
-.formatter.exs
+.git
+_build
+deps
+doc
+.elixir_ls

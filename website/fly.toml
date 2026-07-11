@@ -1,0 +1,21 @@
+# fly.toml app configuration file generated for ex-tauri on 2026-07-11T23:58:37+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'ex-tauri'
+primary_region = 'cdg'
+
+[build]
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '256mb'
+  cpus = 1
+  memory_mb = 256

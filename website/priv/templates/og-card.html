@@ -1,0 +1,147 @@
+<!doctype html>
+<!--
+  Source for priv/static/images/og.png (Open Graph / Twitter card).
+  Render at exactly 1200x630, deviceScaleFactor 2 for crisp text.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background: #0b0a10;
+    color: #ece9f4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    position: relative;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+
+  .glow-a, .glow-b { position: absolute; border-radius: 50%; filter: blur(120px); pointer-events: none; }
+  .glow-a { width: 660px; height: 660px; left: -220px; top: -300px; background: rgba(139,92,246,0.24); }
+  .glow-b { width: 540px; height: 540px; right: -180px; bottom: -280px; background: rgba(255,193,49,0.11); }
+
+  .grid {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 28px 28px;
+    -webkit-mask-image: radial-gradient(ellipse 90% 85% at 42% 45%, #000 55%, transparent 100%);
+            mask-image: radial-gradient(ellipse 90% 85% at 42% 45%, #000 55%, transparent 100%);
+  }
+
+  .stage { position: relative; width: 100%; height: 100%; display: flex; align-items: center; gap: 58px; padding: 0 76px; }
+  .left { flex: 1 1 auto; min-width: 0; }
+
+  .brand-row { display: flex; align-items: center; gap: 18px; margin-bottom: 34px; }
+  .mark {
+    width: 50px; height: 50px; border-radius: 15px;
+    background: conic-gradient(from 210deg, #8b5cf6, #6d28d9 45%, #ffc131 46%, #ffc131 60%, #8b5cf6);
+    box-shadow: 0 8px 30px rgba(139,92,246,.45);
+  }
+  .brand-name { font-size: 44px; font-weight: 800; letter-spacing: -0.5px; }
+
+  h1 { font-size: 62px; line-height: 1.08; font-weight: 800; letter-spacing: -1.8px; margin-bottom: 26px; }
+  h1 .accent { color: #a78bfa; }
+
+  .sub { font-size: 27px; line-height: 1.45; color: #a29bb8; max-width: 480px; margin-bottom: 40px; }
+
+  .badges { display: flex; gap: 14px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-size: 20px; font-weight: 600; color: #a78bfa;
+    background: rgba(139,92,246,0.10); border: 1px solid rgba(139,92,246,0.35);
+    border-radius: 999px; padding: 9px 20px;
+  }
+
+  /* native window mockup */
+  .win-wrap { flex: none; width: 470px; position: relative; }
+  .win {
+    background: #14111d; border: 1px solid #2a2438; border-radius: 16px;
+    box-shadow: 0 40px 90px rgba(0,0,0,0.6), 0 0 0 1px rgba(139,92,246,0.10), 0 0 70px rgba(139,92,246,0.10);
+    overflow: hidden;
+  }
+  .titlebar { display: flex; align-items: center; gap: 8px; padding: 15px 18px; background: #1a1626; border-bottom: 1px solid #221d30; }
+  .dot { width: 13px; height: 13px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .win-title { margin-left: 12px; font-size: 15px; color: #8c85a3; font-weight: 500; }
+
+  .win-body { padding: 34px 34px 40px; }
+  .eyebrow { font-size: 14px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #8b5cf6; margin-bottom: 14px; }
+  .win-h { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 12px; }
+  .win-p { font-size: 17px; line-height: 1.5; color: #a29bb8; margin-bottom: 26px; }
+  .win-actions { display: flex; gap: 12px; }
+  .btn-primary {
+    padding: 12px 22px; border-radius: 11px; font-size: 16px; font-weight: 700; color: #0b0a10;
+    background: linear-gradient(180deg, #a78bfa, #8b5cf6); border: none;
+  }
+  .btn-ghost {
+    padding: 12px 22px; border-radius: 11px; font-size: 16px; font-weight: 600; color: #ece9f4;
+    background: #1d1928; border: 1px solid #2a2438;
+  }
+
+  /* native toast, overlapping the window */
+  .toast {
+    position: absolute; right: -30px; bottom: -26px;
+    display: flex; align-items: center; gap: 14px;
+    background: #1d1928; border: 1px solid #2a2438; border-radius: 14px;
+    padding: 15px 20px; width: 320px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+  }
+  .toast .ic {
+    flex: none; width: 40px; height: 40px; border-radius: 11px;
+    background: conic-gradient(from 210deg, #8b5cf6, #6d28d9 45%, #ffc131 46%, #ffc131 60%, #8b5cf6);
+  }
+  .toast .tt { font-size: 17px; font-weight: 700; }
+  .toast .tb { font-size: 14px; color: #a29bb8; margin-top: 2px; }
+</style>
+</head>
+<body>
+  <div class="glow-a"></div>
+  <div class="glow-b"></div>
+  <div class="grid"></div>
+
+  <div class="stage">
+    <div class="left">
+      <div class="brand-row">
+        <span class="mark"></span>
+        <div class="brand-name">ex-tauri</div>
+      </div>
+
+      <h1>Native desktop apps,<br><span class="accent">written in Elixir.</span></h1>
+
+      <div class="sub">Run your Phoenix&nbsp;LiveView app as a native window on macOS&nbsp;&amp;&nbsp;Linux.</div>
+
+      <div class="badges">
+        <span class="badge">Desktop APIs</span>
+        <span class="badge">Single binary</span>
+      </div>
+    </div>
+
+    <div class="win-wrap">
+      <div class="win">
+        <div class="titlebar">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span class="win-title mono">My App</span>
+        </div>
+        <div class="win-body">
+          <div class="eyebrow">Phoenix LiveView</div>
+          <div class="win-h">Your app, natively.</div>
+          <div class="win-p">Same code. Same components. Now in a real desktop window.</div>
+          <div class="win-actions">
+            <button class="btn-primary">Save file</button>
+            <button class="btn-ghost">Open…</button>
+          </div>
+        </div>
+      </div>
+      <div class="toast">
+        <span class="ic"></span>
+        <div>
+          <div class="tt">Saved!</div>
+          <div class="tb">Driven from Elixir.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -3,11 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ExTauri — Build native desktop apps with Phoenix &amp; Elixir</title>
-<meta name="description" content="ExTauri wraps Tauri so your Phoenix LiveView app runs as a native desktop application on macOS, Windows, and Linux — desktop APIs from Elixir, no JavaScript required.">
-<meta property="og:title" content="ExTauri — Build native desktop apps with Phoenix &amp; Elixir">
-<meta property="og:description" content="Turn your Phoenix LiveView app into a native desktop application. Notifications, dialogs, tray, filesystem and more — driven from Elixir.">
+<title>ex-tauri — Native desktop apps with Phoenix &amp; Elixir</title>
+<meta name="description" content="ex-tauri wraps Tauri so your Phoenix LiveView app runs as a native desktop application on macOS and Linux — desktop APIs from Elixir, no JavaScript required.">
+<meta name="theme-color" content="#0b0a10">
+<link rel="canonical" href="<%= base_url %>/">
+
+<!-- Open Graph -->
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="ex-tauri">
+<meta property="og:url" content="<%= base_url %>/">
+<meta property="og:title" content="ex-tauri — Native desktop apps with Phoenix &amp; Elixir">
+<meta property="og:description" content="Run your Phoenix LiveView app as a native desktop app on macOS and Linux — notifications, dialogs and tray driven from Elixir.">
+<meta property="og:image" content="<%= og_image %>">
+<meta property="og:image:secure_url" content="<%= og_image %>">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="ex-tauri — native desktop apps written in Elixir. Elixir code using ExTauri.Notification and ExTauri.Dialog to drive native desktop features.">
+<meta property="og:locale" content="en_US">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ex-tauri — Native desktop apps with Phoenix &amp; Elixir">
+<meta name="twitter:description" content="Run your Phoenix LiveView app as a native desktop app on macOS and Linux — notifications, dialogs and tray driven from Elixir.">
+<meta name="twitter:image" content="<%= og_image %>">
+<meta name="twitter:image:alt" content="ex-tauri — native desktop apps written in Elixir. Elixir code using ExTauri.Notification and ExTauri.Dialog to drive native desktop features.">
+
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='42' fill='%238b5cf6'/%3E%3Ccircle cx='50' cy='50' r='18' fill='%23ffc131'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="<%= tw_css %>">
 </head>
@@ -16,8 +37,8 @@
 <nav class="sticky top-0 z-50 border-b border-bdr-soft bg-ink/80 backdrop-blur-md">
   <div class="mx-auto flex h-16 max-w-5xl items-center gap-7 px-6">
     <a class="flex items-center gap-2.5 text-[17px] font-bold text-txt no-underline" href="#">
-      <span class="h-[26px] w-[26px] rounded-lg bg-[conic-gradient(from_210deg,#8b5cf6,#6d28d9_45%,#ffc131_46%,#ffc131_60%,#8b5cf6)] shadow-[0_0_18px_rgba(139,92,246,.45)]"></span>
-      ExTauri
+      <span class="h-[26px] w-[26px] rounded-lg bg-[conic-gradient(from_210deg,#8b5cf6,#6d28d9_45%,#ffc131_46%,#ffc131_60%,#8b5cf6)]"></span>
+      ex-tauri
     </a>
     <div class="ml-auto flex items-center gap-5">
       <a href="#features" class="hidden text-sm font-medium text-mut hover:text-txt sm:block">Features</a>
@@ -37,11 +58,11 @@
   <div class="relative mx-auto max-w-5xl px-6">
     <h1 class="mb-5 text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl">
       Build native desktop apps<br>
-      with <span class="bg-gradient-to-r from-grape via-[#c4b5fd] to-amber bg-clip-text text-transparent">Phoenix &amp; Elixir</span>
+      with <span class="text-grape">Phoenix &amp; Elixir</span>
     </h1>
     <p class="mx-auto mb-9 max-w-2xl text-lg text-mut">
       Run your Phoenix LiveView app as a native desktop application on
-      <strong class="font-semibold text-txt">macOS, Windows, and Linux</strong>
+      <strong class="font-semibold text-txt">macOS and Linux</strong>
       — desktop APIs included, no JavaScript required.
     </p>
     <div class="mb-7 flex flex-wrap justify-center gap-3.5">
@@ -55,31 +76,27 @@
       </button>
     </div>
 
-    <div class="mx-auto mt-14 max-w-3xl overflow-hidden rounded-2xl border border-bdr bg-panel shadow-[0_30px_80px_rgba(0,0,0,.55),0_0_0_1px_rgba(139,92,246,.12)]">
-      <div class="flex items-center gap-2 border-b border-bdr-soft bg-panel-2 px-3.5 py-2.5">
-        <span class="h-[11px] w-[11px] rounded-full bg-[#ff5f57]"></span>
-        <span class="h-[11px] w-[11px] rounded-full bg-[#febc2e]"></span>
-        <span class="h-[11px] w-[11px] rounded-full bg-[#28c840]"></span>
-        <span class="mx-auto -translate-x-6 text-xs text-faint">My Phoenix App — native window</span>
+    <figure class="mx-auto mt-14 max-w-4xl">
+      <div class="overflow-hidden rounded-2xl border border-bdr shadow-[0_30px_80px_rgba(0,0,0,.55)]">
+        <img class="block w-full" src="<%= hero_image %>" alt="Codrift, a desktop app, running as a native window via ex-tauri" loading="lazy">
       </div>
-      <img class="block w-full" src="<%= example_gif %>" alt="A Phoenix LiveView application running inside a native desktop window via ExTauri" loading="lazy">
-    </div>
+      <figcaption class="mt-4 text-sm text-faint">Codrift, a real app, running as a native window via ex-tauri.</figcaption>
+    </figure>
   </div>
 </header>
 
 <section id="features" class="py-26">
   <div class="mx-auto max-w-5xl px-6">
     <div class="mx-auto mb-13 max-w-xl text-center">
-      <div class="eyebrow">Features</div>
       <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Keep writing Phoenix. Ship a desktop app.</h2>
     </div>
     <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 "><svg class="h-5 w-5 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25"/> </svg></div><h3 class="mb-2 font-semibold">LiveView as a Desktop App</h3><p class="text-sm text-mut">Your app renders inside a native window — same code, same components.</p></div>
-      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 "><svg class="h-5 w-5 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 0 1-.657.643 48.39 48.39 0 0 1-4.163-.3c.186 1.613.293 3.25.315 4.907a.656.656 0 0 1-.658.663v0c-.355 0-.676-.186-.959-.401a1.647 1.647 0 0 0-1.003-.349c-1.036 0-1.875 1.007-1.875 2.25s.84 2.25 1.875 2.25c.369 0 .713-.128 1.003-.349.283-.215.604-.401.959-.401v0c.31 0 .555.26.532.57a48.039 48.039 0 0 1-.642 5.056c1.518.19 3.058.309 4.616.354a.64.64 0 0 0 .657-.643v0c0-.355-.186-.676-.401-.959a1.647 1.647 0 0 1-.349-1.003c0-1.035 1.008-1.875 2.25-1.875 1.243 0 2.25.84 2.25 1.875 0 .369-.128.713-.349 1.003-.215.283-.4.604-.4.959v0c0 .333.277.599.61.58a48.1 48.1 0 0 0 5.427-.63 48.05 48.05 0 0 0 .582-4.717.532.532 0 0 0-.533-.57v0c-.355 0-.676.186-.959.401-.29.221-.634.349-1.003.349-1.035 0-1.875-1.007-1.875-2.25s.84-2.25 1.875-2.25c.37 0 .713.128 1.003.349.283.215.604.401.96.401v0a.656.656 0 0 0 .658-.663 48.422 48.422 0 0 0-.37-5.36c-1.886.342-3.81.574-5.766.689a.578.578 0 0 1-.61-.58v0Z"/> </svg></div><h3 class="mb-2 font-semibold">Desktop APIs from Elixir</h3><p class="text-sm text-mut">Notifications, dialogs, clipboard, filesystem, tray — with callback-style responses.</p></div>
-      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 "><svg class="h-5 w-5 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/> </svg></div><h3 class="mb-2 font-semibold">True Hot Reload</h3><p class="text-sm text-mut"><code class="inline-code">mix ex_tauri.dev</code> runs your dev server inside the native window.</p></div>
-      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 "><svg class="h-5 w-5 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/> </svg></div><h3 class="mb-2 font-semibold">Server-Side Channel</h3><p class="text-sm text-mut">Send notifications and drive the system tray from GenServers — no browser involved.</p></div>
-      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 "><svg class="h-5 w-5 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/> </svg></div><h3 class="mb-2 font-semibold">Single Binary</h3><p class="text-sm text-mut">Burrito bundles the BEAM and your app into one executable per platform.</p></div>
-      <div class="card"><div class="mb-4 grid h-10 w-10 place-items-center rounded-lg border border-bdr bg-gradient-to-br from-grape-deep/20 to-amber/10 "><svg class="h-5 w-5 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/> </svg></div><h3 class="mb-2 font-semibold">Graceful Shutdown</h3><p class="text-sm text-mut">Heartbeat-based cleanup, even on force-quit or crash.</p></div>
+      <div class="card lg:col-span-2"><svg class="mb-3.5 h-6 w-6 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25"/> </svg><h3 class="mb-2 font-semibold">LiveView as a Desktop App</h3><p class="text-sm text-mut">Your app renders inside a native window — same code, same components.</p></div>
+      <div class="card"><svg class="mb-3.5 h-6 w-6 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 0 1-.657.643 48.39 48.39 0 0 1-4.163-.3c.186 1.613.293 3.25.315 4.907a.656.656 0 0 1-.658.663v0c-.355 0-.676-.186-.959-.401a1.647 1.647 0 0 0-1.003-.349c-1.036 0-1.875 1.007-1.875 2.25s.84 2.25 1.875 2.25c.369 0 .713-.128 1.003-.349.283-.215.604-.401.959-.401v0c.31 0 .555.26.532.57a48.039 48.039 0 0 1-.642 5.056c1.518.19 3.058.309 4.616.354a.64.64 0 0 0 .657-.643v0c0-.355-.186-.676-.401-.959a1.647 1.647 0 0 1-.349-1.003c0-1.035 1.008-1.875 2.25-1.875 1.243 0 2.25.84 2.25 1.875 0 .369-.128.713-.349 1.003-.215.283-.4.604-.4.959v0c0 .333.277.599.61.58a48.1 48.1 0 0 0 5.427-.63 48.05 48.05 0 0 0 .582-4.717.532.532 0 0 0-.533-.57v0c-.355 0-.676.186-.959.401-.29.221-.634.349-1.003.349-1.035 0-1.875-1.007-1.875-2.25s.84-2.25 1.875-2.25c.37 0 .713.128 1.003.349.283.215.604.401.96.401v0a.656.656 0 0 0 .658-.663 48.422 48.422 0 0 0-.37-5.36c-1.886.342-3.81.574-5.766.689a.578.578 0 0 1-.61-.58v0Z"/> </svg><h3 class="mb-2 font-semibold">Desktop APIs from Elixir</h3><p class="text-sm text-mut">Notifications, dialogs, clipboard, filesystem, tray — with callback-style responses.</p></div>
+      <div class="card"><svg class="mb-3.5 h-6 w-6 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/> </svg><h3 class="mb-2 font-semibold">True Hot Reload</h3><p class="text-sm text-mut"><code class="inline-code">mix ex_tauri.dev</code> runs your dev server inside the native window.</p></div>
+      <div class="card lg:col-span-2"><svg class="mb-3.5 h-6 w-6 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/> </svg><h3 class="mb-2 font-semibold">Server-Side Channel</h3><p class="text-sm text-mut">Send notifications and drive the system tray from GenServers — no browser involved.</p></div>
+      <div class="card lg:col-span-2"><svg class="mb-3.5 h-6 w-6 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/> </svg><h3 class="mb-2 font-semibold">Single Binary</h3><p class="text-sm text-mut">Burrito bundles the BEAM and your app into one executable per platform.</p></div>
+      <div class="card"><svg class="mb-3.5 h-6 w-6 text-grape" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon"> <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/> </svg><h3 class="mb-2 font-semibold">Graceful Shutdown</h3><p class="text-sm text-mut">Heartbeat-based cleanup, even on force-quit or crash.</p></div>
     </div>
   </div>
 </section>
@@ -87,7 +104,6 @@
 <section id="get-started" class="border-y border-bdr-soft bg-ink-soft py-26">
   <div class="mx-auto max-w-3xl px-6">
     <div class="mb-13">
-      <div class="eyebrow">Get Started</div>
       <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Three steps to a native window</h2>
     </div>
 
@@ -96,7 +112,7 @@
         <div><div class="grid h-10 w-10 place-items-center rounded-full border border-grape-deep/35 bg-grape-deep/10 font-bold text-grape">1</div></div>
         <div>
           <h3 class="mb-3 text-lg font-semibold">Add the dependency</h3>
-          <div class="code-shell"><div class="code-label">mix.exs</div><pre><code class="lang-elixir">{:ex_tauri, git: "https://github.com/filipecabaco/ex_tauri.git"}</code></pre></div>
+          <div class="code-shell"><div class="code-label">mix.exs</div><pre><code class="lang-elixir">{:ex_tauri, "~> 0.1.0"}</code></pre></div>
         </div>
       </div>
 
@@ -127,7 +143,6 @@ mix ex_tauri.install</code></pre></div>
 <section id="apis" class="py-26">
   <div class="mx-auto max-w-5xl px-6">
     <div class="mb-13 max-w-2xl">
-      <div class="eyebrow">Desktop APIs</div>
       <h2 class="mb-3.5 text-3xl font-bold tracking-tight sm:text-4xl">Native capabilities, idiomatic Elixir</h2>
       <p class="text-mut">Add <code class="inline-code">use ExTauri.LiveView</code> and every API accepts a callback that receives the result — no manual event pattern-matching.</p>
     </div>
@@ -185,7 +200,7 @@ ExTauri.Desktop.set_tray(
 )</code></pre></div>
     </div>
 
-    <p class="mt-8 max-w-3xl rounded-r-xl border-l-[3px] border-grape-deep bg-grape-deep/5 px-4.5 py-3.5 text-[14.5px] text-mut">
+    <p class="mt-8 max-w-3xl rounded-xl border border-grape-deep/25 bg-grape-deep/5 px-4.5 py-3.5 text-[14.5px] text-mut">
       <b class="font-semibold text-txt">Notification, Shell, Window, Event, App</b> and <b class="font-semibold text-txt">Desktop</b> work out of the box.
       Dialogs, clipboard, filesystem, global shortcuts, autostart, updater, and deep links are one
       <code class="inline-code">mix ex_tauri.add &lt;plugin&gt;</code> away —
@@ -197,7 +212,6 @@ ExTauri.Desktop.set_tray(
 <section id="architecture" class="border-y border-bdr-soft bg-ink-soft py-26">
   <div class="mx-auto max-w-5xl px-6">
     <div class="mb-13">
-      <div class="eyebrow">Architecture</div>
       <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">How it works</h2>
     </div>
     <div class="grid items-start gap-10 lg:grid-cols-2">
@@ -225,7 +239,7 @@ ExTauri.Desktop.set_tray(
         </div>
         <div>
           <h4 class="mb-1 font-semibold">Crash-safe shutdown</h4>
-          <p class="text-sm text-mut">The frontend heartbeats over a local socket; if it stops — quit, crash, or force-kill — Phoenix shuts down cleanly. Works on every platform, including Windows.</p>
+          <p class="text-sm text-mut">The frontend heartbeats over a local socket; if it stops — quit, crash, or force-kill — Phoenix shuts down cleanly, every time.</p>
         </div>
       </div>
     </div>
@@ -235,34 +249,24 @@ ExTauri.Desktop.set_tray(
 <section id="ship" class="py-26 text-center">
   <div class="mx-auto max-w-3xl px-6">
     <div class="mx-auto mb-13 max-w-xl">
-      <div class="eyebrow">Ship It</div>
       <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">One command to production bundles</h2>
     </div>
     <div class="code-shell mx-auto mb-6 max-w-md"><div class="code-label">shell</div><pre><code class="lang-bash">mix ex_tauri.build</code></pre></div>
     <ul class="flex list-none flex-wrap justify-center gap-3 p-0">
       <li class="flex items-center gap-2.5 rounded-xl border border-bdr-soft bg-panel px-4.5 py-3 text-sm font-semibold">macOS <span class="font-mono text-[13px] font-normal text-amber">.app · .dmg</span></li>
       <li class="flex items-center gap-2.5 rounded-xl border border-bdr-soft bg-panel px-4.5 py-3 text-sm font-semibold">Linux <span class="font-mono text-[13px] font-normal text-amber">.deb · .appimage</span></li>
-      <li class="flex items-center gap-2.5 rounded-xl border border-bdr-soft bg-panel px-4.5 py-3 text-sm font-semibold">Windows <span class="font-mono text-[13px] font-normal text-amber">.msi · .exe</span></li>
     </ul>
     <p class="mt-10 text-sm text-faint">Signing, notarization, auto-updates, CI matrix: <a class="text-mut underline hover:text-txt" href="https://github.com/filipecabaco/ex_tauri/blob/main/guides/releasing.md">release guide</a>. Working demos in <a class="text-mut underline hover:text-txt" href="https://github.com/filipecabaco/ex_tauri/tree/main/demos">demos/</a> and <a class="text-mut underline hover:text-txt" href="https://github.com/filipecabaco/ex_tauri/tree/main/example">example/</a>.</p>
   </div>
 </section>
 
-<div class="py-25 text-center">
-  <div class="mx-auto max-w-5xl px-6">
-    <h2 class="mb-8 text-3xl font-extrabold tracking-tight sm:text-5xl">Your LiveView app, <span class="bg-gradient-to-r from-grape to-amber bg-clip-text text-transparent">on the desktop</span></h2>
-    <div class="flex flex-wrap justify-center gap-3.5">
-      <a class="btn-primary" href="#get-started">Get Started</a>
-      <a class="btn-ghost" href="https://github.com/filipecabaco/ex_tauri"><svg class="h-4 w-4 text-amber" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" data-slot="icon"> <path fill-rule="evenodd" d="M8 1.75a.75.75 0 0 1 .692.462l1.41 3.393 3.664.293a.75.75 0 0 1 .428 1.317l-2.791 2.39.853 3.575a.75.75 0 0 1-1.12.814L7.998 12.08l-3.135 1.915a.75.75 0 0 1-1.12-.814l.852-3.574-2.79-2.39a.75.75 0 0 1 .427-1.318l3.663-.293 1.41-3.393A.75.75 0 0 1 8 1.75Z" clip-rule="evenodd"/> </svg>Star on GitHub</a>
-    </div>
-  </div>
-</div>
-
 <footer class="border-t border-bdr-soft py-10 text-[13.5px] text-faint">
   <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-5 px-6">
-    <div>ExTauri · MIT License · © <%= year %> · Built with <svg class="inline h-3.5 w-3.5 -mt-px text-grape" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" data-slot="icon"> <path d="M2 6.342a3.375 3.375 0 0 1 6-2.088 3.375 3.375 0 0 1 5.997 2.26c-.063 2.134-1.618 3.76-2.955 4.784a14.437 14.437 0 0 1-2.676 1.61c-.02.01-.038.017-.05.022l-.014.006-.004.002h-.002a.75.75 0 0 1-.592.001h-.002l-.004-.003-.015-.006a5.528 5.528 0 0 1-.232-.107 14.395 14.395 0 0 1-2.535-1.557C3.564 10.22 1.999 8.558 1.999 6.38L2 6.342Z"/> </svg> on the BEAM, served by <a class="footer-link" href="https://francis.build">Francis</a></div>
+    <div>ex-tauri · MIT License · © <%= year %> · Built with <svg class="inline h-3.5 w-3.5 -mt-px text-grape" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" data-slot="icon"> <path d="M2 6.342a3.375 3.375 0 0 1 6-2.088 3.375 3.375 0 0 1 5.997 2.26c-.063 2.134-1.618 3.76-2.955 4.784a14.437 14.437 0 0 1-2.676 1.61c-.02.01-.038.017-.05.022l-.014.006-.004.002h-.002a.75.75 0 0 1-.592.001h-.002l-.004-.003-.015-.006a5.528 5.528 0 0 1-.232-.107 14.395 14.395 0 0 1-2.535-1.557C3.564 10.22 1.999 8.558 1.999 6.38L2 6.342Z"/> </svg> on the BEAM, served by <a class="footer-link" href="https://francis.build">Francis</a></div>
     <div class="flex flex-wrap gap-4.5">
       <a class="footer-link" href="https://github.com/filipecabaco/ex_tauri">GitHub</a>
+      <a class="footer-link" href="https://hex.pm/packages/ex_tauri">Hex</a>
+      <a class="footer-link" href="https://hexdocs.pm/ex_tauri">HexDocs</a>
       <a class="footer-link" href="https://github.com/filipecabaco/ex_tauri/blob/main/guides/releasing.md">Release Guide</a>
       <a class="footer-link" href="https://tauri.app">Tauri</a>
       <a class="footer-link" href="https://github.com/burrito-elixir/burrito">Burrito</a>

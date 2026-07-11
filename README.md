@@ -38,7 +38,7 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 # mix.exs
 def deps do
   [
-    {:ex_tauri, git: "https://github.com/filipecabaco/ex_tauri.git"}
+    {:ex_tauri, "~> 0.1.0"}
   ]
 end
 ```

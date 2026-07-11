@@ -36,14 +36,10 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center gap-2 rounded-xl px-5 py-3 text-[15px] font-semibold no-underline transition hover:-translate-y-px bg-gradient-to-br from-grape-deep to-[#7c3aed] text-white shadow-[0_6px_24px_rgba(139,92,246,.35)] hover:shadow-[0_8px_30px_rgba(139,92,246,.5)];
+    @apply inline-flex items-center gap-2 rounded-xl px-5 py-3 text-[15px] font-semibold no-underline transition hover:-translate-y-px bg-grape-deep text-white hover:bg-[#7c3aed];
   }
   .btn-ghost {
     @apply inline-flex items-center gap-2 rounded-xl px-5 py-3 text-[15px] font-semibold no-underline transition hover:-translate-y-px border border-bdr bg-panel text-txt hover:border-grape-deep;
-  }
-
-  .eyebrow {
-    @apply mb-2.5 text-[13px] font-bold uppercase tracking-widest text-amber;
   }
 
   .card {

@@ -19,6 +19,8 @@ defmodule ExTauriWebsite do
 
   get("/health", fn _ -> %{status: "ok"} end)
 
+  @base_url System.get_env("BASE_URL", "https://ex-tauri.build")
+
   get("/", fn conn ->
     html =
       :code.priv_dir(:ex_tauri_website)
@@ -26,7 +28,9 @@ defmodule ExTauriWebsite do
       |> EEx.eval_file(
         tw_css: Francis.Static.static_path("tw.css"),
         site_js: Francis.Static.static_path("site.js"),
-        example_gif: Francis.Static.static_path("images/example.gif"),
+        hero_image: Francis.Static.static_path("images/hero.png"),
+        base_url: @base_url,
+        og_image: @base_url <> Francis.Static.static_path("images/og.png"),
         year: Date.utc_today().year
       )
 

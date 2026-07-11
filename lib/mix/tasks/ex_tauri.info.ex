@@ -58,12 +58,13 @@ defmodule Mix.Tasks.ExTauri.Info do
 
   @impl true
   def run(args) do
-    {opts, extra_args} = OptionParser.parse!(args,
-      strict: [
-        interactive: :boolean,
-        config: :string
-      ]
-    )
+    {opts, extra_args} =
+      OptionParser.parse!(args,
+        strict: [
+          interactive: :boolean,
+          config: :string
+        ]
+      )
 
     tauri_args = build_tauri_args(opts, extra_args)
     ExTauri.run_simple(["info" | tauri_args])

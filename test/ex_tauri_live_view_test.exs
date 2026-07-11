@@ -62,7 +62,9 @@ defmodule ExTauri.LiveViewTest do
   describe "handle_bridge_event/3 fall-through" do
     test "responses without a registered callback continue to user handlers" do
       params = %{"ref" => "123", "command" => "dialog_open", "path" => "/tmp/x"}
-      assert {:cont, _socket} = LiveView.handle_bridge_event("tauri_response", params, fake_socket())
+
+      assert {:cont, _socket} =
+               LiveView.handle_bridge_event("tauri_response", params, fake_socket())
     end
 
     test "errors without a registered callback continue to user handlers" do

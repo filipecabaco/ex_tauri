@@ -98,6 +98,7 @@ defmodule ExTauri.DesktopTest do
       assert eventually(fn -> Desktop.notify("Hello", body: "World") == :ok end)
 
       assert {:ok, line} = recv_line(client)
+
       assert %{
                "type" => "command",
                "name" => "notify",

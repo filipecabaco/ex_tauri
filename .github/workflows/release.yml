@@ -1,0 +1,108 @@
+name: Release to Hex
+
+# Publishes ex_tauri to hex.pm when a version tag (vX.Y.Z) is pushed, and
+# creates a GitHub Release with generated notes. Tags are normally created
+# automatically by tag-and-release.yml when @version in mix.exs changes on main,
+# but this also runs on a manually pushed tag or via workflow_dispatch.
+#
+# Setup (once): generate a Hex API key with
+#   mix hex.user key generate --permission api:write
+# and store it as the `HEX_API_KEY` repository secret.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release from (e.g., v0.1.0)"
+        required: true
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  ELIXIR_VERSION: "1.17"
+  OTP_VERSION: "27"
+
+jobs:
+  publish:
+    name: Publish to Hex
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout specified tag (manual dispatch only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
+        run: |
+          git fetch --tags
+          git checkout ${{ inputs.tag }}
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-release-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-release-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-
+
+      - name: Install dependencies
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+
+      - name: Verify tag matches mix.exs version
+        run: |
+          MIX_VERSION="$(mix run --no-start -e 'IO.puts(Mix.Project.config()[:version])')"
+          REF="${{ inputs.tag != '' && inputs.tag || github.ref_name }}"
+          TAG_VERSION="${REF#v}"
+          echo "mix.exs version: $MIX_VERSION"
+          echo "release tag:     $TAG_VERSION"
+          if [ "$MIX_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag $REF does not match mix.exs version $MIX_VERSION"
+            exit 1
+          fi
+
+      - name: Compile (warnings as errors)
+        run: mix compile --warnings-as-errors
+        env:
+          MIX_ENV: test
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Run tests
+        run: mix test
+        env:
+          MIX_ENV: test
+
+      - name: Build docs
+        run: mix docs
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to Hex
+        run: mix hex.publish --yes
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}

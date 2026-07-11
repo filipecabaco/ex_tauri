@@ -65,15 +65,16 @@ defmodule Mix.Tasks.ExTauri.Icon do
 
   @impl true
   def run(args) do
-    {opts, positional_args} = OptionParser.parse!(args,
-      strict: [
-        output: :string,
-        config: :string
-      ],
-      aliases: [
-        o: :output
-      ]
-    )
+    {opts, positional_args} =
+      OptionParser.parse!(args,
+        strict: [
+          output: :string,
+          config: :string
+        ],
+        aliases: [
+          o: :output
+        ]
+      )
 
     tauri_args = build_tauri_args(opts, positional_args)
     ExTauri.run_simple(["icon" | tauri_args])

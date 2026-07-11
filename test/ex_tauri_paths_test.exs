@@ -45,7 +45,12 @@ defmodule ExTauri.PathsTest do
     end
 
     test "creates the directory if it doesn't exist" do
-      Application.put_env(:ex_tauri, :app_name, "paths_test_#{System.unique_integer([:positive])}")
+      Application.put_env(
+        :ex_tauri,
+        :app_name,
+        "paths_test_#{System.unique_integer([:positive])}"
+      )
+
       path = Paths.data_dir()
 
       assert File.dir?(path)
@@ -147,7 +152,10 @@ defmodule ExTauri.PathsTest do
     test "respects XDG_DATA_HOME" do
       if match?({:unix, linux} when linux != :darwin, :os.type()) do
         Application.put_env(:ex_tauri, :app_name, "Test App")
-        custom_dir = Path.join(System.tmp_dir!(), "xdg_test_data_#{System.unique_integer([:positive])}")
+
+        custom_dir =
+          Path.join(System.tmp_dir!(), "xdg_test_data_#{System.unique_integer([:positive])}")
+
         System.put_env("XDG_DATA_HOME", custom_dir)
 
         path = Paths.data_dir()
@@ -162,7 +170,10 @@ defmodule ExTauri.PathsTest do
     test "respects XDG_CONFIG_HOME" do
       if match?({:unix, linux} when linux != :darwin, :os.type()) do
         Application.put_env(:ex_tauri, :app_name, "Test App")
-        custom_dir = Path.join(System.tmp_dir!(), "xdg_test_config_#{System.unique_integer([:positive])}")
+
+        custom_dir =
+          Path.join(System.tmp_dir!(), "xdg_test_config_#{System.unique_integer([:positive])}")
+
         System.put_env("XDG_CONFIG_HOME", custom_dir)
 
         path = Paths.config_dir()
@@ -176,7 +187,10 @@ defmodule ExTauri.PathsTest do
     test "respects XDG_CACHE_HOME" do
       if match?({:unix, linux} when linux != :darwin, :os.type()) do
         Application.put_env(:ex_tauri, :app_name, "Test App")
-        custom_dir = Path.join(System.tmp_dir!(), "xdg_test_cache_#{System.unique_integer([:positive])}")
+
+        custom_dir =
+          Path.join(System.tmp_dir!(), "xdg_test_cache_#{System.unique_integer([:positive])}")
+
         System.put_env("XDG_CACHE_HOME", custom_dir)
 
         path = Paths.cache_dir()

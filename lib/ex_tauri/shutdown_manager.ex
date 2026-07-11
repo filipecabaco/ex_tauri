@@ -114,9 +114,7 @@ defmodule ExTauri.ShutdownManager do
     # Schedule the first heartbeat check
     schedule_heartbeat_check(heartbeat_interval)
 
-    Logger.info(
-      "[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{endpoint}"
-    )
+    Logger.info("[ExTauri.ShutdownManager] Started - heartbeat monitoring active on #{endpoint}")
 
     {:ok,
      %{

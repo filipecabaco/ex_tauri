@@ -31,7 +31,7 @@ defmodule ExTauri.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib priv guides .formatter.exs mix.exs README.md LICENSE)
+      files: ~w(lib priv guides .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
@@ -40,13 +40,13 @@ defmodule ExTauri.MixProject do
       main: "readme",
       source_url: @source_url,
       source_ref: "v#{@version}",
-      extras: ["README.md", "guides/releasing.md"]
+      extras: ["README.md", "CHANGELOG.md", "guides/releasing.md"]
     ]
   end
 
   defp deps do
     [
-      {:ex_doc, ">= 0.0.0", only: :docs},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:burrito, "~> 1.5"},
       {:igniter, "~> 0.7"},
       {:jason, "~> 1.4"}

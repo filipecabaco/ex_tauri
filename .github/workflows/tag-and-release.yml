@@ -1,0 +1,50 @@
+name: Tag and Release
+
+# When @version in mix.exs changes on main, create and push the matching
+# vX.Y.Z tag. That tag push triggers release.yml, which publishes to hex.pm.
+#
+# Release flow: bump @version in mix.exs -> merge to main -> tag is created
+# here -> release.yml publishes to Hex and cuts a GitHub Release.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get version from mix.exs
+        run: |
+          VERSION=$(grep -m 1 '@version' mix.exs | sed 's/.*"\([0-9.]*\)".*/\1/')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists. Skipping."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"

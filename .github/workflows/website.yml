@@ -1,0 +1,31 @@
+name: Website CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["website/**"]
+  pull_request:
+    paths: ["website/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            website/deps
+            website/_build
+          key: website-mix-${{ hashFiles('website/mix.exs') }}
+      - run: mix deps.get
+      - run: mix assets.build
+      - run: mix compile --warnings-as-errors
+      - run: mix test

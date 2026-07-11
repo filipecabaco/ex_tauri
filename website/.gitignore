@@ -1,0 +1,12 @@
+/_build/
+/cover/
+/deps/
+/doc/
+erl_crash.dump
+*.ez
+ex_tauri_website-*.tar
+
+# tailwind + digest build output
+/priv/static/tw.css
+/priv/static/cache_manifest.json
+/priv/static/**/*.gz

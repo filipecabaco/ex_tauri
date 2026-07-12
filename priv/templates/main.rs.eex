@@ -261,12 +261,14 @@ fn secret_key_base() -> String {
 }
 
 fn start_server(app: &tauri::AppHandle, port: u16) {
-    // Standard Phoenix runtime.exs reads these; no app changes needed.
+    // PORT and SECRET_KEY_BASE are always injected: every server needs a port,
+    // and SECRET_KEY_BASE is a random per-launch secret (inert if unused). The
+    // remaining pairs come from `config :ex_tauri, :sidecar_env` — the Phoenix
+    // defaults (PHX_SERVER/PHX_HOST) unless overridden for another framework.
     let env: std::collections::HashMap<String, String> = std::collections::HashMap::from([
         ("PORT".to_string(), port.to_string()),
-        ("PHX_SERVER".to_string(), "true".to_string()),
-        ("PHX_HOST".to_string(), "<%= host %>".to_string()),
-        ("SECRET_KEY_BASE".to_string(), secret_key_base()),
+        ("SECRET_KEY_BASE".to_string(), secret_key_base()),<%= for {k, v} <- sidecar_env do %>
+        ("<%= k %>".to_string(), "<%= v %>".to_string()),<% end %>
     ]);
 
     let sidecar_command = app.shell().sidecar("desktop")

@@ -112,7 +112,7 @@
         <div><div class="grid h-10 w-10 place-items-center rounded-full border border-grape-deep/35 bg-grape-deep/10 font-bold text-grape">1</div></div>
         <div>
           <h3 class="mb-3 text-lg font-semibold">Add the dependency</h3>
-          <div class="code-shell"><div class="code-label">mix.exs</div><pre><code class="lang-elixir">{:ex_tauri, "~> 0.1.0"}</code></pre></div>
+          <div class="code-shell"><div class="code-label">mix.exs</div><pre><code class="lang-elixir">{:ex_tauri, "~> 0.1"}</code></pre></div>
         </div>
       </div>
 

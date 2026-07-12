@@ -353,7 +353,7 @@ defmodule ExTauri.Install.Helpers do
     """
     [package]
     name = "#{sanitized}"
-    version = "0.1.0"
+    version = "#{ExTauri.version()}"
     default-run = "#{sanitized}"
     edition = "2021"
     description = ""
@@ -382,7 +382,7 @@ defmodule ExTauri.Install.Helpers do
   @doc false
   def main_src(host, port, socket_name, app_name \\ "App", scheme \\ "http") do
     validate_rust_interpolations!(host, port, socket_name)
-    validate_rust_string!(app_name)
+    validate_rust_string!(app_name, "app_name")
 
     unless to_string(scheme) in ["http", "https"] do
       raise ArgumentError, "scheme must be http or https, got: #{inspect(scheme)}"
@@ -393,16 +393,34 @@ defmodule ExTauri.Install.Helpers do
       port: to_string(port),
       socket_name: to_string(socket_name),
       app_name: to_string(app_name),
-      scheme: to_string(scheme)
+      scheme: to_string(scheme),
+      sidecar_env: sidecar_env(host)
     )
   end
 
-  # app_name is interpolated into a Rust string literal (the menu's Quit label),
-  # so it must not contain a quote, backslash, or newline that would break it.
-  defp validate_rust_string!(app_name) do
-    unless to_string(app_name) =~ ~r/\A[^"\\\r\n]+\z/ do
+  # Extra environment injected into the sidecar in production, on top of the
+  # always-present PORT and SECRET_KEY_BASE. Defaults to the Phoenix signals so
+  # existing apps are unchanged; override with `config :ex_tauri, :sidecar_env`
+  # (a map or keyword list) to target another framework — e.g. `[]` for Francis.
+  defp sidecar_env(host) do
+    default = [{"PHX_SERVER", "true"}, {"PHX_HOST", to_string(host)}]
+
+    :ex_tauri
+    |> Application.get_env(:sidecar_env, default)
+    |> Enum.map(fn {key, value} -> {to_string(key), to_string(value)} end)
+    |> Enum.map(fn {key, value} ->
+      validate_rust_string!(key, "sidecar_env key")
+      validate_rust_string!(value, "sidecar_env value for #{key}")
+      {key, value}
+    end)
+  end
+
+  # Values interpolated into a Rust string literal must not contain a quote,
+  # backslash, or newline that would break the generated source.
+  defp validate_rust_string!(value, label) do
+    unless to_string(value) =~ ~r/\A[^"\\\r\n]+\z/ do
       raise ArgumentError,
-            "app_name contains characters unsafe for a Rust string literal: #{inspect(app_name)}"
+            "#{label} contains characters unsafe for a Rust string literal: #{inspect(value)}"
     end
   end
 

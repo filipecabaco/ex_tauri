@@ -15,9 +15,14 @@ defmodule Mix.Tasks.ExTauri.Dev do
   ## Options
 
     * `--release` / `-r` - Run in release mode instead of debug mode
-    * `--prod-sidecar` - Run a compiled Elixir release as the sidecar instead
-      of `mix phx.server`. Slower, but exercises release boot, runtime config,
-      and migrations. (Default is the dev server, with full hot reload.)
+    * `--sidecar <NAME>` - Which sidecar "shim" Tauri should launch. Built-in
+      names are `phx_server` (default, the dev server — configurable via
+      `config :ex_tauri, :dev_command` so you can run `mix francis.server` or
+      any other command) and `release` (a compiled Elixir release). Custom
+      shims registered under `config :ex_tauri, :sidecars` are also accepted.
+      See `ExTauri.Sidecar`.
+    * `--prod-sidecar` - Deprecated alias for `--sidecar release`. Slower than
+      the dev server, but exercises release boot, runtime config, and migrations.
     * `--target <TARGET>` - Build for the specified target triple
     * `--runner <RUNNER>` - Use the specified runner for the binary
     * `--config <CONFIG>` - Use a custom tauri.conf.json file
@@ -74,6 +79,7 @@ defmodule Mix.Tasks.ExTauri.Dev do
       OptionParser.parse!(args,
         strict: [
           release: :boolean,
+          sidecar: :string,
           prod_sidecar: :boolean,
           target: :string,
           runner: :string,
@@ -86,10 +92,20 @@ defmodule Mix.Tasks.ExTauri.Dev do
         aliases: [r: :release]
       )
 
-    sidecar = if opts[:prod_sidecar], do: :release, else: :phx_server
-    tauri_opts = Keyword.delete(opts, :prod_sidecar)
+    sidecar = resolve_sidecar(opts)
+    tauri_opts = Keyword.drop(opts, [:sidecar, :prod_sidecar])
 
     ExTauri.run_dev(["dev" | build_tauri_args(tauri_opts, extra_args)], sidecar: sidecar)
+  end
+
+  # --sidecar takes precedence; --prod-sidecar is a back-compat alias; default
+  # is the dev server. String names become atoms for ExTauri.Sidecar to resolve.
+  defp resolve_sidecar(opts) do
+    cond do
+      name = opts[:sidecar] -> String.to_atom(name)
+      opts[:prod_sidecar] -> :release
+      true -> :phx_server
+    end
   end
 
   @doc false

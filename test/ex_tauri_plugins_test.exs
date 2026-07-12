@@ -16,7 +16,7 @@ defmodule ExTauri.PluginsTest do
     File.write!(Path.join(src_tauri, "Cargo.toml"), """
     [package]
     name = "test_app"
-    version = "0.1.0"
+    version = "#{ExTauri.version()}"
 
     [dependencies]
     tauri = { version = "2", features = [] }

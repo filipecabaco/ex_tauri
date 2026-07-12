@@ -18,7 +18,7 @@ defmodule ExTauriIntegrationTest do
 
       # Verify package configuration
       assert cargo_toml =~ ~r/name = "test_app"/
-      assert cargo_toml =~ ~r/version = "0\.1\.0"/
+      assert cargo_toml =~ "version = \"#{ExTauri.version()}\""
       assert cargo_toml =~ ~r/edition = "2021"/
 
       # Verify build dependencies use semver major version (not exact version)

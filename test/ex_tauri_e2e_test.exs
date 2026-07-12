@@ -70,7 +70,7 @@ defmodule ExTauri.E2ETest do
         Jason.encode!(
           %{
             "productName" => @app_name,
-            "version" => "0.1.0",
+            "version" => ExTauri.version(),
             "identifier" => "you.app.test-e2e-app",
             "build" => %{
               "devUrl" => "http://#{@host}:#{@port}",

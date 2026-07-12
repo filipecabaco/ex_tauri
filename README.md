@@ -38,7 +38,7 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 # mix.exs
 def deps do
   [
-    {:ex_tauri, "~> 0.1.0"}
+    {:ex_tauri, "~> 0.1"}
   ]
 end
 ```
@@ -68,8 +68,47 @@ mix ex_tauri.dev
 
 This opens your Phoenix app in a native desktop window, running the actual
 `mix phx.server` dev loop inside it — code reloading and live reload work
-exactly as in the browser. (Use `--prod-sidecar` to test against a compiled
-release instead.)
+exactly as in the browser. (Use `--sidecar release` to test against a compiled
+release instead; `--prod-sidecar` is a deprecated alias.)
+
+### Not tied to Phoenix
+
+Tauri launches your app through a small **sidecar shim**. The default shim runs
+`mix phx.server`, but the command is configurable — point it at any dev server:
+
+```elixir
+# config/config.exs — run Francis (or anything) instead of Phoenix
+config :ex_tauri, :dev_command, ~w(mix francis.server)
+```
+
+For launch strategies a command can't express, implement the `ExTauri.Sidecar`
+behaviour, register it under `config :ex_tauri, :sidecars, %{my_shim: MyModule}`,
+and select it with `mix ex_tauri.dev --sidecar my_shim`. See `ExTauri.Sidecar`.
+
+**In production**, the sidecar is your compiled release, and the Rust shell
+injects environment into it. `PORT` and `SECRET_KEY_BASE` are always injected;
+everything else comes from `:sidecar_env`, which defaults to Phoenix's signals:
+
+```elixir
+# config/config.exs — the default, made explicit
+config :ex_tauri, :sidecar_env, [{"PHX_SERVER", "true"}, {"PHX_HOST", "localhost"}]
+
+# …or drop the Phoenix env entirely for another framework
+config :ex_tauri, :sidecar_env, []
+```
+
+Your app must bind to the injected `PORT`. Phoenix reads it automatically;
+frameworks that don't (e.g. Francis) need a one-line `config/runtime.exs`:
+
+```elixir
+# config/runtime.exs
+if port = System.get_env("PORT") do
+  config :francis, bandit_opts: [ip: {127, 0, 0, 1}, port: String.to_integer(port)]
+end
+```
+
+> The native API bridge (notifications, dialogs, clipboard, …) is currently
+> Phoenix LiveView-only; non-Phoenix apps get the window + server lifecycle.
 
 > **Tip:** Review the generated config in `config/config.exs` to customize your app name, port, or window settings.
 

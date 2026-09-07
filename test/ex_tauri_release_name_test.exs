@@ -32,9 +32,18 @@ defmodule ExTauri.ReleaseNameTest do
       assert "my_app_desktop" = ExTauri.default_release_name(:my_app)
     end
 
-    test "does not double a suffix the application already carries" do
-      # The first run of this produced `:francis_desktop_desktop` in CI.
-      assert "francis_desktop" = ExTauri.default_release_name(:francis_desktop)
+    test "keeps the suffix even when it reads badly, because Tauri requires it" do
+      # `francis_desktop_desktop` is silly, and dropping the suffix is worse:
+      # Tauri refuses a sidecar named the same as the Cargo package, which is the
+      # app name. Returning "francis_desktop" here failed the Francis CLI flow.
+      assert "francis_desktop_desktop" = ExTauri.default_release_name(:francis_desktop)
+    end
+
+    test "never returns the application name itself" do
+      # The property the test above is a case of: sidecar name != package name.
+      for app <- [:my_app, :francis_desktop, :desktop, :a] do
+        refute ExTauri.default_release_name(app) == to_string(app)
+      end
     end
   end
 

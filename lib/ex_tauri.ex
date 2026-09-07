@@ -114,14 +114,18 @@ defmodule ExTauri do
   def release_name_atom, do: String.to_atom(release_name())
 
   @doc false
-  # The name `mix ex_tauri.install` gives a fresh install. An app already called
-  # `francis_desktop` would otherwise get `francis_desktop_desktop`, which is
-  # what the first run of this produced.
-  def default_release_name(otp_app) do
-    app = to_string(otp_app)
-
-    if String.ends_with?(app, "_desktop"), do: app, else: app <> "_desktop"
-  end
+  # The name `mix ex_tauri.install` gives a fresh install.
+  #
+  # The suffix is never dropped, even for an app already called
+  # `francis_desktop`, however silly `francis_desktop_desktop` reads. Tauri
+  # refuses to build a sidecar whose name matches the Cargo package —
+  #
+  #     Cannot define a sidecar with the same name as the Cargo package name
+  #
+  # — and that package is the sanitised app name, which for a default install is
+  # the OTP application itself. Returning the app name unchanged is therefore
+  # exactly the collision Tauri rejects; it was tried, and CI caught it.
+  def default_release_name(otp_app), do: "#{otp_app}_desktop"
 
   @doc """
   Returns the ex_tauri package version.

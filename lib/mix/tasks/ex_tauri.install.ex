@@ -111,7 +111,10 @@ defmodule Mix.Tasks.ExTauri.Install do
         :desktop
 
       true ->
-        :"#{Igniter.Project.Application.app_name(igniter)}_desktop"
+        igniter
+        |> Igniter.Project.Application.app_name()
+        |> ExTauri.default_release_name()
+        |> String.to_atom()
     end
   end
 

@@ -27,6 +27,17 @@ defmodule ExTauri.ReleaseNameTest do
     end
   end
 
+  describe "default_release_name/1" do
+    test "derives the name a fresh install is given" do
+      assert "my_app_desktop" = ExTauri.default_release_name(:my_app)
+    end
+
+    test "does not double a suffix the application already carries" do
+      # The first run of this produced `:francis_desktop_desktop` in CI.
+      assert "francis_desktop" = ExTauri.default_release_name(:francis_desktop)
+    end
+  end
+
   describe "generated artifacts name the same binary" do
     # Burrito names the sidecar binary, and its unpack directory, after the
     # release. Three generated files have to agree with mix.exs about that name

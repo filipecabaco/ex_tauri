@@ -113,6 +113,16 @@ defmodule ExTauri do
   @doc false
   def release_name_atom, do: String.to_atom(release_name())
 
+  @doc false
+  # The name `mix ex_tauri.install` gives a fresh install. An app already called
+  # `francis_desktop` would otherwise get `francis_desktop_desktop`, which is
+  # what the first run of this produced.
+  def default_release_name(otp_app) do
+    app = to_string(otp_app)
+
+    if String.ends_with?(app, "_desktop"), do: app, else: app <> "_desktop"
+  end
+
   @doc """
   Returns the ex_tauri package version.
 

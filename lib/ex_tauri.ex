@@ -11,6 +11,10 @@ defmodule ExTauri do
 
   @latest_version "2.5.1"
 
+  # What `mix ex_tauri.install` scaffolded for every app before the release name
+  # became configurable. Kept as the default so those apps keep building.
+  @default_release_name "desktop"
+
   use Application
   require Logger
 
@@ -81,6 +85,33 @@ defmodule ExTauri do
   Returns the latest version of Tauri available.
   """
   def latest_version, do: @latest_version
+
+  @doc """
+  The name of the release Burrito wraps into the sidecar binary.
+
+  Burrito unpacks a shipped release into `.burrito/<release>_erts-<vsn>_<app
+  vsn>/`, named after the release and nothing else. `mix ex_tauri.install` used
+  to scaffold that release as `:desktop` for every app it touched, so two
+  ex_tauri apps on one machine shared a single unpack directory — and anything
+  reasoning about a sidecar from its path alone, `ExTauri.Sidecar.Orphan`
+  included, could not tell whose process it was looking at. Four sidecars of one
+  app were found there and read as abandoned instances of another.
+
+  New installs are given a name derived from the application, which makes the
+  collision impossible rather than merely detectable. The default stays
+  `"desktop"` so that every app installed before this keeps building, and its
+  `:desktop` release keeps working untouched.
+
+      config :ex_tauri, release_name: "my_app_desktop"
+  """
+  def release_name do
+    :ex_tauri
+    |> Application.get_env(:release_name, @default_release_name)
+    |> to_string()
+  end
+
+  @doc false
+  def release_name_atom, do: String.to_atom(release_name())
 
   @doc """
   Returns the ex_tauri package version.
@@ -236,13 +267,15 @@ defmodule ExTauri do
   end
 
   defp wrap() do
-    get_in(Mix.Project.config(), [:releases, :desktop]) ||
-      raise "expected a :desktop release configured in your mix.exs"
+    release = release_name()
+
+    get_in(Mix.Project.config(), [:releases, release_name_atom()]) ||
+      raise "expected a :#{release} release configured in your mix.exs"
 
     # Run release with MIX_ENV=prod at shell level to avoid including dev config with regexes.
     # Dev config (like live_reload patterns) contains regexes that can't be serialized.
     # Must run as separate process so dependencies are loaded correctly for prod environment.
-    case System.cmd("mix", ["release", "desktop", "--overwrite"],
+    case System.cmd("mix", ["release", release, "--overwrite"],
            env: [{"MIX_ENV", "prod"}],
            into: IO.stream(:stdio, :line),
            stderr_to_stdout: true
@@ -261,8 +294,9 @@ defmodule ExTauri do
         """
     end
 
-    # Burrito names output with underscores (desktop_x86_64-...) but Tauri expects
-    # hyphens (desktop-x86_64-...). Get the host triple from rustc and rename.
+    # Burrito names output with underscores (<release>_x86_64-...) but Tauri
+    # expects hyphens (<release>-x86_64-...). Get the host triple from rustc and
+    # rename.
     rename_burrito_output()
 
     :ok
@@ -282,10 +316,11 @@ defmodule ExTauri do
 
   defp rename_burrito_output do
     triplet = host_triplet()
+    release = release_name()
 
     File.cp!(
-      "burrito_out/desktop_#{triplet}",
-      "burrito_out/desktop-#{triplet}"
+      "burrito_out/#{release}_#{triplet}",
+      "burrito_out/#{release}-#{triplet}"
     )
   end
 end

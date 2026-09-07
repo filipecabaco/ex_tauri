@@ -126,7 +126,7 @@ defmodule ExTauri.Sidecar do
     %{
       triplet: triplet,
       project_root: Keyword.get_lazy(overrides, :project_root, &File.cwd!/0),
-      path: Keyword.get(overrides, :path, "burrito_out/desktop-#{triplet}"),
+      path: Keyword.get(overrides, :path, "burrito_out/#{ExTauri.release_name()}-#{triplet}"),
       port: Keyword.get(overrides, :port, Application.get_env(:ex_tauri, :port, 4000))
     }
   end

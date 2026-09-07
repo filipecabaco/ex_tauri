@@ -26,6 +26,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `:unknown` — never `:foreign` — for an unpack directory that has been deleted
   out from under a live process, which is what an upgrade leaves behind.
 
+### Changed
+
+- **`mix ex_tauri.install` now names the release after your application**
+  (`:my_app_desktop`) rather than `:desktop`, and records it as `config
+  :ex_tauri, :release_name`. Burrito names its unpack directory after the
+  release and nothing else, so scaffolding `:desktop` for everyone put every
+  ex_tauri app on a machine into one shared `.burrito/desktop_erts-*` — which is
+  what made a sidecar's owner unknowable from its path, and what let a sweep for
+  abandoned ones reach another vendor's running app. An app-derived name makes
+  that collision impossible rather than merely detectable.
+
+  Nothing changes for an existing app. `:release_name` defaults to `"desktop"`,
+  and the installer keeps a `:desktop` release that is already in `mix.exs`
+  rather than renaming it — renaming would orphan the sidecar binary it has
+  already built and the `tauri.conf.json` entry pointing at it. Existing apps
+  can migrate by renaming the release, setting `:release_name` to match, and
+  rebuilding; `ExTauri.Sidecar.Orphan`'s payload check protects them either way.
+
+  The name is now threaded through everything that has to agree on it: the
+  release Mix builds, `_build/prod/rel/<name>/bin/<name>`,
+  `burrito_out/<name>-<triple>`, `externalBin` and the `shell:allow-execute`
+  capability in the generated Tauri config, and the `sidecar("<name>")` call in
+  `main.rs`.
+
 ### Fixed
 
 - `ExTauri.ShutdownManager` gained three stop signals and lost a crash, all from

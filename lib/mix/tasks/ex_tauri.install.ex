@@ -17,7 +17,7 @@ defmodule Mix.Tasks.ExTauri.Install do
 
   2. **Configures Elixir project** (via Igniter):
      - Adds `ExTauri.ShutdownManager` to your supervision tree
-     - Adds a `:desktop` release to your `mix.exs`
+     - Adds a release named after your application to your `mix.exs`
 
   3. **Installs Tauri CLI** — Downloads via Cargo
 
@@ -59,31 +59,63 @@ defmodule Mix.Tasks.ExTauri.Install do
 
   @impl Igniter.Mix.Task
   def igniter(igniter) do
-    # Phase 1: Set default config values (only if not already set)
-    igniter = configure_defaults(igniter)
+    release = release_name(igniter)
 
-    # Phase 2: Set up Tauri project (CLI install, Rust files, JSON, JS, auto-inject hooks)
-    ExTauri.Install.Helpers.setup_tauri_project()
+    # Phase 1: Set default config values (only if not already set)
+    igniter = configure_defaults(igniter, release)
+
+    # Phase 2: Set up Tauri project (CLI install, Rust files, JSON, JS, auto-inject hooks).
+    # The release name is passed rather than read back from config: Phase 1 wrote
+    # it to config.exs on disk, which the running application environment has not
+    # picked up, and the generated tauri.conf, capability and main.rs all have to
+    # name the same sidecar binary.
+    ExTauri.Install.Helpers.setup_tauri_project([], release_name: to_string(release))
 
     # Phase 3: Modify Elixir project with Igniter (AST-aware, safe)
     igniter
     |> Igniter.Project.Application.add_new_child(ExTauri.ShutdownManager)
-    |> add_desktop_release()
+    |> add_desktop_release(release)
     |> Igniter.add_notice("""
     ExTauri installed successfully!
 
     Next steps:
     1. Review the ExTauri config in config/config.exs (app_name, host, port)
 
-    2. Add Burrito wrapping to your :desktop release for production:
+    2. Add Burrito wrapping to your :#{release} release for production:
 
-        releases: [desktop: [steps: [:assemble, &Burrito.wrap/1], burrito: [...]]]
+        releases: [#{release}: [steps: [:assemble, &Burrito.wrap/1], burrito: [...]]]
 
     3. Run: mix ex_tauri.dev
     """)
   end
 
-  defp configure_defaults(igniter) do
+  # Burrito names its unpack directory after the release and nothing else, so a
+  # release called `:desktop` -- which this task scaffolded for everyone until
+  # now -- put every ex_tauri app on the machine into one shared
+  # `.burrito/desktop_erts-*`. Anything reasoning about a sidecar from its path
+  # then cannot tell whose process it is looking at, and a sweep for abandoned
+  # ones will happily signal another vendor's running app.
+  #
+  # A name derived from the application makes that collision impossible rather
+  # than merely detectable. An app that already has a `:desktop` release keeps
+  # it: renaming would orphan the sidecar binary it has already built and the
+  # tauri.conf entry pointing at it. An explicit `:release_name` always wins.
+  defp release_name(igniter) do
+    releases = Mix.Project.config()[:releases] || []
+
+    cond do
+      configured = Application.get_env(:ex_tauri, :release_name) ->
+        configured |> to_string() |> String.to_atom()
+
+      Keyword.has_key?(releases, :desktop) ->
+        :desktop
+
+      true ->
+        :"#{Igniter.Project.Application.app_name(igniter)}_desktop"
+    end
+  end
+
+  defp configure_defaults(igniter, release) do
     # Derive a human-readable app name from the Mix project atom
     app_name =
       Mix.Project.config()[:app]
@@ -118,13 +150,23 @@ defmodule Mix.Tasks.ExTauri.Install do
       [:version],
       ExTauri.latest_version()
     )
+    # Written even though it matches what `release_name/1` just derived: every
+    # later `mix ex_tauri.build`, `mix ex_tauri.dev` and runtime orphan sweep
+    # reads it from here, and the name has to agree with the release in mix.exs
+    # and the sidecar named in tauri.conf.
+    |> Igniter.Project.Config.configure_new(
+      "config.exs",
+      :ex_tauri,
+      [:release_name],
+      to_string(release)
+    )
   end
 
-  defp add_desktop_release(igniter) do
+  defp add_desktop_release(igniter, release) do
     Igniter.Project.MixProject.update(
       igniter,
       :project,
-      [:releases, :desktop, :steps],
+      [:releases, release, :steps],
       fn
         nil ->
           # Start with a standard release. Users add &Burrito.wrap/1 when ready

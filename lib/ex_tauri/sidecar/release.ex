@@ -12,12 +12,14 @@ defmodule ExTauri.Sidecar.Release do
 
   @impl true
   def prepare(_ctx) do
-    get_in(Mix.Project.config(), [:releases, :desktop]) ||
-      raise "expected a :desktop release configured in your mix.exs"
+    release = ExTauri.release_name()
+
+    get_in(Mix.Project.config(), [:releases, ExTauri.release_name_atom()]) ||
+      raise "expected a :#{release} release configured in your mix.exs"
 
     # Build a standard release without Burrito wrapping for faster dev iteration.
     # Use MIX_ENV=prod to avoid serialization issues with dev config regexes.
-    case System.cmd("mix", ["release", "desktop", "--overwrite"],
+    case System.cmd("mix", ["release", release, "--overwrite"],
            env: [{"MIX_ENV", "prod"}, {"BURRITO_SKIP", "true"}],
            into: IO.stream(:stdio, :line),
            stderr_to_stdout: true
@@ -29,8 +31,9 @@ defmodule ExTauri.Sidecar.Release do
 
   @impl true
   def script(%{project_root: root}) do
-    # The standard release binary lives at _build/prod/rel/desktop/bin/desktop.
-    release_bin = Path.join([root, "_build", "prod", "rel", "desktop", "bin", "desktop"])
+    # The standard release binary lives at _build/prod/rel/<release>/bin/<release>.
+    release = ExTauri.release_name()
+    release_bin = Path.join([root, "_build", "prod", "rel", release, "bin", release])
 
     """
     #!/bin/sh

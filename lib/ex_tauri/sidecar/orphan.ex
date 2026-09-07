@@ -29,13 +29,17 @@ defmodule ExTauri.Sidecar.Orphan do
   ## Whose sidecar is it
 
   Burrito names the unpack directory after the *release*, and `mix
-  ex_tauri.install` scaffolds that release as `:desktop` for everyone. The
-  directory is therefore shared: two ex_tauri apps on one machine both unpack to
+  ex_tauri.install` scaffolded that release as `:desktop` for everyone until it
+  started deriving the name from the application. Every app installed before
+  that shares one directory: two of them both unpack to
   `.burrito/desktop_erts-<vsn>_<app vsn>/`, and every predicate that answers on
-  the path alone answers the same for both. That is not a hypothetical either —
-  it is how four sidecars of one app were read as abandoned instances of
-  another, one blind sweep away from being SIGTERMed by a program that did not
-  own them.
+  the path alone answers the same for both. That is not a hypothetical — it is
+  how four sidecars of one app were read as abandoned instances of another, one
+  blind sweep away from being SIGTERMed by a program that did not own them.
+
+  A unique release name is the real fix and new installs get one, but this check
+  has to hold regardless: the machine an app runs on is not the machine it was
+  installed on, and the orphan it finds may well predate the rename.
 
   `identify/2` is what separates them: the release name cannot, but the payload
   can, because Burrito unpacks each application into `lib/<app>-<vsn>`. It has

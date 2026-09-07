@@ -92,14 +92,20 @@ defmodule Mix.Tasks.ExTauri.Build do
 
     releases = Mix.Project.config()[:releases] || []
 
-    unless releases[:desktop] do
+    release = ExTauri.release_name()
+
+    unless releases[ExTauri.release_name_atom()] do
       Mix.raise("""
-      No :desktop release configured in mix.exs.
+      No :#{release} release configured in mix.exs.
 
       Run `mix ex_tauri.install` to set this up automatically,
       or add manually to your mix.exs project/0:
 
-          releases: [desktop: [steps: [:assemble]]]
+          releases: [#{release}: [steps: [:assemble]]]
+
+      The release name comes from `config :ex_tauri, :release_name` and defaults
+      to "desktop"; the two have to agree, because Burrito names the sidecar
+      binary and its unpack directory after the release.
       """)
     end
 

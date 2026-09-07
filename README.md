@@ -393,6 +393,37 @@ Install Rust via [rustup](https://www.rust-lang.org/tools/install):
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+### The app won't start: port already in use
+
+```
+Failed to start child: {:shutdown, {:failed_to_start_child, ..., :eaddrinuse}}
+```
+
+A sidecar from an earlier launch is still running. The Tauri shell is the only
+thing that spawns one, so a sidecar whose shell died is reparented to init and
+nothing will ever stop it — it keeps your port, and its timers and pollers keep
+running with no window to show them in. Add this to the top of
+`Application.start/2`, before your endpoint's child spec:
+
+```elixir
+def start(_type, _args) do
+  ExTauri.Sidecar.Orphan.ensure_port_available(4000)
+
+  children = [...]
+  Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)
+end
+```
+
+It evicts the orphan holding the port and sweeps any others, and it only ever
+signals your own release — two ex_tauri apps share Burrito's
+`.burrito/desktop_erts-*` directory, so the payload rather than the path decides
+whose sidecar a process is. Pass `otp_app:` if your OTP application is not the
+sanitised `:app_name`.
+
+Keep `ExTauri.ShutdownManager` in your supervision tree as well: it is what
+stops a sidecar when the window closes, including the case where the window died
+before it ever connected.
+
 ### Database configuration for desktop apps
 
 Desktop apps need a local database path. Configure in `config/runtime.exs`:

@@ -8,16 +8,16 @@ defmodule ExTauri.Install.Helpers do
   @doc """
   Installs the Tauri CLI via cargo and initializes the Tauri project structure.
   """
-  def setup_tauri_project(args \\ []) do
+  def setup_tauri_project(args \\ [], opts \\ []) do
     validate_prerequisites!()
 
-    config = read_config!()
+    config = read_config!(opts)
 
     install_tauri_cli(config.version, config.installation_path)
     init_tauri_project(config, args)
     generate_rust_files(config)
     configure_tauri_json(config)
-    generate_capabilities()
+    generate_capabilities(config)
     generate_js_hook()
     inject_js_hook()
     inject_layout_hook()
@@ -27,7 +27,7 @@ defmodule ExTauri.Install.Helpers do
 
   # ── Config reading ─────────────────────────────────────────────────────────
 
-  defp read_config! do
+  defp read_config!(opts) do
     app_name = Application.get_env(:ex_tauri, :app_name, "Phoenix Application")
 
     host =
@@ -58,7 +58,11 @@ defmodule ExTauri.Install.Helpers do
       height: Application.get_env(:ex_tauri, :height, 600),
       width: Application.get_env(:ex_tauri, :width, 800),
       resize: Application.get_env(:ex_tauri, :resize, true),
-      installation_path: ExTauri.installation_path()
+      installation_path: ExTauri.installation_path(),
+      # The installer passes this explicitly: it is writing the value into
+      # config.exs during this same run, so the application environment does not
+      # carry it yet.
+      release_name: opts[:release_name] || ExTauri.release_name()
     }
   end
 
@@ -137,7 +141,14 @@ defmodule ExTauri.Install.Helpers do
 
     File.write!(
       Path.join([src_tauri, "src", "main.rs"]),
-      main_src(config.host, config.port, config.sanitized_name, config.app_name, config.scheme)
+      main_src(
+        config.host,
+        config.port,
+        config.sanitized_name,
+        config.app_name,
+        config.scheme,
+        config.release_name
+      )
     )
   end
 
@@ -155,7 +166,7 @@ defmodule ExTauri.Install.Helpers do
         "productName" => config.app_name,
         "identifier" => "you.app.#{identifier}"
       })
-      |> put_in(["bundle", "externalBin"], ["../burrito_out/desktop"])
+      |> put_in(["bundle", "externalBin"], ["../burrito_out/#{config.release_name}"])
       |> put_in(["app", "security"], %{
         "csp" =>
           "default-src 'self'; script-src 'self' 'unsafe-inline'; " <>
@@ -192,10 +203,14 @@ defmodule ExTauri.Install.Helpers do
 
   # ── Capabilities and JS hook generation ────────────────────────────────────
 
-  defp generate_capabilities do
+  defp generate_capabilities(config) do
     capabilities_dir = Path.join([File.cwd!(), "src-tauri", "capabilities"])
     File.mkdir_p!(capabilities_dir)
-    File.write!(Path.join(capabilities_dir, "default.json"), capabilities_json())
+
+    File.write!(
+      Path.join(capabilities_dir, "default.json"),
+      capabilities_json(config.release_name)
+    )
   end
 
   defp generate_js_hook do
@@ -380,7 +395,14 @@ defmodule ExTauri.Install.Helpers do
   end
 
   @doc false
-  def main_src(host, port, socket_name, app_name \\ "App", scheme \\ "http") do
+  def main_src(
+        host,
+        port,
+        socket_name,
+        app_name \\ "App",
+        scheme \\ "http",
+        release_name \\ "desktop"
+      ) do
     validate_rust_interpolations!(host, port, socket_name)
     validate_rust_string!(app_name, "app_name")
 
@@ -394,6 +416,7 @@ defmodule ExTauri.Install.Helpers do
       socket_name: to_string(socket_name),
       app_name: to_string(app_name),
       scheme: to_string(scheme),
+      release_name: to_string(release_name),
       sidecar_env: sidecar_env(host)
     )
   end
@@ -439,7 +462,7 @@ defmodule ExTauri.Install.Helpers do
   end
 
   @doc false
-  def capabilities_json do
+  def capabilities_json(release_name \\ "desktop") do
     """
     {
       "$schema": "../gen/schemas/desktop-schema.json",
@@ -469,7 +492,7 @@ defmodule ExTauri.Install.Helpers do
           "identifier": "shell:allow-execute",
           "allow": [
             {
-              "name": "desktop",
+              "name": "#{release_name}",
               "sidecar": true
             }
           ]

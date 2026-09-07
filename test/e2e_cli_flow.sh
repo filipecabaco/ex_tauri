@@ -171,8 +171,10 @@ echo "=== Step 6: Verify setup ==="
 grep -q "ShutdownManager" "lib/${APP_NAME}/application.ex" || fail "ShutdownManager not in supervision tree"
 pass "ShutdownManager in supervision tree (via Igniter)"
 
-grep -q "desktop" mix.exs || fail ":desktop release not in mix.exs"
-pass ":desktop release configured (via Igniter)"
+RELEASE_NAME="$(sed -n 's/.*release_name: "\([^"]*\)".*/\1/p' config/config.exs | head -1)"
+[ -n "$RELEASE_NAME" ] || RELEASE_NAME=desktop
+grep -q "$RELEASE_NAME" mix.exs || fail ":$RELEASE_NAME release not in mix.exs"
+pass ":$RELEASE_NAME release configured (via Igniter)"
 
 # Verify Tauri generated files
 test -f src-tauri/Cargo.toml       || fail "Missing src-tauri/Cargo.toml"
@@ -212,11 +214,11 @@ mix compile
 
 # In production, `mix ex_tauri.build` calls wrap() which builds a Burrito release.
 # For testing, we build a standard Mix release — same concept, lighter weight.
-SECRET_KEY_BASE="$SECRET" MIX_ENV=prod mix release desktop --overwrite
+SECRET_KEY_BASE="$SECRET" MIX_ENV=prod mix release "$RELEASE_NAME" --overwrite
 
 TRIPLE=$(rustc -Vv | grep host | awk '{print $2}')
 PROJECT_DIR="$(pwd)"
-RELEASE_BIN="$PROJECT_DIR/_build/prod/rel/desktop/bin/desktop"
+RELEASE_BIN="$PROJECT_DIR/_build/prod/rel/$RELEASE_NAME/bin/$RELEASE_NAME"
 
 test -f "$RELEASE_BIN" || fail "Release binary not found at $RELEASE_BIN"
 pass "Elixir release built"
@@ -225,7 +227,7 @@ pass "Elixir release built"
 # In production, Burrito writes to burrito_out/desktop_<triple> and wrap() copies it.
 # tauri_build::build() validates externalBin paths at compile time.
 mkdir -p burrito_out
-SIDECAR_PATH="burrito_out/desktop-$TRIPLE"
+SIDECAR_PATH="burrito_out/$RELEASE_NAME-$TRIPLE"
 
 cat > "$SIDECAR_PATH" << SIDECAR
 #!/bin/sh
@@ -286,7 +288,7 @@ if [[ "$SERVER_UP" != "true" ]]; then
   echo "  Tauri process status:"
   kill -0 "$TAURI_PID" 2>/dev/null && echo "  - alive" || echo "  - dead"
   echo "  Checking sidecar:"
-  pgrep -f "desktop" || echo "  - no sidecar process found"
+  pgrep -f "$RELEASE_NAME" || echo "  - no sidecar process found"
   echo "  Checking port $PORT:"
   ss -tlnp | grep "$PORT" || echo "  - port not listening"
   fail "Phoenix did not start within 90s"

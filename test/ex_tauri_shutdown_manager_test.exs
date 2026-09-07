@@ -148,6 +148,119 @@ defmodule ExTauri.ShutdownManagerTest do
     end
   end
 
+  describe "connection loss" do
+    test "shuts down when the frontend's socket closes and nothing reconnects", ctx do
+      # A generous heartbeat timeout so that only the closed connection can
+      # explain a shutdown here. The kernel closes a dead process's sockets, so
+      # this is the signal a crash or a force-quit actually trips.
+      start_manager(ctx, heartbeat_timeout: 60_000, heartbeat_reconnect_grace: 0)
+      assert wait_for_file(ctx.socket_path)
+
+      client = connect(ctx.socket_path)
+      :ok = :gen_tcp.send(client, "h")
+      assert eventually(fn -> :sys.get_state(ShutdownManager).connected end)
+
+      :gen_tcp.close(client)
+
+      assert_receive :shutdown_triggered, @timeout * 10
+    end
+
+    test "a reconnect clears the pending disconnect", ctx do
+      # The frontend reconnects every 100ms after a drop, which must not be read
+      # as the window going away.
+      start_manager(ctx, heartbeat_timeout: 60_000, heartbeat_reconnect_grace: 60_000)
+      assert wait_for_file(ctx.socket_path)
+
+      client = connect(ctx.socket_path)
+      :ok = :gen_tcp.send(client, "h")
+      assert eventually(fn -> :sys.get_state(ShutdownManager).connected end)
+
+      :gen_tcp.close(client)
+      assert eventually(fn -> :sys.get_state(ShutdownManager).disconnected_at != nil end)
+
+      reconnected = connect(ctx.socket_path)
+      :ok = :gen_tcp.send(reconnected, "h")
+
+      assert eventually(fn -> :sys.get_state(ShutdownManager).disconnected_at == nil end)
+      refute_received :shutdown_triggered
+      :gen_tcp.close(reconnected)
+    end
+
+    test "a socket that closes before any heartbeat proves nothing", ctx do
+      # Anything on the machine can open the socket. Only the frontend having
+      # spoken makes its disconnect evidence of anything.
+      pid = start_manager(ctx, heartbeat_timeout: 60_000, heartbeat_reconnect_grace: 0)
+      assert wait_for_file(ctx.socket_path)
+
+      ctx.socket_path |> connect() |> :gen_tcp.close()
+
+      refute_receive :shutdown_triggered, @timeout * 5
+      assert :sys.get_state(pid).disconnected_at == nil
+    end
+  end
+
+  describe "the orphan check" do
+    test "stops a sidecar that never got a heartbeat and has lost its shell", ctx do
+      # The state the startup grace deliberately makes immortal: a shell that
+      # died before it could connect. Losing the parent is the one thing a slow
+      # boot cannot do, so it is the only proof accepted while connected? is false.
+      start_manager(ctx, orphan_check: fn -> true end, heartbeat_orphan_grace: 0)
+
+      assert_receive :shutdown_triggered, @timeout * 10
+    end
+
+    test "keeps waiting while the shell is still there", ctx do
+      pid = start_manager(ctx, orphan_check: fn -> false end, heartbeat_orphan_grace: 0)
+
+      refute_receive :shutdown_triggered, @timeout * 5
+      refute :sys.get_state(pid).shutdown_initiated
+    end
+  end
+
+  describe "a socket path another instance is listening on" do
+    test "starts without a listener rather than crashing the supervision tree", ctx do
+      # `{:ok, socket} = :gen_tcp.listen(...)` turned this into a crash that took
+      # the whole tree down, restart after restart.
+      {:ok, live} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:ifaddr, {:local, ctx.socket_path}},
+          {:active, false},
+          {:reuseaddr, true}
+        ])
+
+      on_exit(fn -> :gen_tcp.close(live) end)
+
+      pid = start_manager(ctx)
+
+      assert Process.alive?(pid)
+      assert :sys.get_state(pid).listen_socket == nil
+    end
+
+    test "never unlinks the live instance's socket file", ctx do
+      # Deleting it leaves that listener running but unreachable, so its window
+      # can never reconnect - and a heartbeat that never arrives is the immortal
+      # state. This is how a sidecar outlived its window by three days.
+      {:ok, live} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:ifaddr, {:local, ctx.socket_path}},
+          {:active, false},
+          {:reuseaddr, true}
+        ])
+
+      on_exit(fn -> :gen_tcp.close(live) end)
+
+      start_manager(ctx)
+      assert File.exists?(ctx.socket_path)
+
+      :ok = stop_supervised(ShutdownManager)
+
+      # The file belongs to whoever is listening on it, and that is not us.
+      assert File.exists?(ctx.socket_path)
+    end
+  end
+
   describe "cleanup" do
     test "removes the socket file on terminate", ctx do
       start_manager(ctx)

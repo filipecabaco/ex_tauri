@@ -90,6 +90,8 @@ throttled, and leave nothing behind to say why. Regenerate `src-tauri/src/main.r
   starts the sidecar itself.
 - The generated `Cargo.toml` needs `tauri-plugin-shell` 2.5 (`set_process_group`),
   the `webview-data-url` feature, and `objc2`/`objc2-foundation` on macOS.
+- ex_tauri's own lockfile moves to Burrito 1.6.0, the version `~> 1.5` already
+  resolves to for every new app, so its suite runs against what users get.
 
 ## [0.3.0] - 2026-10-20
 

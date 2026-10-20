@@ -192,6 +192,20 @@ defmodule ExTauri.Sidecar.Orphan do
   end
 
   @doc """
+  True when the shell that spawned this process is provably still running.
+
+  Not the negation of `orphan?/0`: anything that cannot be read — `ps` missing
+  or failing, Windows — answers `false` here, because the caller is deciding
+  whether to *ignore* a heartbeat timeout, and only proof should do that.
+  `ExTauri.ShutdownManager` gates it on `packaged?/0`, for the same reason as
+  `orphan?/0`.
+  """
+  @spec shell_alive?() :: boolean()
+  def shell_alive? do
+    unix?() and parent_pid(self_pid()) not in [nil, 1]
+  end
+
+  @doc """
   True when this process is a Burrito-wrapped sidecar rather than a dev server.
 
   Burrito's launcher sets `__BURRITO` in the environment it `execve`s with. It

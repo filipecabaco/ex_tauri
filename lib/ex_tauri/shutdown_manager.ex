@@ -79,6 +79,37 @@ defmodule ExTauri.ShutdownManager do
      process was not running either, which makes every elapsed measurement
      across it meaningless.
 
+  ## A quiet heartbeat from a live shell is not a dead window
+
+  The stall check above only covers *this* process freezing. The opposite case
+  is the frontend being throttled while the BEAM runs on: macOS App Nap slows
+  the timers of an app whose window has been hidden for a while, and the
+  heartbeat thread's 100ms sleep is one of those timers. Nothing about the
+  window is wrong, the socket stays open, and the bytes simply arrive late —
+  late enough, once, to stop a backend that six agents were using, with the
+  window back on screen a second later.
+
+  So on Unix, in a packaged build, a heartbeat timeout with the connection still
+  open first asks `ExTauri.Sidecar.Orphan.shell_alive?/0`. A shell that is still
+  our parent keeps the backend running: the stall is logged once when it starts
+  and once when it ends, the baseline is reset, and the next check is a full
+  timeout away — the question forks `ps`. Everything that does mean "window
+  gone" still stops it:
+
+    * a quit sends SIGTERM (Unix frontends always do);
+    * a crash or force-quit closes the socket, which is signal 1;
+    * a shell that dies leaves this process reparented to init, so
+      `shell_alive?/0` stops answering yes and the next timeout stops it.
+
+  What it gives up is signal 2 for a shell that is alive but wedged: that
+  backend now lives until the shell is killed, at which point the closed socket
+  stops it. A wedged window is something a person can see and quit; a backend
+  that dies under a hidden window is not.
+
+  Windows keeps the plain timeout, and so does a `mix ex_tauri.dev` backend,
+  whose parent says nothing about a window. Inject `:shell_alive_check` to
+  decide otherwise.
+
   `:heartbeat_timeout` stays at 1500ms because the Windows frontend has no
   SIGTERM to send and quits by letting this time out — raising the default would
   make every Windows quit that much slower. On macOS and Linux the closed
@@ -167,6 +198,12 @@ defmodule ExTauri.ShutdownManager do
       opts[:orphan_check] ||
         fn -> ExTauri.Sidecar.Orphan.packaged?() and ExTauri.Sidecar.Orphan.orphan?() end
 
+    # Asked before a heartbeat timeout stops anything. `true` means the window
+    # provably still exists and the silence is throttling, not death.
+    shell_alive_check =
+      opts[:shell_alive_check] ||
+        fn -> ExTauri.Sidecar.Orphan.packaged?() and ExTauri.Sidecar.Orphan.shell_alive?() end
+
     {listen_socket, endpoint, cleanup_paths} = open_listener(transport, socket_name)
 
     # Spawn acceptor process under the ExTauri TaskSupervisor
@@ -192,6 +229,9 @@ defmodule ExTauri.ShutdownManager do
        disconnected_at: nil,
        # When the orphan check last forked `ps`, so it can be throttled.
        last_orphan_check: nil,
+       # When the heartbeat went quiet under a live shell, so the stall is logged
+       # once when it starts and once when it ends rather than every timeout.
+       stalled_since: nil,
        shutdown_initiated: false,
        heartbeat_interval: heartbeat_interval,
        heartbeat_timeout: heartbeat_timeout,
@@ -199,6 +239,7 @@ defmodule ExTauri.ShutdownManager do
        reconnect_grace: reconnect_grace,
        orphan_grace: orphan_grace,
        orphan_check: orphan_check,
+       shell_alive_check: shell_alive_check,
        shutdown_fun: shutdown_fun,
        # Duplex channel state: the currently connected frontend socket (for
        # outbound ExTauri.Desktop commands) and processes subscribed to
@@ -212,13 +253,16 @@ defmodule ExTauri.ShutdownManager do
   def handle_cast(:heartbeat, state) do
     # Record the heartbeat and mark the frontend as having connected at least once.
     # Any traffic also cancels a pending disconnect: the frontend reconnected.
+    now = System.monotonic_time(:millisecond)
+
+    if state.stalled_since do
+      Logger.info(
+        "[ExTauri.ShutdownManager] Heartbeat resumed after #{now - state.stalled_since}ms of silence"
+      )
+    end
+
     {:noreply,
-     %{
-       state
-       | last_heartbeat: System.monotonic_time(:millisecond),
-         connected: true,
-         disconnected_at: nil
-     }}
+     %{state | last_heartbeat: now, connected: true, disconnected_at: nil, stalled_since: nil}}
   end
 
   def handle_cast({:client_connected, socket}, state) do
@@ -335,6 +379,25 @@ defmodule ExTauri.ShutdownManager do
         )
 
         initiate_shutdown(state)
+
+      elapsed > state.heartbeat_timeout and is_nil(state.disconnected_at) and
+          state.shell_alive_check.() ->
+        # The connection is open and the shell is still our parent: the frontend
+        # is being throttled (App Nap, a loaded machine), not gone. Rebaselining
+        # puts the next `ps` a full timeout away rather than one interval.
+        unless state.stalled_since do
+          Logger.warning(
+            "[ExTauri.ShutdownManager] No heartbeat for #{elapsed}ms, but the Tauri frontend " <>
+              "is still running - treating it as throttled and keeping the backend up"
+          )
+        end
+
+        {:noreply,
+         rearm(%{
+           state
+           | last_heartbeat: now,
+             stalled_since: state.stalled_since || now - elapsed
+         })}
 
       elapsed > state.heartbeat_timeout ->
         Logger.warning(

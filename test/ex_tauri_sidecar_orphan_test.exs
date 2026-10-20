@@ -159,6 +159,10 @@ defmodule ExTauri.Sidecar.OrphanTest do
       refute Orphan.orphan?()
       refute Orphan.packaged?()
     end
+
+    test "shell_alive?/0 sees the test VM's parent, and only on Unix" do
+      assert Orphan.shell_alive?() == match?({:unix, _}, :os.type())
+    end
   end
 
   # `lib/<app>-<vsn>` is what Burrito unpacks and what identify/2 reads.

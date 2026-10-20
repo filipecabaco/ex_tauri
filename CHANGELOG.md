@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The generated Rust shell (`priv/templates/main.rs.eex`) is rewritten around
+what a desktop backend actually does in the field: start slowly, die, get
+throttled, and leave nothing behind to say why. Regenerate `src-tauri/src/main.rs`,
+`Cargo.toml`, `tauri.conf.json`'s window and `capabilities/default.json` with
+`mix ex_tauri.install` to pick it up.
+
+### Added
+
+- **The backend is restarted when it dies under an open window**, on the same
+  port, up to three times with backoff (a backend that stayed up a minute gets
+  a fresh three). Until then, and if it gives up, the window shows a page saying
+  what happened, the exit code or signal, and where the log is — instead of
+  polling a dead port for as long as it stays open.
+- **A loading page and a startup error page.** The window opens on a `data:`
+  "Starting…" page rather than `frontendDist` (whatever was listening on the
+  configured port of the user's machine, with the app's capabilities), and a
+  backend that never comes up gets a page naming the reason.
+- `ExTauri.Desktop.keep_awake/1` holds off macOS App Nap (an `NSProcessInfo`
+  activity) while your app is doing work someone is waiting on. App Nap
+  throttles a hidden window's timers, the heartbeat thread's included.
+- `ExTauri.Desktop.quit/0` quits the app the way its Quit menu item does.
+- A `"heartbeat_late"` desktop event, sent once when the shell's heartbeat
+  starts running late (`%{"late_ms" => n}`), and logged by the shell.
+- `ExTauri.Sidecar.Orphan.shell_pid/0`: the shell now passes its own pid as
+  `EX_TAURI_SHELL_PID`, and the orphan and live-shell checks ask about it.
+
+### Fixed
+
+- **Burrito 1.6 broke shutdown and orphan detection.** Up to 1.5 the launcher
+  `execve`d the BEAM; from 1.6 it spawns the BEAM as its child. The shell's
+  SIGTERM killed the launcher, logged "shut down gracefully", and left the BEAM
+  running; `orphan?/0` and `shell_alive?/0` were asking about the launcher; and
+  the window's `--no-halt` made every sidecar look like a CLI invocation, so
+  none was ever reaped. The shell now signals the BEAM itself and spawns the
+  sidecar in its own process group (the final kill takes the launcher and any
+  port programs with it), the Elixir checks use `EX_TAURI_SHELL_PID` or look
+  past a launcher to the shell, and `--no-halt` alone is not a command.
+- **The generated shell never passed `--no-halt`**, which Burrito 1.6 needs or
+  it halts the VM right after boot.
+- **The generated shell waited for the backend on the main thread, forever**:
+  a spinning cursor and a window that could not be quit when it never came up.
+  The wait is on a worker thread with a two-minute deadline, and stops the
+  moment the sidecar exits.
+- **The sidecar's output and exit were lost.** Stdout was `println!`ed (nowhere,
+  for an app launched from Finder) and stderr and the exit dropped. They go to
+  the app's log, with Elixir's `[error]`/`[warning]` carried over as log levels
+  and colour codes stripped. `ERL_CRASH_DUMP` points next to the log: the BEAM
+  wrote dumps to its working directory, `/` for an app launched from Finder.
+- **The app's log deleted itself.** The log plugin's defaults keep one 40 KB
+  file at TRACE level and delete it when it fills; it is now INFO, 5 MB, five
+  files kept, local timestamps.
+- **The generated capabilities did not apply to the app's real page.** Tauri
+  counts a page as local only under `frontendDist`, and the shell navigates to
+  an ephemeral port, so every invoke from the page was denied in production
+  while working in dev. They now carry `remote: <scheme>://<host>:*`.
+- **A new window could attach to an abandoned backend.** The heartbeat socket
+  was named for the app only; it is now per launch and passed to the sidecar as
+  `EX_TAURI_HEARTBEAT_SOCKET` (`EX_TAURI_HEARTBEAT_PORT_FILE` on Windows).
+  `ExTauri.ShutdownManager` listens there when set.
+- **`set_tray` added a new icon every call** and multiplied every click (a
+  listener per call, never removed), and **any menu or tray id containing
+  "quit" quit the app**. The old icon is removed first, tray clicks are routed
+  once, the Quit item's id is namespaced, and tray clicks are no longer also
+  reported as `menu_click`.
+- **Quitting blocked the UI thread** (two seconds on every Windows quit) and
+  ended with `process::exit`, skipping plugin cleanup. It runs on a worker
+  thread and ends with `AppHandle::exit`.
+- `expect` on a missing or unstartable sidecar panicked with no trace; it now
+  shows the startup error page, and a panic hook logs any panic.
+- The channel could hang forever writing to a backend that stopped reading, and
+  its reader could die silently on a bad line, after which every command was
+  dropped. Writes time out and both sides reconnect together.
+- Opening the app again, or clicking its Dock icon, brings the window back.
+
+### Changed
+
+- The generated capability no longer grants `shell:allow-execute` for the
+  sidecar. The Rust shell spawns it, capabilities do not restrict Rust, and
+  with `remote` set it would let any page on the host start another copy of the
+  backend. Add it back to `capabilities/default.json` only if your page really
+  starts the sidecar itself.
+- The generated `Cargo.toml` needs `tauri-plugin-shell` 2.5 (`set_process_group`),
+  the `webview-data-url` feature, and `objc2`/`objc2-foundation` on macOS.
+
 ## [0.3.0] - 2026-10-20
 
 ### Added

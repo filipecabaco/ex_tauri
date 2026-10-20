@@ -181,7 +181,11 @@ defmodule ExTauri.Install.Helpers do
           fullscreen: config.fullscreen,
           width: config.width,
           height: config.height,
-          resizable: config.resize
+          resizable: config.resize,
+          # Shown until the backend answers. Without it the window opened on
+          # frontendDist — whatever happened to be listening on the configured
+          # port of this machine, with the app's capabilities.
+          url: loading_page_url(config.app_name)
         }
       ])
       # Expose the Tauri API on window.__TAURI__. The generated LiveView hook
@@ -209,7 +213,7 @@ defmodule ExTauri.Install.Helpers do
 
     File.write!(
       Path.join(capabilities_dir, "default.json"),
-      capabilities_json(config.release_name)
+      capabilities_json(config.scheme, config.host)
     )
   end
 
@@ -380,11 +384,18 @@ defmodule ExTauri.Install.Helpers do
     log = "0.4"
     serde_json = "1.0"
     serde = { version = "1.0", features = ["derive"] }
-    tauri = { version = "#{major}", features = ["tray-icon"] }
-    tauri-plugin-shell = "#{major}"
+    # webview-data-url: the loading and error pages are data: URLs.
+    tauri = { version = "#{major}", features = ["tray-icon", "webview-data-url"] }
+    # 2.5 is the first with set_process_group, which the sidecar is spawned with.
+    tauri-plugin-shell = "#{shell_plugin_version(major)}"
     tauri-plugin-log = "#{major}"
     tauri-plugin-notification = "#{major}"
     tauri-plugin-single-instance = "#{major}"
+
+    # ExTauri.Desktop.keep_awake/1 holds an NSProcessInfo activity (App Nap).
+    [target.'cfg(target_os = "macos")'.dependencies]
+    objc2 = "0.6"
+    objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSProcessInfo", "NSString"] }
 
     [features]
     # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
@@ -461,14 +472,59 @@ defmodule ExTauri.Install.Helpers do
     end
   end
 
+  defp shell_plugin_version("2"), do: "2.5"
+  defp shell_plugin_version(major), do: major
+
   @doc false
-  def capabilities_json(release_name \\ "desktop") do
+  # The window's first page, until the shell navigates to the backend. A data:
+  # URL because nothing local exists to point at; plain, and in both themes.
+  def loading_page_url(app_name) do
+    name = app_name |> to_string() |> html_escape()
+
+    html = """
+    <!doctype html><meta charset="utf-8"><title>#{name}</title>
+    <style>
+      :root { color-scheme: light dark; }
+      html, body { margin: 0; height: 100%; }
+      body { display: flex; align-items: center; justify-content: center;
+             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+             background: Canvas; color: CanvasText; opacity: 0.7; }
+    </style>
+    <div data-tauri-drag-region>Starting #{name}…</div>
+    """
+
+    "data:text/html;base64," <> Base.encode64(html)
+  end
+
+  defp html_escape(text) do
+    text
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+    |> String.replace("\"", "&quot;")
+  end
+
+  @doc false
+  # `remote` is what lets the app's own page use these: Tauri counts a page as
+  # local only when its URL is under frontendDist, and the shell navigates the
+  # window to an ephemeral port, so every invoke from the real page was denied —
+  # silently — while the same code worked in dev, where the port is pinned. The
+  # pattern's `:*` is the port wildcard; the host is exactly what the shell
+  # navigates to (`localhost` and `127.0.0.1` are different origins to Tauri).
+  #
+  # There is deliberately no `shell:allow-execute` for the sidecar: the Rust
+  # shell spawns it, capabilities do not restrict Rust, and with `remote` set it
+  # would let any page on that host start another copy of the backend.
+  def capabilities_json(scheme \\ "http", host \\ "localhost") do
     """
     {
       "$schema": "../gen/schemas/desktop-schema.json",
       "identifier": "default",
       "description": "Capability for the main application window",
       "windows": ["main", "*"],
+      "remote": {
+        "urls": ["#{scheme}://#{host}:*"]
+      },
       "permissions": [
         "core:default",
         "notification:default",
@@ -487,16 +543,7 @@ defmodule ExTauri.Install.Helpers do
         "core:window:allow-set-resizable",
         "core:window:allow-start-dragging",
         "core:window:allow-close",
-        "core:webview:allow-create-webview-window",
-        {
-          "identifier": "shell:allow-execute",
-          "allow": [
-            {
-              "name": "#{release_name}",
-              "sidecar": true
-            }
-          ]
-        }
+        "core:webview:allow-create-webview-window"
       ]
     }
     """

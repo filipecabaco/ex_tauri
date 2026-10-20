@@ -38,8 +38,17 @@ defmodule ExTauri.ShutdownManager do
      initiates graceful shutdown; before the first connection the timeout is not
      enforced, so a slow boot can't shut the app down before the window attaches
 
-  The socket path is unique per application (based on `:app_name` config) to prevent
-  collisions when multiple ExTauri applications run simultaneously.
+  Generated shells pick the endpoint per launch and pass it in the environment —
+  `EX_TAURI_HEARTBEAT_SOCKET` (Unix) or `EX_TAURI_HEARTBEAT_PORT_FILE` (Windows)
+  — and this listens exactly there. A path named only for the application let a
+  new window attach to an abandoned backend still listening on it: the old one
+  got heartbeated forever, the new one never heard from its window. Without the
+  variable (shells generated before 0.3.1) the per-application path above is
+  used, so the socket stays unique across different ExTauri apps.
+
+  The shell also passes its own pid as `EX_TAURI_SHELL_PID`, which is what the
+  orphan check and the live-shell check below ask about — see
+  `ExTauri.Sidecar.Orphan.shell_pid/0`.
 
   This works even when:
   - The app is force-quit (CMD+Q on macOS)
@@ -89,26 +98,28 @@ defmodule ExTauri.ShutdownManager do
   late enough, once, to stop a backend that six agents were using, with the
   window back on screen a second later.
 
-  So on Unix, in a packaged build, a heartbeat timeout with the connection still
-  open first asks `ExTauri.Sidecar.Orphan.shell_alive?/0`. A shell that is still
-  our parent keeps the backend running: the stall is logged once when it starts
-  and once when it ends, the baseline is reset, and the next check is a full
-  timeout away — the question forks `ps`. Everything that does mean "window
-  gone" still stops it:
+  So on Unix, wherever the shell can be named — it passed `EX_TAURI_SHELL_PID`,
+  or this is a packaged build whose process tree says — a heartbeat timeout with
+  the connection still open first asks `ExTauri.Sidecar.Orphan.shell_alive?/0`.
+  A shell that is still running keeps the backend up: the stall is logged once
+  when it starts and once when it ends, the baseline is reset, and the next check
+  is a full timeout away — the question forks `ps`. Everything that does mean
+  "window gone" still stops it:
 
     * a quit sends SIGTERM (Unix frontends always do);
     * a crash or force-quit closes the socket, which is signal 1;
-    * a shell that dies leaves this process reparented to init, so
-      `shell_alive?/0` stops answering yes and the next timeout stops it.
+    * a shell that dies stops answering `shell_alive?/0`, so the next timeout
+      stops it.
 
   What it gives up is signal 2 for a shell that is alive but wedged: that
   backend now lives until the shell is killed, at which point the closed socket
   stops it. A wedged window is something a person can see and quit; a backend
   that dies under a hidden window is not.
 
-  Windows keeps the plain timeout, and so does a `mix ex_tauri.dev` backend,
-  whose parent says nothing about a window. Inject `:shell_alive_check` to
-  decide otherwise.
+  Windows keeps the plain timeout, and so does a backend whose shell cannot be
+  named (a `mix ex_tauri.dev` backend from a shell generated before 0.3.1, whose
+  parent says nothing about a window). Inject `:shell_alive_check` to decide
+  otherwise.
 
   `:heartbeat_timeout` stays at 1500ms because the Windows frontend has no
   SIGTERM to send and quits by letting this time out — raising the default would
@@ -193,18 +204,19 @@ defmodule ExTauri.ShutdownManager do
     orphan_grace = setting(opts, :heartbeat_orphan_grace, @default_orphan_grace)
 
     # Injectable so the suite can exercise the orphan path without reparenting a
-    # real OS process. In production it only ever runs in a packaged build.
+    # real OS process. In production it only runs where the answer means
+    # something: a packaged build, or any build whose shell named itself.
     orphan_check =
-      opts[:orphan_check] ||
-        fn -> ExTauri.Sidecar.Orphan.packaged?() and ExTauri.Sidecar.Orphan.orphan?() end
+      opts[:orphan_check] || fn -> shell_known?() and ExTauri.Sidecar.Orphan.orphan?() end
 
     # Asked before a heartbeat timeout stops anything. `true` means the window
     # provably still exists and the silence is throttling, not death.
     shell_alive_check =
       opts[:shell_alive_check] ||
-        fn -> ExTauri.Sidecar.Orphan.packaged?() and ExTauri.Sidecar.Orphan.shell_alive?() end
+        fn -> shell_known?() and ExTauri.Sidecar.Orphan.shell_alive?() end
 
-    {listen_socket, endpoint, cleanup_paths} = open_listener(transport, socket_name)
+    {listen_socket, endpoint, cleanup_paths} =
+      open_listener(transport, opts[:endpoint] || endpoint_from_env(transport), socket_name)
 
     # Spawn acceptor process under the ExTauri TaskSupervisor
     if listen_socket do
@@ -469,8 +481,15 @@ defmodule ExTauri.ShutdownManager do
     end
   end
 
-  defp open_listener(:unix, socket_name) do
-    socket_path = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
+  defp shell_known?,
+    do: ExTauri.Sidecar.Orphan.shell_pid() != nil or ExTauri.Sidecar.Orphan.packaged?()
+
+  defp endpoint_from_env(:unix), do: System.get_env("EX_TAURI_HEARTBEAT_SOCKET")
+  defp endpoint_from_env(:tcp), do: System.get_env("EX_TAURI_HEARTBEAT_PORT_FILE")
+
+  defp open_listener(:unix, socket_path, socket_name) do
+    socket_path =
+      socket_path || Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.sock")
 
     remove_stale_socket(socket_path)
 
@@ -499,8 +518,8 @@ defmodule ExTauri.ShutdownManager do
     end
   end
 
-  defp open_listener(:tcp, socket_name) do
-    port_file = Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.port")
+  defp open_listener(:tcp, port_file, socket_name) do
+    port_file = port_file || Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.port")
 
     # Clean up a stale port file so the frontend can't connect to a dead port
     File.rm(port_file)

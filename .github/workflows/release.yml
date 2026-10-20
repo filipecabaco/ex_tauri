@@ -1,9 +1,10 @@
 name: Release to Hex
 
 # Publishes ex_tauri to hex.pm when a version tag (vX.Y.Z) is pushed, and
-# creates a GitHub Release with generated notes. Tags are normally created
-# automatically by tag-and-release.yml when @version in mix.exs changes on main,
-# but this also runs on a manually pushed tag or via workflow_dispatch.
+# creates a GitHub Release with generated notes. Normally started by
+# tag-and-release.yml through workflow_dispatch right after it pushes the tag
+# (its tag push cannot trigger this by itself); a tag pushed by hand still
+# triggers it directly.
 #
 # Setup (once): generate a Hex API key with
 #   mix hex.user key generate --permission api:write
@@ -33,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -50,7 +51,7 @@ jobs:
           otp-version: ${{ env.OTP_VERSION }}
 
       - name: Cache deps
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             deps
@@ -67,7 +68,10 @@ jobs:
 
       - name: Verify tag matches mix.exs version
         run: |
-          MIX_VERSION="$(mix run --no-start -e 'IO.puts(Mix.Project.config()[:version])')"
+          # Compile first: on a cold cache, `mix run` prints the whole dependency
+          # build to stdout, and the capture below read that as the version.
+          mix compile
+          MIX_VERSION="$(mix run --no-start --no-compile -e 'IO.puts(Mix.Project.config()[:version])')"
           REF="${{ inputs.tag != '' && inputs.tag || github.ref_name }}"
           TAG_VERSION="${REF#v}"
           echo "mix.exs version: $MIX_VERSION"
@@ -94,7 +98,7 @@ jobs:
         run: mix docs
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
           name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}

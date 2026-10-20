@@ -1,10 +1,15 @@
 name: Tag and Release
 
 # When @version in mix.exs changes on main, create and push the matching
-# vX.Y.Z tag. That tag push triggers release.yml, which publishes to hex.pm.
+# vX.Y.Z tag, then start release.yml for it, which publishes to hex.pm.
 #
 # Release flow: bump @version in mix.exs -> merge to main -> tag is created
 # here -> release.yml publishes to Hex and cuts a GitHub Release.
+#
+# The release has to be started explicitly. A tag pushed with GITHUB_TOKEN
+# triggers no workflows (GitHub's guard against recursive runs), so the tag
+# push alone never reached release.yml; v0.3.0 sat tagged and unpublished.
+# workflow_dispatch is the one event GITHUB_TOKEN is allowed to trigger.
 
 on:
   push:
@@ -13,13 +18,14 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   tag:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -48,3 +54,9 @@ jobs:
         run: |
           git tag "v$VERSION"
           git push origin "v$VERSION"
+
+      - name: Start the Hex release
+        if: steps.check_tag.outputs.exists == 'false'
+        run: gh workflow run release.yml --ref "$GITHUB_REF_NAME" -f tag="v$VERSION"
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -196,12 +196,22 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| match event {
-            // Cmd+Q from the Dock, logging out, the last window going: all of
-            // them stop the backend first. The exit quit() ends with is let through.
+            // The last window going, or an exit asked for in code: stop the
+            // backend first. The exit quit() ends with is let through.
             tauri::RunEvent::ExitRequested { api, .. } => {
                 if !EXIT_READY.load(Ordering::SeqCst) {
                     api.prevent_exit();
                     quit(app_handle);
+                }
+            }
+            // Quit from the Dock, an AppleScript `quit`, logging out: macOS
+            // terminates the app itself and Tauri only reports Exit, with no
+            // ExitRequested to intercept. Stop the backend here, blocking —
+            // the process is ending anyway — or it is left to notice the
+            // heartbeat socket closing on its own.
+            tauri::RunEvent::Exit => {
+                if !EXIT_READY.load(Ordering::SeqCst) {
+                    stop_sidecar(app_handle);
                 }
             }
             // Clicking the Dock icon brings the window back.

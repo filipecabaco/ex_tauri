@@ -205,15 +205,18 @@ defmodule ExTauri.Sidecar.OrphanTest do
   end
 
   # An OS pid that existed a moment ago and has since exited and been reaped.
+  # `cat` waits on its stdin, so the pid can be read before it exits (`true`
+  # was sometimes gone before Port.info/2 asked); closing the port ends it.
   defp spawn_and_reap do
-    port = Port.open({:spawn_executable, System.find_executable("true")}, [:exit_status])
+    port = Port.open({:spawn_executable, System.find_executable("cat")}, [:binary])
     {:os_pid, pid} = Port.info(port, :os_pid)
+    Port.close(port)
 
-    receive do
-      {^port, {:exit_status, _}} -> pid
-    after
-      5_000 -> flunk("`true` did not exit")
-    end
+    gone? = fn -> not match?({_, 0}, System.cmd("ps", ["-o", "pid=", "-p", "#{pid}"])) end
+
+    if Enum.any?(1..100, fn _ -> gone?.() or (Process.sleep(50) && false) end),
+      do: pid,
+      else: flunk("`cat` (pid #{pid}) did not exit")
   end
 
   # `lib/<app>-<vsn>` is what Burrito unpacks and what identify/2 reads.

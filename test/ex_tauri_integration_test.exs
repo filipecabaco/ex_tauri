@@ -203,6 +203,15 @@ defmodule ExTauriIntegrationTest do
       assert main_src =~ "ERL_CRASH_DUMP"
     end
 
+    test "a backend that exits releases its keep_awake" do
+      # A restarted backend starts believing nothing is held; found by killing
+      # the BEAM under a real build and watching App Nap stay disabled.
+      main_src = Helpers.main_src("localhost", "4000", "test_app")
+
+      assert main_src =~
+               ~r/CommandEvent::Terminated\(exit\) => \{.*?app_nap::set_disabled\(false\)/s
+    end
+
     test "keeps its log instead of rotating it away" do
       main_src = Helpers.main_src("localhost", "4000", "test_app")
 

@@ -220,6 +220,15 @@ defmodule ExTauriIntegrationTest do
       assert main_src =~ ~r/fn quit\(app: &tauri::AppHandle\) \{.*?std::thread::spawn/s
     end
 
+    test "stops the backend when macOS terminates the app itself" do
+      # Quit from the Dock, an AppleScript `quit` and logging out never send
+      # ExitRequested; found by quitting a real build and reading its log.
+      main_src = Helpers.main_src("localhost", "4000", "test_app")
+
+      assert main_src =~
+               ~r/tauri::RunEvent::Exit => \{\s+if !EXIT_READY.*?stop_sidecar\(app_handle\)/s
+    end
+
     test "handles different host and port configurations" do
       main_src = Helpers.main_src("127.0.0.1", "8080", "test_app")
 

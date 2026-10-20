@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Quitting from the Dock, an AppleScript `quit` or logging out skipped the
+  shell's shutdown.** macOS terminates the app itself there and Tauri reports
+  only `RunEvent::Exit`, never the `ExitRequested` the shell handled, so the
+  backend got no SIGTERM and was left to notice the heartbeat socket closing
+  (about three seconds later, and not through its own shutdown). The shell now
+  stops the sidecar on `Exit` too. Found by quitting a real build and reading
+  its log: no "stopping" line, no exit line.
+
 ## [0.4.0] - 2026-10-20
 
 The generated Rust shell (`priv/templates/main.rs.eex`) is rewritten around

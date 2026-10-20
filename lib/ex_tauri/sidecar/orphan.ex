@@ -9,12 +9,12 @@ defmodule ExTauri.Sidecar.Orphan do
 
   Which process *is* the shell takes some care. Generated shells say so, in
   `EX_TAURI_SHELL_PID`, and that answer is used whenever it is there — see
-  `shell_pid/0`. Without it the shell is read off the process tree: up to Burrito
-  1.5 the launcher `execve`d the BEAM in place, so the shell was the BEAM's
-  parent; from 1.6 the launcher spawns the BEAM as its *child* and waits on it,
-  so the parent is the launcher and the shell is one level further up. A
-  launcher is recognised by its executable being named after the release, which
-  is what Tauri names the bundled sidecar.
+  `shell_pid/0`. Without it the shell is read off the process tree. Burrito's
+  launcher (1.6, which ex_tauri requires) spawns the BEAM as its *child* and
+  waits on it, so a packaged BEAM's parent is the launcher and the shell is one
+  level further up; a release script or the dev shim `exec`s the VM, so there
+  the parent is the shell itself. A launcher is recognised by its executable
+  being named after the release, which is what Tauri names the bundled sidecar.
 
   That is not hypothetical. It has now been observed in two ex_tauri apps on one
   machine: seven sidecars of one running at once, the oldest holding its HTTP

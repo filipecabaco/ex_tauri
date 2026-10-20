@@ -8,7 +8,7 @@ defmodule ExTauri.MixProject do
     [
       app: :ex_tauri,
       version: @version,
-      elixir: "~> 1.15",
+      elixir: "~> 1.17",
       # Limited to OTP 27 due to Burrito pre-compiled ERTS availability
       # OTP 28 doesn't have universal macOS binaries available yet
       otp_release: "~> 27.0",
@@ -47,7 +47,7 @@ defmodule ExTauri.MixProject do
   defp deps do
     [
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:burrito, "~> 1.5"},
+      {:burrito, "~> 1.6"},
       {:igniter, "~> 0.7"},
       {:jason, "~> 1.4"}
     ]

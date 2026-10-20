@@ -24,11 +24,12 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 
 ## Prerequisites
 
-- **Elixir** >= 1.15 with **OTP 27** (OTP 28 not yet supported due to Burrito ERTS availability)
+- **Elixir** >= 1.17 with **OTP 27** (OTP 28 not yet supported due to Burrito ERTS availability)
 - **Rust** — [Install via rustup](https://www.rust-lang.org/tools/install)
+- **Zig 0.16.0**, exactly — Burrito 1.6 builds the packaged sidecar with it and refuses any other version
 - **Platform dependencies** — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
-> **Note:** Zig is only required if you use Burrito for cross-compilation. For same-platform builds, Rust alone is sufficient.
+> **Note:** `mix ex_tauri.dev` skips Burrito, so Zig is only needed for `mix ex_tauri.build`.
 
 ## Getting Started
 

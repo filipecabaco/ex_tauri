@@ -90,8 +90,10 @@ throttled, and leave nothing behind to say why. Regenerate `src-tauri/src/main.r
   starts the sidecar itself.
 - The generated `Cargo.toml` needs `tauri-plugin-shell` 2.5 (`set_process_group`),
   the `webview-data-url` feature, and `objc2`/`objc2-foundation` on macOS.
-- ex_tauri's own lockfile moves to Burrito 1.6.0, the version `~> 1.5` already
-  resolves to for every new app, so its suite runs against what users get.
+- **Requires Burrito `~> 1.6`, and with it Elixir `~> 1.17` and Zig 0.16.0**
+  for `mix ex_tauri.build`. `~> 1.5` already resolved to 1.6.0 for every new
+  app; the generated shell and the orphan checks are now built around its
+  launcher (which spawns the BEAM as a child), so the requirement says so.
 
 ## [0.3.0] - 2026-10-20
 

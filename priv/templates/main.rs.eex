@@ -1,15 +1,17 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use tauri_plugin_shell::process::CommandEvent;
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc;
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+const APP_NAME: &str = "<%= app_name %>";
 
 // Flipped to false when the app is quitting. The channel threads stop sending
 // heartbeats once this is false, which lets the sidecar detect heartbeat loss
@@ -17,21 +19,59 @@ use std::time::Duration;
 // there is no SIGTERM to deliver.
 static HEARTBEAT_ACTIVE: AtomicBool = AtomicBool::new(true);
 
+// Set once the window has been pointed at a backend that answered. Before that
+// a sidecar that exits is a failed start, and the startup page says so; after
+// it, it is a backend that died under an open window, and it is restarted.
+static BACKEND_READY: AtomicBool = AtomicBool::new(false);
+
+// Set by the sidecar's Terminated event and cleared on every spawn, so a wait
+// for the port gives up the moment the process it is waiting on is gone rather
+// than at the deadline.
+static SIDECAR_EXITED: AtomicBool = AtomicBool::new(false);
+
+// One recovery at a time: the restart loop owns every respawn until it has a
+// backend up again or gives up.
+static RECOVERING: AtomicBool = AtomicBool::new(false);
+static RESTARTS: AtomicU32 = AtomicU32::new(0);
+
+// The quit sequence runs once, and the exit it ends with is let through.
+static QUIT_STARTED: AtomicBool = AtomicBool::new(false);
+static EXIT_READY: AtomicBool = AtomicBool::new(false);
+
 // Outbound side of the sidecar channel: heartbeats, replies, and native
 // events (menu/tray clicks) are queued here and written by the writer thread.
 static CHANNEL_TX: Mutex<Option<mpsc::Sender<String>>> = Mutex::new(None);
 
-// Handle to the tray icon created via the "set_tray" channel command.
-// Kept so a later set_tray replaces (drops) the previous icon.
-static TRAY: Mutex<Option<tauri::tray::TrayIcon>> = Mutex::new(None);
+// One secret for the life of the app, so a restarted backend still accepts the
+// session cookies the window already holds.
+static SECRET_KEY_BASE: OnceLock<String> = OnceLock::new();
+
+const MAX_RESTARTS: u32 = 3;
+// A backend that stayed up this long before dying gets a fresh set of restarts.
+const STABLE_UPTIME: Duration = Duration::from_secs(60);
+// Generous because the first launch pays for unpacking the release.
+const STARTUP_DEADLINE: Duration = Duration::from_secs(120);
+const QUIT_GRACE: Duration = Duration::from_secs(5);
+const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
+// A heartbeat gap this much longer than the tick is reported. Half the
+// ShutdownManager's 1500ms timeout, so a stall is on record before it matters.
+const HEARTBEAT_LATE: Duration = Duration::from_millis(750);
+
+// The quit item's id is namespaced, and so are the tray's: every menu click in
+// the app, tray included, reaches the one on_menu_event handler below, and an
+// app whose tray had an item called "quit" (or "quit_session") used to quit.
+const QUIT_ID: &str = "ex_tauri:quit";
+const TRAY_ID: &str = "ex_tauri_tray";
+const TRAY_ITEM_PREFIX: &str = "ex_tauri_tray:";
 
 struct AppState {
-    sidecar_child: Mutex<Option<SidecarProcess>>,
+    sidecar: Mutex<Option<SidecarProcess>>,
 }
 
 struct SidecarProcess {
-    child: Option<tauri_plugin_shell::process::CommandChild>,
-    pid: Option<u32>,
+    child: Option<CommandChild>,
+    pid: u32,
+    started: Instant,
 }
 
 impl Drop for SidecarProcess {
@@ -57,87 +97,43 @@ fn send_channel_event(name: &str, payload: serde_json::Value) {
     send_channel_message(message.to_string());
 }
 
-fn kill_sidecar(app: &tauri::AppHandle) {
-    // Stop heartbeating first: the sidecar's ShutdownManager sees the heartbeat
-    // stop and begins its own graceful shutdown while we wait below.
-    HEARTBEAT_ACTIVE.store(false, Ordering::Relaxed);
-
-    if let Some(state) = app.try_state::<AppState>() {
-        if let Ok(mut guard) = state.sidecar_child.lock() {
-            if let Some(mut process) = guard.take() {
-                // Try graceful shutdown first with SIGTERM
-                if let Some(pid) = process.pid {
-                    println!("Attempting graceful shutdown of sidecar (PID: {})...", pid);
-
-                    // Send SIGTERM for graceful shutdown
-                    #[cfg(unix)]
-                    {
-                        use std::process::Command;
-                        let _ = Command::new("kill")
-                            .args(["-TERM", &pid.to_string()])
-                            .output();
-
-                        // Wait up to 2 seconds for graceful shutdown
-                        let timeout = Duration::from_millis(2000);
-                        let start = std::time::Instant::now();
-
-                        while start.elapsed() < timeout {
-                            // Check if process is still running
-                            let status = Command::new("kill")
-                                .args(["-0", &pid.to_string()])
-                                .output();
-
-                            if let Ok(output) = status {
-                                if !output.status.success() {
-                                    println!("Sidecar shut down gracefully");
-                                    return;
-                                }
-                            }
-
-                            std::thread::sleep(Duration::from_millis(100));
-                        }
-
-                        println!("Graceful shutdown timeout, forcing kill...");
-                    }
-
-                    #[cfg(windows)]
-                    {
-                        // No SIGTERM on Windows. The heartbeat was stopped above,
-                        // so the sidecar's ShutdownManager times out (1500ms by
-                        // default) and exits gracefully on its own — give it time
-                        // to do so before falling through to the hard kill.
-                        std::thread::sleep(Duration::from_millis(2000));
-                    }
-                }
-
-                // Fallback to SIGKILL if graceful shutdown didn't work
-                if let Some(child) = process.child.take() {
-                    println!("Sending SIGKILL to sidecar...");
-                    let _ = child.kill();
-                }
-            }
-        }
-    }
-}
-
 fn main() {
+    // A panic in setup or a callback otherwise ends the app with nothing in the
+    // log — a packaged app has no terminal for the default hook to print to.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log::error!(target: "panic", "{}", info);
+        default_hook(info);
+    }));
+
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
-            // Focus the main window when a second instance is launched
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Opening the app again brings the running one forward.
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(
+            // The plugin's defaults keep one 40 KB file at TRACE level and delete
+            // it when it fills, so a few minutes of webview tracing erased the
+            // lines that explain why a backend stopped.
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .max_file_size(5_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5))
+                .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .build(),
+        )
         .plugin(tauri_plugin_notification::init())
         .manage(AppState {
-            sidecar_child: Mutex::new(None),
+            sidecar: Mutex::new(None),
         })
         // Tauri v2 installs no default macOS menu, so Cmd+Q is unbound. A *custom*
         // Quit item (not the predefined one, which terminates natively and bypasses
-        // on_menu_event) routes Cmd+Q through on_menu_event -> kill_sidecar so the
-        // backend is stopped before exit. The Edit submenu keeps copy/paste working.
+        // on_menu_event) routes Cmd+Q through quit() so the backend is stopped
+        // before exit. The Edit submenu keeps copy/paste working.
         .menu(|handle| {
-            let quit = MenuItem::with_id(handle, "quit", "Quit <%= app_name %>", true, Some("CmdOrCtrl+Q"))?;
-            let app_menu = Submenu::with_items(handle, "<%= app_name %>", true, &[&quit])?;
+            let quit = MenuItem::with_id(handle, QUIT_ID, format!("Quit {}", APP_NAME), true, Some("CmdOrCtrl+Q"))?;
+            let app_menu = Submenu::with_items(handle, APP_NAME, true, &[&quit])?;
             let edit_menu = Submenu::with_items(
                 handle,
                 "Edit",
@@ -156,55 +152,94 @@ fn main() {
         })
         .setup(|app| {
             let port = resolve_port();
-            start_server(app.handle(), port);
-            check_server_started(port);
-            navigate_main_window(app.handle(), port);
-            start_channel(app.handle().clone());
+            let handle = app.handle().clone();
+            // Everything after this runs on a worker thread. `setup` runs on the
+            // main thread inside applicationDidFinishLaunching, so waiting for
+            // the backend here froze the event loop until it bound its port — a
+            // spinning cursor and a window that could not even be quit when it
+            // never did.
+            std::thread::spawn(move || {
+                if let Err(reason) = launch_backend(&handle, port) {
+                    log::error!(target: "sidecar", "did not start: {}", reason);
+                    show_page(&handle, Page::StartFailed, &reason);
+                    return;
+                }
+                BACKEND_READY.store(true, Ordering::SeqCst);
+                start_channel(handle.clone());
+            });
             Ok(())
         })
-        // Intercept menu events (especially CMD+Q on macOS)
         .on_menu_event(|app, event| {
-            println!("Menu event received: {:?}", event.id());
-            // On macOS, the default menu includes a "quit" item
-            // Intercept it to perform graceful shutdown
-            if event.id().as_ref() == "quit" || event.id().as_ref().contains("quit") {
-                println!("Quit menu item clicked (CMD+Q), shutting down gracefully...");
-                kill_sidecar(app);
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                std::process::exit(0);
+            let id = event.id().as_ref();
+
+            if id == QUIT_ID {
+                quit(app);
+                return;
             }
 
-            // Forward every other menu click to the Elixir sidecar so
-            // server-side code can react (see ExTauri.Desktop.subscribe/0).
-            send_channel_event(
-                "menu_click",
-                serde_json::json!({"id": event.id().as_ref()}),
-            );
+            // Server-side code reacts to both (see ExTauri.Desktop.subscribe/0).
+            match id.strip_prefix(TRAY_ITEM_PREFIX) {
+                Some(tray_id) => send_channel_event("tray_menu_click", serde_json::json!({"id": tray_id})),
+                None => send_channel_event("menu_click", serde_json::json!({"id": id})),
+            }
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Kill the sidecar when the main window closes. Secondary
-                // windows (ExTauri.Window.open) close without stopping the app.
+            // Closing the main window quits the app; secondary windows
+            // (ExTauri.Window.open) close without stopping anything.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
-                    kill_sidecar(&window.app_handle());
+                    api.prevent_close();
+                    quit(window.app_handle());
                 }
             }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                // Kill the sidecar when the app is exiting (fallback for non-menu exits)
-                println!("ExitRequested event received, shutting down...");
-                kill_sidecar(app_handle);
-                api.prevent_exit(); // Prevent exit until we've cleaned up
-                // Allow exit after cleanup
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    std::process::exit(0);
-                });
+        .run(|app_handle, event| match event {
+            // Cmd+Q from the Dock, logging out, the last window going: all of
+            // them stop the backend first. The exit quit() ends with is let through.
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                if !EXIT_READY.load(Ordering::SeqCst) {
+                    api.prevent_exit();
+                    quit(app_handle);
+                }
             }
+            // Clicking the Dock icon brings the window back.
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => show_main_window(app_handle),
+            _ => {}
         });
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+// The one way out — the Quit item, closing the main window, ExitRequested, and
+// ExTauri.Desktop.quit/0 all come here. Off the main thread: stopping the
+// backend means waiting for it, and doing that on the UI thread froze the
+// window on every quit.
+fn quit(app: &tauri::AppHandle) {
+    if QUIT_STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+
+    let app = app.clone();
+    std::thread::spawn(move || {
+        stop_sidecar(&app);
+        EXIT_READY.store(true, Ordering::SeqCst);
+        // exit() rather than process::exit: it runs RunEvent::Exit, so plugins
+        // clean up after themselves and the webview flushes its storage.
+        app.exit(0);
+    });
 }
 
 // Uses EX_TAURI_PORT when set (mix ex_tauri.dev pins it to the configured dev
@@ -260,63 +295,277 @@ fn secret_key_base() -> String {
     out
 }
 
-fn start_server(app: &tauri::AppHandle, port: u16) {
+// Where this launch's heartbeat channel lives. Per launch, and handed to the
+// sidecar in the environment: a path named only for the app let a new window
+// attach to an abandoned backend still listening on it. Short, because a Unix
+// socket path must fit in 104 bytes and macOS's temp dir already takes ~50.
+#[cfg(unix)]
+fn heartbeat_endpoint() -> (&'static str, std::path::PathBuf) {
+    let path = std::env::temp_dir().join(format!("tauri_heartbeat_{}.sock", std::process::id()));
+    ("EX_TAURI_HEARTBEAT_SOCKET", path)
+}
+
+// The BEAM cannot listen on Unix domain sockets on Windows, so the sidecar
+// listens on 127.0.0.1 with an OS-assigned port and publishes the port number
+// in this file (see ExTauri.ShutdownManager).
+#[cfg(windows)]
+fn heartbeat_endpoint() -> (&'static str, std::path::PathBuf) {
+    let path = std::env::temp_dir().join(format!(
+        "tauri_heartbeat_<%= socket_name %>_{}.port",
+        std::process::id()
+    ));
+    ("EX_TAURI_HEARTBEAT_PORT_FILE", path)
+}
+
+// Starts the backend and waits until it answers on `port`, then shows it.
+fn launch_backend(app: &tauri::AppHandle, port: u16) -> Result<(), String> {
+    spawn_sidecar(app, port)?;
+    wait_for_backend(port)?;
+    navigate_main_window(app, port);
+    Ok(())
+}
+
+fn spawn_sidecar(app: &tauri::AppHandle, port: u16) -> Result<(), String> {
+    if !HEARTBEAT_ACTIVE.load(Ordering::SeqCst) {
+        return Err("the app is quitting".to_string());
+    }
+
     // PORT and SECRET_KEY_BASE are always injected: every server needs a port,
     // and SECRET_KEY_BASE is a random per-launch secret (inert if unused). The
     // remaining pairs come from `config :ex_tauri, :sidecar_env` — the Phoenix
     // defaults (PHX_SERVER/PHX_HOST) unless overridden for another framework.
-    let env: std::collections::HashMap<String, String> = std::collections::HashMap::from([
+    let secret = SECRET_KEY_BASE.get_or_init(secret_key_base).clone();
+    let mut env: std::collections::HashMap<String, String> = std::collections::HashMap::from([
         ("PORT".to_string(), port.to_string()),
-        ("SECRET_KEY_BASE".to_string(), secret_key_base()),<%= for {k, v} <- sidecar_env do %>
+        ("SECRET_KEY_BASE".to_string(), secret),<%= for {k, v} <- sidecar_env do %>
         ("<%= k %>".to_string(), "<%= v %>".to_string()),<% end %>
     ]);
 
-    let sidecar_command = app.shell().sidecar("<%= release_name %>")
-        .expect("failed to setup `desktop` sidecar")
-        .envs(env);
+    // Who the window is, and where its heartbeat goes. The sidecar's orphan and
+    // live-shell checks ask about this pid rather than their parent, which under
+    // Burrito 1.6 is the launcher, not this process.
+    env.insert("EX_TAURI_SHELL_PID".to_string(), std::process::id().to_string());
+    let (endpoint_var, endpoint) = heartbeat_endpoint();
+    env.insert(endpoint_var.to_string(), endpoint.to_string_lossy().into_owned());
 
-    let (mut rx, child) = sidecar_command
+    // The BEAM writes erl_crash.dump to its working directory, and an app
+    // launched from Finder runs in `/`, which it cannot write: a backend that
+    // crashed left no dump anywhere. Put it beside the app's log instead.
+    if let Ok(dir) = app.path().app_log_dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        env.insert(
+            "ERL_CRASH_DUMP".to_string(),
+            dir.join("erl_crash.dump").to_string_lossy().into_owned(),
+        );
+    }
+
+    // `--no-halt`: from Burrito 1.6 the launcher boots the BEAM with
+    // `-s elixir start_cli`, which halts the VM right after boot unless told
+    // not to. Release scripts and the dev shim ignore the argument.
+    //
+    // Its own process group, so the final kill takes everything with it: a
+    // Burrito launcher spawns the BEAM as a child, and the BEAM spawns ports.
+    let command = app
+        .shell()
+        .sidecar("<%= release_name %>")
+        .map_err(|error| format!("the `<%= release_name %>` sidecar is missing from the app bundle ({})", error))?
+        .args(["--no-halt"])
+        .envs(env)
+        .set_process_group(true);
+
+    SIDECAR_EXITED.store(false, Ordering::SeqCst);
+
+    let (rx, child) = command
         .spawn()
-        .expect("Failed to spawn desktop sidecar");
+        .map_err(|error| format!("the backend could not be started ({})", error))?;
 
-    // Get the PID for graceful shutdown
     let pid = child.pid();
-    println!("Sidecar process started with PID: {}", pid);
+    log::info!(target: "sidecar", "started (pid {}, port {})", pid, port);
 
-    // Store the child process handle so we can kill it on exit
     if let Some(state) = app.try_state::<AppState>() {
-        if let Ok(mut guard) = state.sidecar_child.lock() {
+        if let Ok(mut guard) = state.sidecar.lock() {
             *guard = Some(SidecarProcess {
                 child: Some(child),
-                pid: Some(pid),
+                pid,
+                started: Instant::now(),
             });
         }
     }
 
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stdout(line_bytes) = event {
-                let line = String::from_utf8_lossy(&line_bytes);
-                println!("{}", line);
-            }
-        }
-    });
+    tauri::async_runtime::spawn(watch_sidecar(app.clone(), rx, pid, port));
+    Ok(())
 }
 
-fn check_server_started(port: u16) {
-    let sleep_interval = std::time::Duration::from_millis(200);
-    let host = "<%= host %>".to_string();
-    let addr = format!("{}:{}", host, port);
-    println!(
-        "Waiting for your phoenix dev server to start on {}...",
-        addr
-    );
-    loop {
-        if std::net::TcpStream::connect(addr.clone()).is_ok() {
-           break;
+// Everything the sidecar says, and its exit, goes to the app's log. Printing it
+// went nowhere for an app launched from Finder, and an exit nobody recorded is
+// how a backend once stopped under an open window with no trace of why.
+async fn watch_sidecar(
+    app: tauri::AppHandle,
+    mut rx: tauri::async_runtime::Receiver<CommandEvent>,
+    pid: u32,
+    port: u16,
+) {
+    while let Some(event) = rx.recv().await {
+        match event {
+            CommandEvent::Stdout(bytes) => log_sidecar_line(&bytes, false),
+            CommandEvent::Stderr(bytes) => log_sidecar_line(&bytes, true),
+            CommandEvent::Error(error) => log::error!(target: "sidecar", "{}", error),
+            CommandEvent::Terminated(exit) => {
+                SIDECAR_EXITED.store(true, Ordering::SeqCst);
+                let exit = describe_exit(exit.code, exit.signal);
+
+                if !HEARTBEAT_ACTIVE.load(Ordering::SeqCst) {
+                    log::info!(target: "sidecar", "{} (pid {})", exit, pid);
+                    continue;
+                }
+
+                log::error!(target: "sidecar", "{} while the window is open (pid {})", exit, pid);
+
+                if BACKEND_READY.load(Ordering::SeqCst) && !RECOVERING.swap(true, Ordering::SeqCst) {
+                    let uptime = sidecar_uptime(&app, pid);
+                    let app = app.clone();
+                    std::thread::spawn(move || recover_backend(&app, port, exit, uptime));
+                }
+            }
+            _ => {}
         }
-        std::thread::sleep(sleep_interval);
     }
+}
+
+fn describe_exit(code: Option<i32>, signal: Option<i32>) -> String {
+    match (code, signal) {
+        (Some(code), _) => format!("the backend exited with code {}", code),
+        (None, Some(signal)) => format!("the backend was killed by signal {}", signal),
+        (None, None) => "the backend exited".to_string(),
+    }
+}
+
+fn sidecar_uptime(app: &tauri::AppHandle, pid: u32) -> Duration {
+    app.try_state::<AppState>()
+        .and_then(|state| {
+            state.sidecar.lock().ok().and_then(|guard| {
+                guard
+                    .as_ref()
+                    .filter(|process| process.pid == pid)
+                    .map(|process| process.started.elapsed())
+            })
+        })
+        .unwrap_or_default()
+}
+
+// Restarts a backend that died under an open window, on the same port so the
+// window's URL stays good: up to MAX_RESTARTS times with backoff, then a page
+// that says what happened instead of a window polling a dead port.
+fn recover_backend(app: &tauri::AppHandle, port: u16, exit: String, uptime: Duration) {
+    if uptime >= STABLE_UPTIME {
+        RESTARTS.store(0, Ordering::SeqCst);
+    }
+
+    let mut last = exit;
+
+    while HEARTBEAT_ACTIVE.load(Ordering::SeqCst) {
+        let attempt = RESTARTS.fetch_add(1, Ordering::SeqCst) + 1;
+
+        if attempt > MAX_RESTARTS {
+            log::error!(target: "sidecar", "giving up after {} restarts", MAX_RESTARTS);
+            show_page(
+                app,
+                Page::Stopped,
+                &format!("{}, and it stopped again after each of {} restarts.", last, MAX_RESTARTS),
+            );
+            break;
+        }
+
+        show_page(app, Page::Restarting, &format!("{}. Restart {} of {}.", last, attempt, MAX_RESTARTS));
+        std::thread::sleep(Duration::from_secs(1 << (attempt - 1)));
+
+        // Whatever the dead backend left in its process group goes first.
+        if let Some(state) = app.try_state::<AppState>() {
+            if let Ok(mut guard) = state.sidecar.lock() {
+                guard.take();
+            }
+        }
+
+        match launch_backend(app, port) {
+            Ok(()) => {
+                log::info!(target: "sidecar", "restarted (attempt {})", attempt);
+                break;
+            }
+            Err(reason) => {
+                log::error!(target: "sidecar", "restart {} failed: {}", attempt, reason);
+                last = reason;
+            }
+        }
+    }
+
+    RECOVERING.store(false, Ordering::SeqCst);
+}
+
+// Elixir's console logger writes the level in brackets; carrying it over makes
+// an [error] from the backend an ERROR in the app's log too. Colour codes are
+// stripped — they are noise in a file.
+fn log_sidecar_line(bytes: &[u8], stderr: bool) {
+    let line = strip_ansi(&String::from_utf8_lossy(bytes));
+    let line = line.trim_end();
+    if line.is_empty() {
+        return;
+    }
+
+    let level = if ["[error]", "[critical]", "[alert]", "[emergency]"].iter().any(|tag| line.contains(tag)) {
+        log::Level::Error
+    } else if line.contains("[warning]") || line.contains("[warn]") || stderr {
+        log::Level::Warn
+    } else if line.contains("[debug]") {
+        log::Level::Debug
+    } else {
+        log::Level::Info
+    };
+
+    log::log!(target: "sidecar", level, "{}", line);
+}
+
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            // CSI: ESC [ parameters... final byte in @..~
+            if chars.next() == Some('[') {
+                for c in chars.by_ref() {
+                    if ('@'..='~').contains(&c) {
+                        break;
+                    }
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+// Gives up the moment the sidecar exits instead of at the deadline, and does
+// not mistake a server that is already on the port for ours when ours is gone.
+fn wait_for_backend(port: u16) -> Result<(), String> {
+    let addr = format!("<%= host %>:{}", port);
+    let deadline = Instant::now() + STARTUP_DEADLINE;
+    log::info!(target: "sidecar", "waiting for the backend on {}", addr);
+
+    while Instant::now() < deadline {
+        if SIDECAR_EXITED.load(Ordering::SeqCst) {
+            return Err("the backend exited while starting".to_string());
+        }
+        if std::net::TcpStream::connect(&addr).is_ok() {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+
+    Err(format!(
+        "the backend never listened on {} within {} seconds",
+        addr,
+        STARTUP_DEADLINE.as_secs()
+    ))
 }
 
 // Points the window at the port actually in use. When the OS assigned a free
@@ -331,78 +580,313 @@ fn navigate_main_window(app: &tauri::AppHandle, port: u16) {
     }
 }
 
+// Stops the backend: SIGTERM to the BEAM itself (Unix) so it shuts down
+// cleanly, or the heartbeat going quiet (Windows), then the whole process group.
+fn stop_sidecar(app: &tauri::AppHandle) {
+    // Stop heartbeating first: on Windows, where there is no SIGTERM to deliver,
+    // the heartbeat going quiet is how the backend learns to shut down.
+    HEARTBEAT_ACTIVE.store(false, Ordering::SeqCst);
+
+    let process = app
+        .try_state::<AppState>()
+        .and_then(|state| state.sidecar.lock().ok().and_then(|mut guard| guard.take()));
+
+    if let Some(mut process) = process {
+        #[cfg(unix)]
+        {
+            // The pid we spawned may be a Burrito launcher, which dies on SIGTERM
+            // without passing it on: signal the BEAM, and the launcher follows it.
+            let beam = beam_pid(process.pid).unwrap_or(process.pid);
+            log::info!(target: "sidecar", "stopping (pid {})", beam);
+            let _ = std::process::Command::new("kill")
+                .args(["-TERM", &beam.to_string()])
+                .output();
+
+            if !wait_until(QUIT_GRACE, || SIDECAR_EXITED.load(Ordering::SeqCst) || !pid_alive(beam)) {
+                log::warn!(target: "sidecar", "did not stop within {}s, killing it", QUIT_GRACE.as_secs());
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            if !wait_until(QUIT_GRACE, || SIDECAR_EXITED.load(Ordering::SeqCst)) {
+                log::warn!(target: "sidecar", "did not stop within {}s, killing it", QUIT_GRACE.as_secs());
+            }
+        }
+
+        // The whole group, always: whatever the backend leaves behind — a
+        // launcher still waiting, port programs — goes with it.
+        if let Some(child) = process.child.take() {
+            let _ = child.kill();
+        }
+    }
+
+    // The sidecar removes it on a clean stop; a crash would leave it behind.
+    let _ = std::fs::remove_file(heartbeat_endpoint().1);
+}
+
+fn wait_until(timeout: Duration, done: impl Fn() -> bool) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if done() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    done()
+}
+
+#[cfg(unix)]
+fn pid_alive(pid: u32) -> bool {
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+// The BEAM under the process we spawned: that process itself when it execs the
+// VM (a release script, the dev shim), its child when it is a Burrito launcher.
+#[cfg(unix)]
+fn beam_pid(root: u32) -> Option<u32> {
+    let output = std::process::Command::new("ps")
+        .args(["-A", "-o", "pid=,ppid=,comm="])
+        .output()
+        .ok()?;
+
+    let table: Vec<(u32, u32, String)> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pid = fields.next()?.parse().ok()?;
+            let ppid = fields.next()?.parse().ok()?;
+            Some((pid, ppid, fields.collect::<Vec<_>>().join(" ")))
+        })
+        .collect();
+
+    let mut generation = vec![root];
+    for _ in 0..4 {
+        if let Some((pid, _, _)) = table
+            .iter()
+            .find(|(pid, _, comm)| generation.contains(pid) && comm.ends_with("beam.smp"))
+        {
+            return Some(*pid);
+        }
+        generation = table
+            .iter()
+            .filter(|(_, ppid, _)| generation.contains(ppid))
+            .map(|(pid, _, _)| *pid)
+            .collect();
+        if generation.is_empty() {
+            break;
+        }
+    }
+    None
+}
+
+enum Page {
+    StartFailed,
+    Restarting,
+    Stopped,
+}
+
+// Replaces the window's content when there is no backend to show: a data: page,
+// because the backend is the thing missing and there is no other local asset to
+// point at. It says what happened and where the log is.
+fn show_page(app: &tauri::AppHandle, page: Page, detail: &str) {
+    // Quitting stops the backend, which fails any wait still in progress; that
+    // is not something to put back on screen.
+    if !HEARTBEAT_ACTIVE.load(Ordering::SeqCst) {
+        return;
+    }
+
+    let (title, lead) = match page {
+        Page::StartFailed => (
+            format!("{} could not start", APP_NAME),
+            "The backend never came up, so there is nothing to show. Quit and open the app again; if it keeps happening, the log below says why.",
+        ),
+        Page::Restarting => (
+            "Restarting".to_string(),
+            "The backend stopped unexpectedly and is being restarted. This page will be replaced as soon as it is back.",
+        ),
+        Page::Stopped => (
+            format!("{} stopped", APP_NAME),
+            "The backend stopped unexpectedly and could not be restarted. Quit and open the app again.",
+        ),
+    };
+
+    let logs = app
+        .path()
+        .app_log_dir()
+        .map(|dir| dir.display().to_string())
+        .unwrap_or_default();
+
+    let html = format!(
+        concat!(
+            "<!doctype html><meta charset=\"utf-8\"><title>{title}</title>",
+            "<style>",
+            ":root {{ color-scheme: light dark; }}",
+            "html, body {{ margin: 0; height: 100%; }}",
+            "body {{ display: flex; align-items: center; justify-content: center; ",
+            "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; ",
+            "background: Canvas; color: CanvasText; }}",
+            ".box {{ max-width: 34rem; padding: 2rem; line-height: 1.5; }}",
+            "h1 {{ font-size: 1.1rem; margin: 0 0 1rem; }}",
+            "p {{ margin: 0 0 0.75rem; opacity: 0.85; }}",
+            "code {{ font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; ",
+            "-webkit-user-select: text; user-select: text; }}",
+            "</style>",
+            "<div class=\"box\" data-tauri-drag-region>",
+            "<h1>{title}</h1><p>{lead}</p><p>{detail}</p>",
+            "<p>Logs: <code>{logs}</code></p></div>"
+        ),
+        title = html_escape(&title),
+        lead = html_escape(lead),
+        detail = html_escape(detail),
+        logs = html_escape(&logs),
+    );
+
+    if let Some(window) = app.get_webview_window("main") {
+        if let Ok(url) = data_url(&html).parse() {
+            let _ = window.navigate(url);
+        }
+        // Somebody should see this, even with the window hidden or minimised.
+        let _ = window.show();
+    }
+}
+
+fn html_escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+fn data_url(html: &str) -> String {
+    let mut url = String::from("data:text/html;charset=utf-8,");
+    for byte in html.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-_.~".contains(&byte) {
+            url.push(byte as char);
+        } else {
+            url.push_str(&format!("%{:02X}", byte));
+        }
+    }
+    url
+}
+
 // The sidecar channel carries heartbeats (liveness), commands from Elixir
 // (ExTauri.Desktop: notifications, tray, ...), and native events back to
 // Elixir — all as newline-delimited JSON over the ShutdownManager socket.
 fn start_channel(app: tauri::AppHandle) {
-    println!("Starting sidecar channel (heartbeat + desktop commands)...");
+    log::info!(target: "channel", "connecting to the backend");
 
     std::thread::spawn(move || {
-        let interval = Duration::from_millis(100);
-
         // Outer loop: (re)establish the connection. The sidecar's listener can
         // come up late (slow boot) or be recreated, so a dropped connection must
         // reconnect rather than end the heartbeat — otherwise the backend would
         // see the heartbeat stop and shut itself down. Everything exits once
         // HEARTBEAT_ACTIVE is cleared (the app is quitting): stopping the
         // heartbeat is what tells the sidecar to shut down gracefully.
-        while HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
+        while HEARTBEAT_ACTIVE.load(Ordering::SeqCst) {
             let stream = match connect_channel() {
                 Some(stream) => stream,
                 None => return,
             };
 
-            println!("Connected to sidecar channel");
+            log::info!(target: "channel", "connected");
 
             let (tx, rx) = mpsc::channel::<String>();
             if let Ok(mut guard) = CHANNEL_TX.lock() {
                 *guard = Some(tx.clone());
             }
 
-            // Ticker: queue a heartbeat line every 100ms.
+            // Ticker: queue a heartbeat every 100ms, and say so when the sleep
+            // overran. macOS App Nap throttles this thread's timer once the
+            // window has been hidden for a while; that is how a heartbeat gap
+            // once stopped a backend six agents were using. Reported once per
+            // stall, not once per late tick. `Instant` does not advance during
+            // system sleep, so a closed lid is not reported as one.
             let ticker_tx = tx.clone();
             std::thread::spawn(move || {
-                while HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
+                let mut stalled = false;
+                while HEARTBEAT_ACTIVE.load(Ordering::SeqCst) {
                     if ticker_tx
                         .send(String::from("{\"type\":\"heartbeat\"}"))
                         .is_err()
                     {
                         break;
                     }
-                    std::thread::sleep(interval);
+
+                    let slept = Instant::now();
+                    std::thread::sleep(HEARTBEAT_INTERVAL);
+                    let late = slept.elapsed().saturating_sub(HEARTBEAT_INTERVAL);
+
+                    if late > HEARTBEAT_LATE && !stalled {
+                        stalled = true;
+                        let late_ms = late.as_millis() as u64;
+                        log::warn!(
+                            target: "heartbeat",
+                            "ran {}ms late: the app is being throttled (App Nap?) or the machine is very busy",
+                            late_ms
+                        );
+                        let event = serde_json::json!({
+                            "type": "event",
+                            "name": "heartbeat_late",
+                            "payload": {"late_ms": late_ms}
+                        });
+                        if ticker_tx.send(event.to_string()).is_err() {
+                            break;
+                        }
+                    } else if late <= HEARTBEAT_LATE && stalled {
+                        stalled = false;
+                        log::info!(target: "heartbeat", "back on schedule");
+                    }
                 }
             });
 
-            // Reader: executes desktop commands sent by Elixir.
+            // Reader: executes desktop commands sent by Elixir. A line it cannot
+            // read takes the connection down with it, so the writer fails too and
+            // both reconnect — rather than every later command being dropped by
+            // a reader that had quietly stopped.
             if let Ok(read_stream) = stream.try_clone() {
                 let reader_app = app.clone();
                 std::thread::spawn(move || {
                     use std::io::{BufRead, BufReader};
-                    let reader = BufReader::new(read_stream);
-                    for line in reader.lines() {
-                        match line {
-                            Ok(line) => handle_channel_command(&reader_app, &line),
-                            Err(_) => break,
+                    let mut reader = BufReader::new(read_stream);
+                    let mut line = String::new();
+                    loop {
+                        line.clear();
+                        match reader.read_line(&mut line) {
+                            Ok(0) => break,
+                            Ok(_) => handle_channel_command(&reader_app, line.trim_end()),
+                            Err(error) => {
+                                log::warn!(target: "channel", "unreadable message, reconnecting: {}", error);
+                                let _ = reader.get_ref().shutdown(std::net::Shutdown::Both);
+                                break;
+                            }
                         }
                     }
                 });
             }
 
             // Writer (this thread): drain the queue onto the socket. A failed
-            // write means the connection dropped — clean up and reconnect.
+            // write means the connection dropped — clean up and reconnect. The
+            // timeout covers a backend that stopped reading without closing:
+            // that used to block this thread forever while the queue grew.
             let mut stream = stream;
+            let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
             for message in rx.iter() {
-                if writeln!(stream, "{}", message).is_err() {
+                if let Err(error) = writeln!(stream, "{}", message) {
+                    if HEARTBEAT_ACTIVE.load(Ordering::SeqCst) {
+                        log::warn!(target: "channel", "write failed, reconnecting: {}", error);
+                    }
+                    let _ = stream.shutdown(std::net::Shutdown::Both);
                     break;
                 }
             }
 
             if let Ok(mut guard) = CHANNEL_TX.lock() {
                 *guard = None;
-            }
-
-            if HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
-                println!("Sidecar channel lost, reconnecting...");
             }
         }
     });
@@ -416,45 +900,27 @@ type ChannelStream = std::net::TcpStream;
 // Connects to the ShutdownManager's listener, retrying until the sidecar is
 // up. Returns None only when the app is shutting down.
 fn connect_channel() -> Option<ChannelStream> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::net::UnixStream;
+    let (_, endpoint) = heartbeat_endpoint();
 
-        let socket_path = std::env::temp_dir().join("tauri_heartbeat_<%= socket_name %>.sock");
-
-        loop {
-            if !HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
-                return None;
-            }
-            match UnixStream::connect(&socket_path) {
-                Ok(stream) => return Some(stream),
-                Err(_) => std::thread::sleep(Duration::from_millis(100)),
-            }
+    loop {
+        if !HEARTBEAT_ACTIVE.load(Ordering::SeqCst) {
+            return None;
         }
-    }
 
-    #[cfg(windows)]
-    {
-        use std::net::TcpStream;
+        #[cfg(unix)]
+        let stream = std::os::unix::net::UnixStream::connect(&endpoint).ok();
 
-        // The BEAM cannot listen on Unix domain sockets on Windows, so the
-        // sidecar listens on 127.0.0.1 with an OS-assigned port and publishes
-        // the port number in this discovery file (see ExTauri.ShutdownManager).
-        // Re-read it on every reconnect: the port changes when the sidecar
+        // Re-read the port file on every attempt: it changes when the sidecar
         // restarts its listener.
-        let port_file = std::env::temp_dir().join("tauri_heartbeat_<%= socket_name %>.port");
+        #[cfg(windows)]
+        let stream = std::fs::read_to_string(&endpoint)
+            .ok()
+            .and_then(|contents| contents.trim().parse::<u16>().ok())
+            .and_then(|port| std::net::TcpStream::connect(("127.0.0.1", port)).ok());
 
-        loop {
-            if !HEARTBEAT_ACTIVE.load(Ordering::Relaxed) {
-                return None;
-            }
-            let port = std::fs::read_to_string(&port_file)
-                .ok()
-                .and_then(|contents| contents.trim().parse::<u16>().ok());
-            match port.and_then(|p| TcpStream::connect(("127.0.0.1", p)).ok()) {
-                Some(stream) => return Some(stream),
-                None => std::thread::sleep(Duration::from_millis(100)),
-            }
+        match stream {
+            Some(stream) => return Some(stream),
+            None => std::thread::sleep(Duration::from_millis(100)),
         }
     }
 }
@@ -486,6 +952,10 @@ fn handle_channel_command(app: &tauri::AppHandle, line: &str) {
             let _ = app.run_on_main_thread(move || set_tray(&app_handle, payload));
         }
 
+        "keep_awake" => app_nap::set_disabled(payload["active"].as_bool().unwrap_or(false)),
+
+        "quit" => quit(app),
+
         other => {
             send_channel_event(
                 "error",
@@ -495,11 +965,64 @@ fn handle_channel_command(app: &tauri::AppHandle, line: &str) {
     }
 }
 
+// ExTauri.Desktop.keep_awake/1. Holding an NSProcessInfo activity is the
+// supported way to opt out of App Nap for a while: user-initiated, so timers
+// keep their resolution with the window hidden; "allowing idle system sleep",
+// so a machine left alone still sleeps.
+#[cfg(target_os = "macos")]
+mod app_nap {
+    use objc2::rc::Retained;
+    use objc2::runtime::{NSObjectProtocol, ProtocolObject};
+    use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
+    use std::sync::Mutex;
+
+    struct Activity(Retained<ProtocolObject<dyn NSObjectProtocol>>);
+
+    // The token is an opaque object that NSProcessInfo, itself thread-safe,
+    // only ever takes back in endActivity:. Nothing reads it in between.
+    unsafe impl Send for Activity {}
+
+    static ACTIVITY: Mutex<Option<Activity>> = Mutex::new(None);
+
+    pub fn set_disabled(disabled: bool) {
+        let Ok(mut guard) = ACTIVITY.lock() else { return };
+        let info = NSProcessInfo::processInfo();
+
+        match (disabled, guard.take()) {
+            (true, None) => {
+                let reason = NSString::from_str("Work in progress");
+                let token = info.beginActivityWithOptions_reason(
+                    NSActivityOptions::UserInitiatedAllowingIdleSystemSleep,
+                    &reason,
+                );
+                *guard = Some(Activity(token));
+                log::info!(target: "app_nap", "held off");
+            }
+            (false, Some(activity)) => {
+                // Safety: the token is exactly what beginActivityWithOptions:reason: returned.
+                unsafe { info.endActivity(&activity.0) };
+                log::info!(target: "app_nap", "allowed again");
+            }
+            (_, unchanged) => *guard = unchanged,
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod app_nap {
+    pub fn set_disabled(_disabled: bool) {}
+}
+
 // Builds (or replaces) the system tray from an Elixir-provided spec:
 // {"tooltip": "...", "items": [{"id": "...", "label": "..."}, ...]}.
-// Menu item clicks come back as "tray_menu_click" events on the channel.
+// Item clicks reach the app-wide on_menu_event, which forwards them as
+// "tray_menu_click" events on the channel.
 fn set_tray(app: &tauri::AppHandle, payload: serde_json::Value) {
     use tauri::tray::TrayIconBuilder;
+
+    // A tray icon is registered with the app as well as returned here, so
+    // dropping our handle never removed it: every set_tray added another icon.
+    let _ = app.remove_tray_by_id(TRAY_ID);
 
     let empty = Vec::new();
     let item_specs = payload["items"].as_array().unwrap_or(&empty);
@@ -508,7 +1031,8 @@ fn set_tray(app: &tauri::AppHandle, payload: serde_json::Value) {
     for spec in item_specs {
         let id = spec["id"].as_str().unwrap_or("item");
         let label = spec["label"].as_str().unwrap_or(id);
-        if let Ok(item) = MenuItem::with_id(app, id, label, true, None::<&str>) {
+        let namespaced = format!("{}{}", TRAY_ITEM_PREFIX, id);
+        if let Ok(item) = MenuItem::with_id(app, namespaced, label, true, None::<&str>) {
             items.push(item);
         }
     }
@@ -529,15 +1053,11 @@ fn set_tray(app: &tauri::AppHandle, payload: serde_json::Value) {
         }
     };
 
-    let mut builder = TrayIconBuilder::with_id("ex_tauri_tray")
+    // No on_menu_event here: TrayIconBuilder registers it as another global
+    // listener that is never removed, so each set_tray multiplied every click.
+    let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .show_menu_on_left_click(true)
-        .on_menu_event(|_app, event| {
-            send_channel_event(
-                "tray_menu_click",
-                serde_json::json!({"id": event.id().as_ref()}),
-            );
-        });
+        .show_menu_on_left_click(true);
 
     if let Some(tooltip) = payload["tooltip"].as_str() {
         builder = builder.tooltip(tooltip);
@@ -547,18 +1067,10 @@ fn set_tray(app: &tauri::AppHandle, payload: serde_json::Value) {
         builder = builder.icon(icon.clone());
     }
 
-    match builder.build(app) {
-        Ok(tray) => {
-            if let Ok(mut guard) = TRAY.lock() {
-                // Dropping the previous handle removes its icon.
-                *guard = Some(tray);
-            }
-        }
-        Err(error) => {
-            send_channel_event(
-                "error",
-                serde_json::json!({"message": format!("Failed to build tray: {}", error)}),
-            );
-        }
+    if let Err(error) = builder.build(app) {
+        send_channel_event(
+            "error",
+            serde_json::json!({"message": format!("Failed to build tray: {}", error)}),
+        );
     }
 }

@@ -32,11 +32,13 @@ defmodule ExTauriIntegrationTest do
       assert cargo_toml =~ ~r/serde = \{ version = "1\.0", features = \["derive"\] \}/
 
       # Core tauri should use semver major version
-      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \["tray-icon"\] \}/
+      assert cargo_toml =~
+               ~r/tauri = \{ version = "2", features = \["tray-icon", "webview-data-url"\] \}/
 
       # Plugins should use semver major version (not exact version like "2.5.1")
-      # This is critical because plugins have independent versioning
-      assert cargo_toml =~ ~r/tauri-plugin-shell = "2"/
+      # This is critical because plugins have independent versioning. The shell
+      # plugin is the exception: set_process_group needs 2.5.
+      assert cargo_toml =~ ~r/tauri-plugin-shell = "2\.5"/
       assert cargo_toml =~ ~r/tauri-plugin-log = "2"/
       assert cargo_toml =~ ~r/tauri-plugin-notification = "2"/
 
@@ -64,15 +66,17 @@ defmodule ExTauriIntegrationTest do
       for {tauri_version, expected_major} <- test_cases do
         cargo_toml = Helpers.cargo_toml("test_app", tauri_version)
 
-        # Plugins should use major version only
-        assert cargo_toml =~ ~r/tauri-plugin-shell = "#{expected_major}"/,
+        # Plugins should use major version only (shell needs 2.5 on major 2)
+        expected_shell = if expected_major == "2", do: "2\\.5", else: expected_major
+
+        assert cargo_toml =~ ~r/tauri-plugin-shell = "#{expected_shell}"/,
                "Failed for version #{tauri_version}: expected major version #{expected_major}"
 
         assert cargo_toml =~ ~r/tauri-plugin-log = "#{expected_major}"/,
                "Failed for version #{tauri_version}: expected major version #{expected_major}"
 
         assert cargo_toml =~
-                 ~r/tauri = \{ version = "#{expected_major}", features = \["tray-icon"\] \}/,
+                 ~r/tauri = \{ version = "#{expected_major}", features = \["tray-icon", "webview-data-url"\] \}/,
                "Failed for version #{tauri_version}: expected major version #{expected_major}"
 
         assert cargo_toml =~
@@ -99,8 +103,20 @@ defmodule ExTauriIntegrationTest do
       cargo_toml = Helpers.cargo_toml("test_app", "2.5.1")
 
       assert cargo_toml =~ ~r/tauri-build = \{ version = "2", features = \[\] \}/
-      # tray-icon enables ExTauri.Desktop.set_tray/1
-      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \["tray-icon"\] \}/
+      # tray-icon enables ExTauri.Desktop.set_tray/1; webview-data-url the
+      # loading and error pages
+      assert cargo_toml =~
+               ~r/tauri = \{ version = "2", features = \["tray-icon", "webview-data-url"\] \}/
+    end
+
+    test "pulls in objc2 for App Nap on macOS only" do
+      cargo_toml = Helpers.cargo_toml("test_app", "2.5.1")
+
+      assert cargo_toml =~ ~s{[target.'cfg(target_os = "macos")'.dependencies]}
+      assert cargo_toml =~ ~s{"NSProcessInfo"}
+      # Plugins patch the first `[dependencies]\n`; the target table must not be it.
+      [_, after_main] = String.split(cargo_toml, "\n[dependencies]\n", parts: 2)
+      assert after_main =~ "tauri-plugin-shell"
     end
   end
 
@@ -112,30 +128,32 @@ defmodule ExTauriIntegrationTest do
       main_src = Helpers.main_src(host, port, "test_app")
 
       # Verify imports
-      assert main_src =~ ~r/use tauri_plugin_shell::process::CommandEvent;/
+      assert main_src =~ ~r/use tauri_plugin_shell::process::\{CommandChild, CommandEvent\};/
       assert main_src =~ ~r/use tauri_plugin_shell::ShellExt;/
 
       # Verify plugin initialization
       assert main_src =~ ~r/\.plugin\(tauri_plugin_shell::init\(\)\)/
-      assert main_src =~ ~r/\.plugin\(tauri_plugin_log::Builder::new\(\)\.build\(\)\)/
+      assert main_src =~ "tauri_plugin_log::Builder::new()"
       assert main_src =~ ~r/\.plugin\(tauri_plugin_notification::init\(\)\)/
 
       # Verify setup function signature (V2 uses AppHandle reference; the
       # port is resolved at runtime and passed in)
-      assert main_src =~ ~r/fn start_server\(app: &tauri::AppHandle, port: u16\)/
+      assert main_src =~
+               ~r/fn spawn_sidecar\(app: &tauri::AppHandle, port: u16\) -> Result<\(\), String>/
 
-      # Verify sidecar usage with new API
-      assert main_src =~ ~r/app\.shell\(\)\.sidecar\("desktop"\)/
+      # Verify sidecar usage with new API — and no panic when it is missing
+      assert main_src =~ ~s{.sidecar("desktop")}
       assert main_src =~ ~r/\.spawn\(\)/
-      assert main_src =~ ~r/\.expect\("Failed to spawn desktop sidecar"\)/
+      refute main_src =~ ~s{.expect("Failed to spawn}
 
       # Verify CommandEvent handling with bytes (V2)
-      assert main_src =~ ~r/if let CommandEvent::Stdout\(line_bytes\) = event/
-      assert main_src =~ ~r/let line = String::from_utf8_lossy\(&line_bytes\);/
+      assert main_src =~ "CommandEvent::Stdout(bytes) => log_sidecar_line(&bytes, false)"
+      assert main_src =~ "CommandEvent::Terminated(exit)"
+      assert main_src =~ "String::from_utf8_lossy(bytes)"
 
       # Verify server check with correct host; the port is resolved at runtime
       # (EX_TAURI_PORT in dev, an OS-assigned free port in production).
-      assert main_src =~ ~r/let host = "#{host}"\.to_string\(\);/
+      assert main_src =~ ~s[format!("#{host}:{}", port)]
       assert main_src =~ "fn resolve_port()"
       assert main_src =~ "EX_TAURI_PORT"
       assert main_src =~ ".unwrap_or(#{port})"
@@ -150,22 +168,62 @@ defmodule ExTauriIntegrationTest do
     test "generates main.rs with correct async runtime usage" do
       main_src = Helpers.main_src("localhost", "4000", "test_app")
 
-      assert main_src =~ ~r/tauri::async_runtime::spawn\(async move/
+      assert main_src =~ ~r/tauri::async_runtime::spawn\(watch_sidecar\(/
       assert main_src =~ ~r/while let Some\(event\) = rx\.recv\(\)\.await/
     end
 
-    test "generates main.rs with server startup check" do
+    test "waits for the backend off the main thread, with a deadline" do
       main_src = Helpers.main_src("localhost", "4000", "test_app")
 
-      assert main_src =~ ~r/fn check_server_started\(port: u16\)/
+      # setup hands the wait to a worker thread; blocking it froze the app.
+      assert main_src =~ ~r/\.setup\(\|app\| \{.*?std::thread::spawn/s
+      assert main_src =~ ~r/fn wait_for_backend\(port: u16\) -> Result<\(\), String>/
+      assert main_src =~ "STARTUP_DEADLINE"
+      assert main_src =~ "SIDECAR_EXITED"
       assert main_src =~ ~r/TcpStream::connect/
-      assert main_src =~ ~r/std::time::Duration::from_millis\(200\)/
+      refute main_src =~ "fn check_server_started"
+    end
+
+    test "starts the sidecar so Burrito 1.6 neither halts it nor hides it from signals" do
+      main_src = Helpers.main_src("localhost", "4000", "test_app")
+
+      assert main_src =~ ~s{.args(["--no-halt"])}
+      assert main_src =~ ".set_process_group(true)"
+      assert main_src =~ "EX_TAURI_SHELL_PID"
+      assert main_src =~ "fn beam_pid(root: u32)"
+    end
+
+    test "tells the user, and restarts, when the backend dies" do
+      main_src = Helpers.main_src("localhost", "4000", "test_app")
+
+      assert main_src =~ "fn recover_backend("
+      assert main_src =~ "MAX_RESTARTS"
+      assert main_src =~ "Page::StartFailed"
+      assert main_src =~ "Page::Stopped"
+      assert main_src =~ "ERL_CRASH_DUMP"
+    end
+
+    test "keeps its log instead of rotating it away" do
+      main_src = Helpers.main_src("localhost", "4000", "test_app")
+
+      assert main_src =~ "RotationStrategy::KeepSome(5)"
+      assert main_src =~ ".max_file_size(5_000_000)"
+      assert main_src =~ ".level(log::LevelFilter::Info)"
+    end
+
+    test "quits only from its own Quit item, and off the UI thread" do
+      main_src = Helpers.main_src("localhost", "4000", "test_app")
+
+      assert main_src =~ ~s{const QUIT_ID: &str = "ex_tauri:quit";}
+      refute main_src =~ ~s{contains("quit")}
+      refute main_src =~ "std::process::exit"
+      assert main_src =~ ~r/fn quit\(app: &tauri::AppHandle\) \{.*?std::thread::spawn/s
     end
 
     test "handles different host and port configurations" do
       main_src = Helpers.main_src("127.0.0.1", "8080", "test_app")
 
-      assert main_src =~ ~r/let host = "127\.0\.0\.1"\.to_string\(\);/
+      assert main_src =~ ~s[format!("127.0.0.1:{}", port)]
       assert main_src =~ ".unwrap_or(8080)"
     end
   end
@@ -192,23 +250,11 @@ defmodule ExTauriIntegrationTest do
       # Verify notification permissions
       assert "notification:default" in permissions
 
-      # Verify scoped sidecar permission (least-privilege: only allow the desktop sidecar)
-      sidecar_permission =
-        Enum.find(permissions, fn
-          %{"identifier" => "shell:allow-execute"} -> true
-          _ -> false
-        end)
-
-      assert sidecar_permission != nil
-      assert is_list(sidecar_permission["allow"])
-      assert %{"name" => "desktop", "sidecar" => true} in sidecar_permission["allow"]
-
-      # Verify broad shell permissions are NOT granted by default (least-privilege)
-      refute "shell:allow-execute" in permissions,
-             "Broad shell:allow-execute should not be a top-level string permission"
-
-      refute "shell:allow-spawn" in permissions,
-             "Broad shell:allow-spawn should not be granted by default"
+      # No shell execution at all: the Rust shell spawns the sidecar, and with
+      # `remote` set any page on the host could start another copy of it.
+      refute Enum.any?(permissions, &match?(%{"identifier" => "shell:allow-execute"}, &1))
+      refute "shell:allow-execute" in permissions
+      refute "shell:allow-spawn" in permissions
     end
 
     test "capabilities.json is valid JSON" do
@@ -218,29 +264,15 @@ defmodule ExTauriIntegrationTest do
       assert {:ok, _} = Jason.decode(capabilities_json)
     end
 
-    test "capabilities.json includes scoped sidecar permission for external binary" do
-      capabilities_json = Helpers.capabilities_json()
-      {:ok, capabilities} = Jason.decode(capabilities_json)
+    test "applies to the app's real page, which is on an ephemeral port" do
+      # Tauri counts a page as local only under frontendDist; the shell
+      # navigates the window to a port picked at launch, so without `remote`
+      # every invoke from the real page is denied.
+      {:ok, capabilities} = Jason.decode(Helpers.capabilities_json())
+      assert capabilities["remote"] == %{"urls" => ["http://localhost:*"]}
 
-      permissions = capabilities["permissions"]
-
-      # Must explicitly allow the desktop sidecar via scoped permission
-      sidecar_configs =
-        permissions
-        |> Enum.filter(&is_map/1)
-        |> Enum.flat_map(fn config -> Map.get(config, "allow", []) end)
-
-      desktop_config =
-        Enum.find(sidecar_configs, fn config ->
-          config["name"] == "desktop" && config["sidecar"] == true
-        end)
-
-      assert desktop_config != nil, "Desktop sidecar must be explicitly allowed in capabilities"
-
-      # Broad shell permissions should NOT be present (least-privilege principle)
-      string_permissions = Enum.filter(permissions, &is_binary/1)
-      refute "shell:allow-execute" in string_permissions
-      refute "shell:allow-spawn" in string_permissions
+      {:ok, capabilities} = Jason.decode(Helpers.capabilities_json("https", "127.0.0.1"))
+      assert capabilities["remote"] == %{"urls" => ["https://127.0.0.1:*"]}
     end
   end
 
@@ -282,11 +314,13 @@ defmodule ExTauriIntegrationTest do
       assert cargo_toml =~ ~r/edition = "2021"/
       assert main_src =~ ~r/\.plugin\(/
       assert main_src =~ ~r/tauri_plugin_shell::ShellExt/
-      assert capabilities =~ "shell:allow-execute"
+      assert capabilities =~ "core:default"
 
       # Verify semver ranges are used (not exact versions)
-      assert cargo_toml =~ ~r/tauri = \{ version = "2", features = \["tray-icon"\] \}/
-      assert cargo_toml =~ ~r/tauri-plugin-shell = "2"/
+      assert cargo_toml =~
+               ~r/tauri = \{ version = "2", features = \["tray-icon", "webview-data-url"\] \}/
+
+      assert cargo_toml =~ ~r/tauri-plugin-shell = "2\.5"/
       assert cargo_toml =~ ~r/tauri-plugin-log = "2"/
 
       # Ensure exact versions like "2.5.1" are NOT used for plugins

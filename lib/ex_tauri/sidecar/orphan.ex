@@ -2,12 +2,19 @@ defmodule ExTauri.Sidecar.Orphan do
   @moduledoc """
   Recognising — and clearing out — packaged sidecars whose window is gone.
 
-  The Tauri shell is the only thing that ever spawns a packaged sidecar, and
-  Burrito's launcher `execve`s the BEAM in place rather than forking, so the
-  shell is always the sidecar's direct parent. A sidecar reparented to init
-  (PPID 1) has therefore definitively lost its window: nothing will heartbeat it
-  again, nothing will SIGTERM it on quit, and it keeps every process its
-  supervision tree owns running until the machine reboots.
+  The Tauri shell is the only thing that ever spawns a packaged sidecar. A
+  sidecar whose shell is gone has definitively lost its window: nothing will
+  heartbeat it again, nothing will SIGTERM it on quit, and it keeps every process
+  its supervision tree owns running until the machine reboots.
+
+  Which process *is* the shell takes some care. Generated shells say so, in
+  `EX_TAURI_SHELL_PID`, and that answer is used whenever it is there — see
+  `shell_pid/0`. Without it the shell is read off the process tree. Burrito's
+  launcher (1.6, which ex_tauri requires) spawns the BEAM as its *child* and
+  waits on it, so a packaged BEAM's parent is the launcher and the shell is one
+  level further up; a release script or the dev shim `exec`s the VM, so there
+  the parent is the shell itself. A launcher is recognised by its executable
+  being named after the release, which is what Tauri names the bundled sidecar.
 
   That is not hypothetical. It has now been observed in two ex_tauri apps on one
   machine: seven sidecars of one running at once, the oldest holding its HTTP
@@ -182,13 +189,19 @@ defmodule ExTauri.Sidecar.Orphan do
   @doc """
   True when *this* process has lost the shell that spawned it.
 
-  Only meaningful for a packaged sidecar, so the caller has to be one: a plain
-  `mix ex_tauri.dev` backend is regularly a child of init and perfectly healthy.
-  `ExTauri.ShutdownManager` gates it on `packaged?/0` for that reason.
+  With `shell_pid/0` known, that pid is simply checked. Without it the answer
+  comes from the process tree, which is only meaningful for a packaged sidecar:
+  a plain `mix ex_tauri.dev` backend is regularly a child of init and perfectly
+  healthy. `ExTauri.ShutdownManager` gates it on `packaged?/0` or `shell_pid/0`
+  for that reason.
   """
   @spec orphan?() :: boolean()
   def orphan? do
-    unix?() and parent_pid(self_pid()) == 1
+    unix?() and
+      case shell_pid() do
+        nil -> shell_of(self_pid(), []) == 1
+        shell -> not alive?(shell)
+      end
   end
 
   @doc """
@@ -197,18 +210,40 @@ defmodule ExTauri.Sidecar.Orphan do
   Not the negation of `orphan?/0`: anything that cannot be read — `ps` missing
   or failing, Windows — answers `false` here, because the caller is deciding
   whether to *ignore* a heartbeat timeout, and only proof should do that.
-  `ExTauri.ShutdownManager` gates it on `packaged?/0`, for the same reason as
-  `orphan?/0`.
+  `ExTauri.ShutdownManager` gates it on `packaged?/0` or `shell_pid/0`, for the
+  same reason as `orphan?/0`.
   """
   @spec shell_alive?() :: boolean()
   def shell_alive? do
-    unix?() and parent_pid(self_pid()) not in [nil, 1]
+    unix?() and
+      case shell_pid() do
+        nil -> shell_of(self_pid(), []) not in [nil, 1]
+        shell -> alive?(shell)
+      end
+  end
+
+  @doc """
+  The Tauri shell's OS pid, when the shell passed it in `EX_TAURI_SHELL_PID`.
+
+  Generated shells always do. It is the one answer that does not depend on how
+  the sidecar was launched — a Burrito launcher, a release script, a dev shim —
+  and it means something in `mix ex_tauri.dev` too, where the process tree says
+  nothing about a window. A pid the OS has since reused would read as alive;
+  that window is the gap between a shell dying and another process being handed
+  its number, and the closed heartbeat socket covers it.
+  """
+  @spec shell_pid() :: pos_integer() | nil
+  def shell_pid do
+    case System.get_env("EX_TAURI_SHELL_PID") do
+      nil -> nil
+      value -> parse_pid(value)
+    end
   end
 
   @doc """
   True when this process is a Burrito-wrapped sidecar rather than a dev server.
 
-  Burrito's launcher sets `__BURRITO` in the environment it `execve`s with. It
+  Burrito's launcher sets `__BURRITO` in the environment it starts the BEAM with. It
   does *not* set `RELEASE_NAME`, which is the trap that makes desktop-only
   behaviour gated on `RELEASE_NAME` pass every local test and no-op in every
   shipped build.
@@ -221,7 +256,7 @@ defmodule ExTauri.Sidecar.Orphan do
   @doc "True when `pid` is a packaged sidecar — of any ex_tauri app — with no parent shell."
   @spec orphan_sidecar?(pos_integer(), keyword()) :: boolean()
   def orphan_sidecar?(pid, opts \\ []) do
-    unix?() and pid != self_pid() and parent_pid(pid) == 1 and
+    unix?() and pid != self_pid() and shell_of(pid, opts) == 1 and
       packaged_sidecar?(command(pid), opts)
   end
 
@@ -248,8 +283,16 @@ defmodule ExTauri.Sidecar.Orphan do
   # so nothing above this line can tell them from a sidecar — and `myapp
   # some-command` run from a terminal, or spawned by an editor, is regularly a
   # child of init with no window it could have lost. The window's sidecar is
-  # spawned with no arguments at all.
-  defp cli_invocation?(command), do: Regex.match?(~r/-extra\s+\S/, command)
+  # spawned with `--no-halt` and nothing else — Burrito 1.6 halts the VM after
+  # boot without it — so that one flag on its own is not a command. Matching any
+  # argument at all made every window's sidecar look like a CLI call, and none
+  # was ever reaped.
+  defp cli_invocation?(command) do
+    case Regex.run(~r/-extra\s+(.*)$/, command) do
+      [_, extra] -> extra |> String.split() |> Enum.any?(&(&1 != "--no-halt"))
+      nil -> false
+    end
+  end
 
   @doc """
   Whether `command` is running your release, another app's, or one that can no
@@ -390,6 +433,28 @@ defmodule ExTauri.Sidecar.Orphan do
       _ -> nil
     end
   end
+
+  # The process standing for `pid`'s window: its parent, or its grandparent when
+  # the parent is a Burrito launcher (1.6+ spawns the BEAM as a child; see the
+  # moduledoc). 1 means init adopted it — the shell is gone. nil means unknown.
+  defp shell_of(pid, opts) do
+    case parent_pid(pid) do
+      nil -> nil
+      1 -> 1
+      parent -> if launcher?(parent, opts), do: parent_pid(parent), else: parent
+    end
+  end
+
+  # Tauri bundles the sidecar under the release's name, so the launcher's
+  # executable is `.../<release_name>` whatever directory the app lives in.
+  defp launcher?(pid, opts) do
+    case command(pid) do
+      nil -> false
+      command -> Regex.match?(~r{(^|/)#{Regex.escape(release_name(opts))}(\s|$)}, command)
+    end
+  end
+
+  defp alive?(pid), do: match?({_, 0}, run("ps", ["-o", "pid=", "-p", Integer.to_string(pid)]))
 
   defp signal(pid, name), do: run("kill", ["-#{name}", Integer.to_string(pid)])
 

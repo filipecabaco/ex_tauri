@@ -40,6 +40,13 @@ defmodule ExTauri.Sidecar.OrphanTest do
       assert Orphan.packaged_sidecar?(@linux <> " -- -- -extra")
     end
 
+    test "the window's own --no-halt is not a CLI invocation" do
+      # Burrito 1.6 halts after boot without it, so every window's sidecar
+      # carries it — reading it as a command meant none was ever reaped.
+      assert Orphan.packaged_sidecar?(@linux <> " -- -- -extra --no-halt")
+      refute Orphan.packaged_sidecar?(@linux <> " -- -- -extra --no-halt status")
+    end
+
     test "follows a release name other than the scaffolded :desktop" do
       command = String.replace(@linux, "desktop_erts", "console_erts")
 
@@ -163,6 +170,53 @@ defmodule ExTauri.Sidecar.OrphanTest do
     test "shell_alive?/0 sees the test VM's parent, and only on Unix" do
       assert Orphan.shell_alive?() == match?({:unix, _}, :os.type())
     end
+  end
+
+  describe "a shell that names itself (EX_TAURI_SHELL_PID)" do
+    setup do
+      on_exit(fn -> System.delete_env("EX_TAURI_SHELL_PID") end)
+    end
+
+    test "is read as an OS pid, and junk is ignored" do
+      System.put_env("EX_TAURI_SHELL_PID", "4242")
+      assert Orphan.shell_pid() == 4242
+
+      System.put_env("EX_TAURI_SHELL_PID", "nope")
+      assert Orphan.shell_pid() == nil
+    end
+
+    test "a live shell pid answers alive and not orphaned" do
+      # This VM itself stands in for a running shell.
+      System.put_env("EX_TAURI_SHELL_PID", System.pid())
+
+      assert Orphan.shell_alive?()
+      refute Orphan.orphan?()
+    end
+
+    test "a dead shell pid answers orphaned, whatever the process tree says" do
+      # Under Burrito 1.6 the BEAM's parent is the launcher, which outlives the
+      # shell; the named pid is the only answer that cannot be fooled by that.
+      dead = spawn_and_reap()
+      System.put_env("EX_TAURI_SHELL_PID", Integer.to_string(dead))
+
+      refute Orphan.shell_alive?()
+      assert Orphan.orphan?()
+    end
+  end
+
+  # An OS pid that existed a moment ago and has since exited and been reaped.
+  # `cat` waits on its stdin, so the pid can be read before it exits (`true`
+  # was sometimes gone before Port.info/2 asked); closing the port ends it.
+  defp spawn_and_reap do
+    port = Port.open({:spawn_executable, System.find_executable("cat")}, [:binary])
+    {:os_pid, pid} = Port.info(port, :os_pid)
+    Port.close(port)
+
+    gone? = fn -> not match?({_, 0}, System.cmd("ps", ["-o", "pid=", "-p", "#{pid}"])) end
+
+    if Enum.any?(1..100, fn _ -> gone?.() or (Process.sleep(50) && false) end),
+      do: pid,
+      else: flunk("`cat` (pid #{pid}) did not exit")
   end
 
   # `lib/<app>-<vsn>` is what Burrito unpacks and what identify/2 reads.

@@ -40,8 +40,23 @@ defmodule ExTauri.Desktop do
         {:noreply, do_sync(state)}
       end
 
+      def handle_info({:ex_tauri_event, "tray_menu_click", %{"id" => "quit"}}, state) do
+        # Tray ids are only ever forwarded here; quitting is asked for explicitly.
+        ExTauri.Desktop.quit()
+        {:noreply, state}
+      end
+
   Event names include `"tray_menu_click"`, `"menu_click"` (application menu),
-  and `"error"` (a command failed on the Rust side).
+  `"heartbeat_late"` (the shell's heartbeat ran late — `%{"late_ms" => n}`, sent
+  once when a stall starts, typically macOS App Nap throttling a hidden window;
+  see `keep_awake/1`), and `"error"` (a command failed on the Rust side).
+
+  ## Staying responsive in the background
+
+  macOS App Nap slows the timers of an app whose window has been hidden for a
+  while. Call `keep_awake(true)` while your app is doing work someone is waiting
+  on, and `keep_awake(false)` when it is idle again — an app that holds it
+  forever costs the user battery for nothing. The system can still sleep.
 
   ## Availability
 
@@ -85,6 +100,31 @@ defmodule ExTauri.Desktop do
       |> Enum.map(fn item -> %{id: to_string(item[:id]), label: to_string(item[:label])} end)
 
     command("set_tray", %{tooltip: opts[:tooltip], items: items})
+  end
+
+  @doc """
+  Holds off macOS App Nap while `active` is true.
+
+  The shell holds an `NSProcessInfo` activity for as long as the last call said
+  `true`: timers keep their resolution with the window hidden, and the machine
+  can still sleep when idle. A no-op on other platforms.
+
+  Returns `:ok`, or `{:error, :not_connected}` before the frontend attaches —
+  the shell keeps no memory of a call it never received, so callers that need
+  it held should send it again once connected.
+  """
+  def keep_awake(active) when is_boolean(active) do
+    command("keep_awake", %{active: active})
+  end
+
+  @doc """
+  Asks the shell to quit the app the same way its Quit menu item does: the
+  window goes, this backend is stopped gracefully, then the process exits.
+
+  Returns `:ok`, or `{:error, :not_connected}` when there is no frontend.
+  """
+  def quit do
+    command("quit", %{})
   end
 
   @doc """

@@ -24,11 +24,12 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 
 ## Prerequisites
 
-- **Elixir** >= 1.15 with **OTP 27** (OTP 28 not yet supported due to Burrito ERTS availability)
+- **Elixir** >= 1.17 with **OTP 27** (OTP 28 not yet supported due to Burrito ERTS availability)
 - **Rust** — [Install via rustup](https://www.rust-lang.org/tools/install)
+- **Zig 0.16.0**, exactly — Burrito 1.6 builds the packaged sidecar with it and refuses any other version
 - **Platform dependencies** — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
-> **Note:** Zig is only required if you use Burrito for cross-compilation. For same-platform builds, Rust alone is sufficient.
+> **Note:** `mix ex_tauri.dev` skips Burrito, so Zig is only needed for `mix ex_tauri.build`.
 
 ## Getting Started
 
@@ -336,16 +337,31 @@ In dev, `EX_TAURI_PORT` pins the configured port so live reload URLs match.
 
 ExTauri uses a local socket heartbeat to detect when the Tauri frontend exits:
 
-1. `ShutdownManager` opens a listener:
-   - **macOS/Linux:** a Unix domain socket at `<tmpdir>/tauri_heartbeat_<app_name>.sock`
+1. `ShutdownManager` opens a listener where the shell told it to — the shell
+   picks one per launch and passes it in the environment:
+   - **macOS/Linux:** a Unix domain socket, `EX_TAURI_HEARTBEAT_SOCKET`
+     (`<tmpdir>/tauri_heartbeat_<shell pid>.sock`)
    - **Windows:** a TCP socket on `127.0.0.1` with an OS-assigned port, published
-     in `<tmpdir>/tauri_heartbeat_<app_name>.port` for the frontend to discover
-2. The Rust frontend connects and sends a byte every **100ms**
+     in the file named by `EX_TAURI_HEARTBEAT_PORT_FILE` for the frontend to discover
+2. The Rust frontend connects and sends a heartbeat every **100ms**
 3. `ShutdownManager` checks for heartbeats every **500ms**
-4. If no heartbeat is received for **1500ms**, graceful shutdown begins
+4. The backend shuts down gracefully when the window is gone: the socket closed
+   with nothing reconnecting, the shell process (`EX_TAURI_SHELL_PID`) no longer
+   running, or — on Windows, or where the shell cannot be named — no heartbeat
+   for **1500ms**. A quiet heartbeat from a shell that is still running (macOS
+   App Nap throttling a hidden window) is logged, not acted on.
 5. Phoenix closes connections, flushes logs, and exits cleanly
 
-This works even when the app is force-quit, crashes, or is killed unexpectedly. The socket path is unique per application (based on `:app_name`) to prevent collisions. When you quit normally, the frontend stops heartbeating before waiting on the sidecar, so the same mechanism drives graceful shutdown on platforms without SIGTERM (Windows).
+This works even when the app is force-quit, crashes, or is killed unexpectedly. When you quit normally, the shell sends SIGTERM to the BEAM (Unix) or stops heartbeating (Windows, which has no SIGTERM) and waits for it, then kills the sidecar's whole process group.
+
+### When the backend dies
+
+If the backend exits while the window is open, the shell restarts it on the same
+port — up to three times, with backoff — and shows a page saying what happened
+in the meantime. If it keeps dying, the page stays, with the exit code and the
+path of the app's log. The sidecar's output, its exit, and any panic in the
+shell are all written to that log (`~/Library/Logs/<identifier>/` on macOS), and
+an `erl_crash.dump` lands beside it.
 
 ## Configuration
 

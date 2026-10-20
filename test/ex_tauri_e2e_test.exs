@@ -152,18 +152,17 @@ defmodule ExTauri.E2ETest do
       main_rs = ExTauri.Install.Helpers.main_src(@host, @port, socket_name)
 
       assert main_rs =~ "fn main()"
-      assert main_rs =~ "fn start_server"
-      assert main_rs =~ "fn check_server_started"
+      assert main_rs =~ "fn spawn_sidecar"
+      assert main_rs =~ "fn wait_for_backend"
       assert main_rs =~ "fn start_channel"
-      assert main_rs =~ "fn kill_sidecar"
+      assert main_rs =~ "fn stop_sidecar"
 
       assert main_rs =~ "tauri::Builder::default()"
       assert main_rs =~ ".plugin(tauri_plugin_shell::init())"
-      assert main_rs =~ ".plugin(tauri_plugin_log::Builder::new().build())"
+      assert main_rs =~ "tauri_plugin_log::Builder::new()"
       assert main_rs =~ ".setup("
       assert main_rs =~ ".build(tauri::generate_context!())"
 
-      assert main_rs =~ "tauri_heartbeat_#{socket_name}.sock"
       assert main_rs =~ "std::env::temp_dir()"
     end
 
@@ -171,14 +170,17 @@ defmodule ExTauri.E2ETest do
       socket_name = ExTauri.Paths.sanitize_name(@app_name)
       main_rs = ExTauri.Install.Helpers.main_src(@host, @port, socket_name)
 
-      # Unix: heartbeat over the Unix domain socket
+      # Unix: heartbeat over a Unix domain socket picked per launch and handed
+      # to the sidecar, so a new window can never attach to an old backend
       assert main_rs =~ "UnixStream::connect"
-      assert main_rs =~ "tauri_heartbeat_#{socket_name}.sock"
+      assert main_rs =~ ~s["tauri_heartbeat_{}.sock", std::process::id()]
+      assert main_rs =~ "EX_TAURI_HEARTBEAT_SOCKET"
 
       # Windows: heartbeat over localhost TCP, discovered via the port file
       # written by ExTauri.ShutdownManager's :tcp transport
-      assert main_rs =~ "tauri_heartbeat_#{socket_name}.port"
-      assert main_rs =~ ~s{TcpStream::connect(("127.0.0.1", p))}
+      assert main_rs =~ "tauri_heartbeat_#{socket_name}_{}.port"
+      assert main_rs =~ "EX_TAURI_HEARTBEAT_PORT_FILE"
+      assert main_rs =~ ~s{TcpStream::connect(("127.0.0.1", port))}
       refute main_rs =~ "Heartbeat not yet supported on Windows"
 
       # Quitting stops the heartbeat so the sidecar can shut down gracefully
@@ -195,15 +197,15 @@ defmodule ExTauri.E2ETest do
       permissions = parsed["permissions"]
       assert "notification:default" in permissions
 
-      # Broad shell permissions should NOT be present (least-privilege)
+      # No shell execution from the page at all (least-privilege): the Rust
+      # shell spawns the sidecar itself
       string_permissions = Enum.filter(permissions, &is_binary/1)
       refute "shell:allow-execute" in string_permissions
       refute "shell:allow-spawn" in string_permissions
+      refute Enum.any?(permissions, &is_map/1)
 
-      # Verify scoped sidecar config
-      sidecar = Enum.find(permissions, &is_map/1)
-      assert sidecar["identifier"] == "shell:allow-execute"
-      assert %{"name" => "desktop", "sidecar" => true} in sidecar["allow"]
+      # ...and the permissions reach the real page on its ephemeral port
+      assert parsed["remote"] == %{"urls" => ["http://localhost:*"]}
     end
   end
 
@@ -220,7 +222,7 @@ defmodule ExTauri.E2ETest do
       socket_name = "my_test_app"
       main_rs = ExTauri.Install.Helpers.main_src(@host, @port, socket_name)
 
-      assert main_rs =~ "tauri_heartbeat_my_test_app.sock"
+      assert main_rs =~ "tauri_heartbeat_my_test_app_{}.port"
     end
   end
 end

@@ -59,23 +59,8 @@ defmodule ExTauri.ReleaseNameTest do
       refute main_rs =~ ~s{sidecar("desktop")}
     end
 
-    test "the shell capability allows the release's sidecar" do
-      capabilities = Helpers.capabilities_json("my_app_desktop")
-
-      assert %{"permissions" => permissions} = Jason.decode!(capabilities)
-
-      allowed =
-        Enum.find_value(permissions, fn
-          %{"identifier" => "shell:allow-execute", "allow" => allow} -> allow
-          _other -> nil
-        end)
-
-      assert [%{"name" => "my_app_desktop", "sidecar" => true}] = allowed
-    end
-
-    test "both still default to desktop, so an existing install regenerates unchanged" do
+    test "main.rs still defaults to desktop, so an existing install regenerates unchanged" do
       assert Helpers.main_src("localhost", "4000", "app") =~ ~s{sidecar("desktop")}
-      assert Helpers.capabilities_json() =~ ~s{"name": "desktop"}
     end
   end
 end

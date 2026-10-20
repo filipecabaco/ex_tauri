@@ -135,6 +135,22 @@ defmodule ExTauri.DesktopTest do
       :gen_tcp.close(client)
     end
 
+    test "keep_awake and quit reach the frontend as JSON commands", ctx do
+      client = connect(ctx.socket_path)
+
+      assert eventually(fn -> Desktop.keep_awake(true) == :ok end)
+      assert {:ok, line} = recv_line(client)
+
+      assert %{"type" => "command", "name" => "keep_awake", "payload" => %{"active" => true}} =
+               Jason.decode!(line)
+
+      assert :ok = Desktop.quit()
+      assert {:ok, line} = recv_line(client)
+      assert %{"type" => "command", "name" => "quit"} = Jason.decode!(line)
+
+      :gen_tcp.close(client)
+    end
+
     test "commands fail again after the frontend disconnects", ctx do
       client = connect(ctx.socket_path)
       assert eventually(fn -> Desktop.notify("Hi") == :ok end)

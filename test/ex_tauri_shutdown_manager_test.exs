@@ -199,6 +199,57 @@ defmodule ExTauri.ShutdownManagerTest do
     end
   end
 
+  describe "a quiet heartbeat under a live shell" do
+    test "keeps the backend up while the shell is still running", ctx do
+      # App Nap throttles a hidden window's timers, heartbeat thread included,
+      # while the socket stays open and the window is perfectly alive. That
+      # once stopped a backend six agents were using.
+      pid = start_manager(ctx, shell_alive_check: fn -> true end)
+      GenServer.cast(ShutdownManager, :heartbeat)
+
+      refute_receive :shutdown_triggered, @timeout * 5
+      assert :sys.get_state(pid).stalled_since
+      refute :sys.get_state(pid).shutdown_initiated
+    end
+
+    test "a resumed heartbeat ends the stall", ctx do
+      pid = start_manager(ctx, shell_alive_check: fn -> true end)
+      GenServer.cast(ShutdownManager, :heartbeat)
+      assert eventually(fn -> :sys.get_state(pid).stalled_since != nil end)
+
+      GenServer.cast(ShutdownManager, :heartbeat)
+
+      assert eventually(fn -> :sys.get_state(pid).stalled_since == nil end)
+    end
+
+    test "stops once the shell is gone", ctx do
+      # A shell that dies mid-stall leaves this process reparented to init, so
+      # the same question starts answering no.
+      {:ok, alive} = Agent.start_link(fn -> true end)
+      start_manager(ctx, shell_alive_check: fn -> Agent.get(alive, & &1) end)
+      GenServer.cast(ShutdownManager, :heartbeat)
+
+      refute_receive :shutdown_triggered, @timeout * 3
+      Agent.update(alive, fn _ -> false end)
+
+      assert_receive :shutdown_triggered, @timeout * 10
+    end
+
+    test "a closed connection still stops it, whatever the shell check says", ctx do
+      # The kernel closing the socket is the crash and force-quit signal; a
+      # live-looking parent must not outvote it.
+      start_manager(ctx, shell_alive_check: fn -> true end, heartbeat_reconnect_grace: 0)
+      assert wait_for_file(ctx.socket_path)
+
+      client = connect(ctx.socket_path)
+      :ok = :gen_tcp.send(client, "h")
+      assert eventually(fn -> :sys.get_state(ShutdownManager).connected end)
+      :gen_tcp.close(client)
+
+      assert_receive :shutdown_triggered, @timeout * 10
+    end
+  end
+
   describe "the orphan check" do
     test "stops a sidecar that never got a heartbeat and has lost its shell", ctx do
       # The state the startup grace deliberately makes immortal: a shell that

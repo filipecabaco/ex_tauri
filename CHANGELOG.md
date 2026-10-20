@@ -84,6 +84,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never arrived — it then ran forever holding its port. A stale path with
   nothing listening is still removed, which is the case that check was for.
 
+- `ExTauri.ShutdownManager` no longer stops the backend when a heartbeat goes
+  quiet under a shell that is still running. macOS App Nap throttles the timers
+  of an app whose window has been hidden for a while, heartbeat thread included,
+  so the bytes arrive late while the socket stays open and the window is fine.
+  One such gap stopped a backend that six agents were driving, after its window
+  had been in the background for fifteen minutes. On Unix, in a packaged build, a
+  timeout with the connection still open now asks the new
+  `ExTauri.Sidecar.Orphan.shell_alive?/0` first. A shell that is still the
+  sidecar's parent keeps the backend up, and the stall is logged when it starts
+  and when it ends. A quit (SIGTERM), a closed socket and a shell that died
+  (reparented to init) all still stop it. Windows, whose frontend quits by
+  letting the heartbeat time out, keeps the plain timeout, and so does
+  `mix ex_tauri.dev`. The check can be replaced with `:shell_alive_check`.
+
 ## [0.2.0] - 2026-07-12
 
 ### Added

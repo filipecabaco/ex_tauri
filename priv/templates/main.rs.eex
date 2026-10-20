@@ -424,6 +424,11 @@ async fn watch_sidecar(
                 SIDECAR_EXITED.store(true, Ordering::SeqCst);
                 let exit = describe_exit(exit.code, exit.signal);
 
+                // keep_awake is the backend's to hold, and that backend is gone.
+                // A restarted one starts out believing nothing is held, so an
+                // activity left in place here was never released again.
+                app_nap::set_disabled(false);
+
                 if !HEARTBEAT_ACTIVE.load(Ordering::SeqCst) {
                     log::info!(target: "sidecar", "{} (pid {})", exit, pid);
                     continue;

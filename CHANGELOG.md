@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A restarted backend could leave App Nap disabled for good.** The shell held
+  the `keep_awake` activity across a backend restart, while the new backend
+  started out believing nothing was held — so with no work in progress it never
+  sent `keep_awake(false)`. The shell now releases the activity whenever the
+  sidecar exits. Found by killing the BEAM under a real build.
+
 ## [0.4.1] - 2026-10-20
 
 ### Fixed

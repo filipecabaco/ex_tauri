@@ -160,7 +160,7 @@ test -f src-tauri/src/main.rs      || fail "Missing src-tauri/src/main.rs"
 test -f src-tauri/tauri.conf.json  || fail "Missing src-tauri/tauri.conf.json"
 test -f src-tauri/capabilities/default.json || fail "Missing capabilities/default.json"
 
-grep -q "let host = \"$HOST\"" src-tauri/src/main.rs || fail "main.rs missing host"
+grep -qF "format!(\"$HOST:{}\", port)" src-tauri/src/main.rs || fail "main.rs missing host"
 grep -q "unwrap_or($PORT)" src-tauri/src/main.rs || fail "main.rs missing default port"
 grep -q "tauri_heartbeat_francis_desktop" src-tauri/src/main.rs || fail "main.rs missing heartbeat socket"
 

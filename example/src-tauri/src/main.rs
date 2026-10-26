@@ -93,8 +93,17 @@ fn main() {
         })
         .setup(|app| {
             start_server(app.handle());
-            check_server_started();
-            start_heartbeat();
+            // Off the main thread. `setup` runs inside
+            // applicationDidFinishLaunching on macOS, so waiting for the sidecar
+            // here stalls the AppKit run loop: the window never paints and macOS
+            // files the process as a hang after ~5s. A first launch reliably costs
+            // that much, because Burrito unpacks the ERTS tree before the release
+            // can bind its port.
+            std::thread::spawn(|| {
+                if check_server_started() {
+                    start_heartbeat();
+                }
+            });
             Ok(())
         })
         // Intercept menu events (especially CMD+Q on macOS)
@@ -136,7 +145,11 @@ fn start_server(app: &tauri::AppHandle) {
     let sidecar_command = app
         .shell()
         .sidecar("desktop")
-        .expect("failed to setup `desktop` sidecar");
+        .expect("failed to setup `desktop` sidecar")
+        // Burrito's launcher never passes `--no-halt`, so without this a wrapped
+        // release runs its boot script, prints that the server is listening, and
+        // halts with status 0 before accepting a connection.
+        .args(["--no-halt"]);
 
     let (mut rx, child) = sidecar_command
         .spawn()
@@ -166,21 +179,27 @@ fn start_server(app: &tauri::AppHandle) {
     });
 }
 
-fn check_server_started() {
+// Blocks until the server accepts a connection. Returns false if it never does,
+// rather than looping forever: a sidecar that dies on boot (port taken, bad
+// unpack, killed by Gatekeeper) used to leave a blank window and no clue why.
+// The budget is generous because a first launch pays for the ERTS unpack.
+fn check_server_started() -> bool {
     let sleep_interval = std::time::Duration::from_millis(200);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
     let host = "localhost".to_string();
     let port = "4000".to_string();
     let addr = format!("{}:{}", host, port);
-    println!(
-        "Waiting for your phoenix dev server to start on {}...",
-        addr
-    );
-    loop {
+    println!("Waiting for your phoenix server to start on {}...", addr);
+
+    while std::time::Instant::now() < deadline {
         if std::net::TcpStream::connect(addr.clone()).is_ok() {
-            break;
+            return true;
         }
         std::thread::sleep(sleep_interval);
     }
+
+    eprintln!("error: no server ever listened on {} — giving up.", addr);
+    false
 }
 
 fn start_heartbeat() {
@@ -195,7 +214,7 @@ fn start_heartbeat() {
 
         // Wait for socket to be ready
         let mut stream = loop {
-            match UnixStream::connect(socket_path) {
+            match UnixStream::connect(&socket_path) {
                 Ok(s) => break s,
                 Err(_) => {
                     // Socket not ready yet, wait and retry

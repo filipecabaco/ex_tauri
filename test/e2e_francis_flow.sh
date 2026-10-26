@@ -14,6 +14,12 @@
 #   - A hand-written config/runtime.exs that reads PORT into bandit_opts, since
 #     Francis (unlike Phoenix) does not read PORT itself.
 #
+# NOTE: that runtime.exs path needs francis >= 0.3.4. Through 0.3.3 Francis read
+# :bandit_opts from the `use Francis` macro options only and silently discarded
+# `config :francis, bandit_opts: ...`, so the sidecar bound Bandit's default 4000
+# while Tauri pointed the webview at $PORT. This script therefore pins the
+# generated app to ~> 0.3.4 (see Step 2).
+#
 # Requires: elixir >= 1.18 (Francis generator target), rust/cargo, xvfb,
 #           python3, curl, network access
 #
@@ -54,6 +60,16 @@ trap cleanup EXIT
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; exit 1; }
 
+# curl already prints "000" on a connection failure AND exits non-zero, so a
+# `|| echo "000"` fallback appends a SECOND "000" and the caller sees "000000".
+# That compares unequal to "000", which silently turned every connectivity
+# assertion below into an unconditional pass. Read curl's status once.
+http_code() {
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' "$1" 2>/dev/null) || true
+  echo "${code:-000}"
+}
+
 # ─── Step 1: Create Francis project ─────────────────────────────────────────
 echo ""
 echo "=== Step 1: Create Francis project ==="
@@ -91,6 +107,23 @@ IO.puts("ex_tauri dependency added to mix.exs")
 grep -q "ex_tauri" mix.exs || fail "Failed to add ex_tauri to mix.exs"
 pass "ex_tauri added to mix.exs"
 
+# The generator emits {:francis, "~> 0.2"}. The config/runtime.exs recipe in
+# Step 3 (and in ex_tauri's README) only works from 0.3.4 on, so pin the floor
+# here rather than letting resolution pick a Francis that ignores it.
+elixir -e '
+path = "mix.exs"
+content = File.read!(path)
+new_content = String.replace(content, ~r/\{:francis,\s*"[^"]+"\}/, "{:francis, \"~> 0.3.4\"}")
+if content == new_content do
+  IO.puts("ERROR: Failed to pin francis version")
+  System.halt(1)
+end
+File.write!(path, new_content)
+IO.puts("francis pinned to ~> 0.3.4")
+'
+grep -q 'francis, "~> 0.3.4"' mix.exs || fail "Failed to pin francis >= 0.3.4"
+pass "francis pinned to ~> 0.3.4 (runtime.exs bandit_opts needs it)"
+
 # ─── Step 3: Configure ex_tauri (framework-agnostic sidecar) ─────────────────
 echo ""
 echo "=== Step 3: Configure ex_tauri ==="
@@ -110,7 +143,7 @@ ELIXIR_CONFIG
 
 # Francis does not read PORT itself, so the app owns this one-liner. runtime.exs
 # is evaluated by the release (the production sidecar), binding Bandit to the
-# port Tauri assigns.
+# port Tauri assigns. Honoured from francis 0.3.4 on; see the note at the top.
 cat > config/runtime.exs << 'ELIXIR_CONFIG'
 import Config
 
@@ -241,7 +274,7 @@ echo "=== Step 10: Verify ==="
 echo "  Waiting for Francis on $HOST:$PORT..."
 SERVER_UP=false
 for i in $(seq 1 90); do
-  HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/" 2>/dev/null || echo "000")
+  HTTP_CODE=$(http_code "http://$HOST:$PORT/")
   if [[ "$HTTP_CODE" != "000" ]]; then
     SERVER_UP=true
     echo "  Francis responded with HTTP $HTTP_CODE after ${i}s"
@@ -277,7 +310,7 @@ fi
 
 echo "  Waiting 5s to confirm heartbeat keeps system alive..."
 sleep 5
-HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/" 2>/dev/null || echo "000")
+HTTP_CODE=$(http_code "http://$HOST:$PORT/")
 [[ "$HTTP_CODE" != "000" ]] || fail "Francis stopped responding after 5s (heartbeat may have failed)"
 pass "Francis still responding after 5s (heartbeat working)"
 
@@ -291,7 +324,7 @@ TAURI_PID=""
 echo "  Waiting for ShutdownManager to detect heartbeat loss..."
 sleep 4
 
-SHUTDOWN_HTTP=$(curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/" 2>/dev/null || echo "000")
+SHUTDOWN_HTTP=$(http_code "http://$HOST:$PORT/")
 if [[ "$SHUTDOWN_HTTP" == "000" ]]; then
   pass "Francis shut down after Tauri exit (heartbeat-based shutdown works!)"
 else

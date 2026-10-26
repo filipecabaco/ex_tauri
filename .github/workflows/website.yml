@@ -14,12 +14,12 @@ jobs:
       run:
         working-directory: website
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
         with:
           elixir-version: "1.18"
           otp-version: "27"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             website/deps

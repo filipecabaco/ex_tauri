@@ -34,6 +34,56 @@ defmodule ExTauri.PathsTest do
     end
   end
 
+  describe "under ampoule" do
+    @describetag :tmp_dir
+
+    setup %{tmp_dir: tmp_dir} do
+      Application.put_env(:ex_tauri, :app_name, "Home Test")
+      System.put_env("EX_TAURI_HOME", tmp_dir)
+
+      on_exit(fn ->
+        System.delete_env("EX_TAURI_HOME")
+        System.delete_env("EX_TAURI_HOST_OS")
+      end)
+
+      :ok
+    end
+
+    test "EX_TAURI_HOME replaces the home, which ampoule makes a deleted-on-exit /tmp",
+         %{tmp_dir: tmp_dir} do
+      for dir <- [Paths.data_dir(), Paths.config_dir(), Paths.cache_dir(), Paths.log_dir()] do
+        assert String.starts_with?(dir, tmp_dir <> "/")
+        assert dir =~ "home_test"
+      end
+    end
+
+    test "EX_TAURI_HOST_OS names the OS, since the guest reports Linux everywhere",
+         %{tmp_dir: tmp_dir} do
+      # Otherwise a macOS app would keep its data in ~/.local/share and lose it
+      # when it switched packagers.
+      System.put_env("EX_TAURI_HOST_OS", "macos")
+
+      assert Paths.data_dir() ==
+               Path.join([tmp_dir, "Library", "Application Support", "home_test"])
+
+      System.put_env("EX_TAURI_HOST_OS", "linux")
+      System.delete_env("XDG_DATA_HOME")
+      assert Paths.data_dir() == Path.join([tmp_dir, ".local", "share", "home_test"])
+    end
+
+    test "iOS keeps the macOS layout inside the app's container", %{tmp_dir: tmp_dir} do
+      System.put_env("EX_TAURI_HOST_OS", "ios")
+
+      assert Paths.data_dir() ==
+               Path.join([tmp_dir, "Library", "Application Support", "home_test"])
+
+      assert Paths.cache_dir() == Path.join([tmp_dir, "Library", "Caches", "home_test"])
+      # The folder the Files app shows for the app.
+      assert Paths.documents_dir() == Path.join(tmp_dir, "Documents")
+      assert File.dir?(Paths.documents_dir())
+    end
+  end
+
   describe "data_dir/0" do
     test "returns a path containing the app identifier" do
       Application.put_env(:ex_tauri, :app_name, "Test App")

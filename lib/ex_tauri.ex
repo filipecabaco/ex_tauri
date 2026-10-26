@@ -32,8 +32,17 @@ defmodule ExTauri do
   defp validate_config do
     otp_release = :erlang.system_info(:otp_release) |> List.to_string()
 
-    case Integer.parse(otp_release) do
-      {major, _} when major < 27 ->
+    case {ExTauri.Packager.packager(), Integer.parse(otp_release)} do
+      {:ampoule, {major, _}} when major < 28 ->
+        Logger.warning("""
+        The ampoule packager runs releases built with OTP 28, but you are running OTP #{otp_release}.
+        `ampoule version` shows the OTP its runtime needs; the release must match it.
+        """)
+
+      {:ampoule, _} ->
+        :ok
+
+      {_, {major, _}} when major < 27 ->
         Logger.warning("""
         ExTauri requires OTP 27 but you are running OTP #{otp_release}.
         Burrito does not have pre-compiled ERTS available for other OTP versions.
@@ -43,7 +52,7 @@ defmodule ExTauri do
             asdf install erlang 27.2
         """)
 
-      {major, _} when major > 27 ->
+      {_, {major, _}} when major > 27 ->
         Logger.warning("""
         ExTauri currently targets OTP 27 but you are running OTP #{otp_release}.
         Burrito may not have pre-compiled ERTS for OTP #{major} yet.
@@ -153,7 +162,8 @@ defmodule ExTauri do
   @doc """
   Runs a Tauri CLI command after building a full production release.
 
-  This function builds the Elixir release (with Burrito wrapping), then
+  This function builds the Elixir release and packages it as the sidecar with
+  the configured packager (Burrito, or ampoule — see `ExTauri.Packager`), then
   executes the Tauri CLI. Use this for production builds only.
 
   For development, use `run_dev/1` which skips Burrito for faster iteration.
@@ -166,8 +176,16 @@ defmodule ExTauri do
   """
   def run(args) when is_list(args) do
     check_src_tauri!()
-    wrap()
+    args |> target_triplet() |> ExTauri.Packager.package()
     run_tauri_cli(args)
+  end
+
+  # `--target` picks the sidecar Tauri bundles; otherwise it is the host's.
+  defp target_triplet(args) do
+    case Enum.drop_while(args, &(&1 != "--target")) do
+      ["--target", triple | _] -> triple
+      _ -> host_triplet()
+    end
   end
 
   @doc """
@@ -220,8 +238,8 @@ defmodule ExTauri do
       ExTauri.run_simple(["icon", "app-icon.png"])
 
   """
-  def run_simple(args) when is_list(args) do
-    run_tauri_cli(args)
+  def run_simple(args, env \\ []) when is_list(args) do
+    run_tauri_cli(args, env)
   end
 
   # Private functions
@@ -280,42 +298,6 @@ defmodule ExTauri do
     end
   end
 
-  defp wrap() do
-    release = release_name()
-
-    get_in(Mix.Project.config(), [:releases, release_name_atom()]) ||
-      raise "expected a :#{release} release configured in your mix.exs"
-
-    # Run release with MIX_ENV=prod at shell level to avoid including dev config with regexes.
-    # Dev config (like live_reload patterns) contains regexes that can't be serialized.
-    # Must run as separate process so dependencies are loaded correctly for prod environment.
-    case System.cmd("mix", ["release", release, "--overwrite"],
-           env: [{"MIX_ENV", "prod"}],
-           into: IO.stream(:stdio, :line),
-           stderr_to_stdout: true
-         ) do
-      {_, 0} ->
-        :ok
-
-      {_, exit_code} ->
-        raise """
-        Failed to build release with exit code #{exit_code}.
-
-        If you see a Burrito ERTS download error (404), you may need to configure
-        a different ERTS version in your mix.exs release configuration.
-
-        See: https://github.com/burrito-elixir/burrito#configuration
-        """
-    end
-
-    # Burrito names output with underscores (<release>_x86_64-...) but Tauri
-    # expects hyphens (<release>-x86_64-...). Get the host triple from rustc and
-    # rename.
-    rename_burrito_output()
-
-    :ok
-  end
-
   @doc false
   # The Rust host target triple (e.g. "aarch64-apple-darwin"), used to name the
   # sidecar that Tauri spawns. Public so `ExTauri.Sidecar` can build its context.
@@ -326,15 +308,5 @@ defmodule ExTauri do
       [_, host] -> String.trim(host)
       _ -> raise "Could not determine host triple from `rustc -Vv`"
     end
-  end
-
-  defp rename_burrito_output do
-    triplet = host_triplet()
-    release = release_name()
-
-    File.cp!(
-      "burrito_out/#{release}_#{triplet}",
-      "burrito_out/#{release}-#{triplet}"
-    )
   end
 end

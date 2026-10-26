@@ -312,6 +312,28 @@ defmodule ExTauri.ShutdownManagerTest do
     end
   end
 
+  describe "the :stdin transport" do
+    test "stops the backend when stdin closes", ctx do
+      # The iOS shell holds the backend's stdin open; the kernel closes it however
+      # the app goes away. Lines before the close mean nothing.
+      {:ok, lines} = Agent.start_link(fn -> ["ignored\n", "also ignored\n", :eof] end)
+      read = fn -> Agent.get_and_update(lines, fn [next | rest] -> {next, rest} end) end
+
+      pid = start_manager(ctx, transport: :stdin, stdin_read: read)
+
+      assert_receive :shutdown_triggered, @timeout * 10
+      assert :sys.get_state(pid).listen_socket == nil
+      refute File.exists?(ctx.socket_path)
+    end
+
+    test "keeps running while stdin stays open", ctx do
+      pid = start_manager(ctx, transport: :stdin, stdin_read: fn -> Process.sleep(:infinity) end)
+
+      refute_receive :shutdown_triggered, @timeout * 5
+      assert Process.alive?(pid)
+    end
+  end
+
   describe "cleanup" do
     test "removes the socket file on terminate", ctx do
       start_manager(ctx)

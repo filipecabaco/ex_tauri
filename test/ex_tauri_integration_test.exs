@@ -120,6 +120,50 @@ defmodule ExTauriIntegrationTest do
     end
   end
 
+  describe "ampoule and iOS shells" do
+    test "the desktop shell launches either packager's sidecar from one main.rs" do
+      src = Helpers.main_src("localhost", "4000", "test_app", "App", "http", "test_app_desktop")
+
+      # Told apart at launch by ampoule's trailer: switching :packager never
+      # needs main.rs regenerated.
+      assert src =~ "fn sidecar_is_ampoule() -> bool"
+      assert src =~ ~s|exe.with_file_name("test_app_desktop")|
+      assert src =~ ~s|b"AMPOULE1"|
+
+      # Burrito halts after boot without --no-halt; ampoule takes a command and
+      # sees only what is mounted, so the socket dir and home go in.
+      assert src =~ ~s|vec!["--no-halt".to_string()]|
+      assert src =~ ~s|"/run/ex_tauri/{}"|
+      assert src =~ "EX_TAURI_HOME"
+      assert src =~ "EX_TAURI_HOST_OS"
+      assert src =~ ~s|mounts.join(","), "start".to_string()|
+    end
+
+    test "the iOS shell runs the bundled backend in the simulator only" do
+      src = Helpers.mobile_src("localhost")
+
+      # Compiled into the desktop crate too, so everything is gated on mobile.
+      assert src =~ "#[cfg(mobile)]\nmod mobile {"
+      assert src =~ "#[tauri::mobile_entry_point]"
+      assert src =~ ~s|cfg!(target_abi = "sim")|
+      assert src =~ ~s|.join("ex_tauri/backend")|
+
+      # Loopback only, stdin as the heartbeat, the container as the home.
+      assert src =~ ~s|"--listen-host",\n                "127.0.0.1"|
+      assert src =~ ~s|.env("EX_TAURI_HEARTBEAT_STDIN", "1")|
+      assert src =~ ~s|.env("EX_TAURI_HOST_OS", "ios")|
+      assert src =~ ".stdin(Stdio::piped())"
+
+      # The configured host and :sidecar_env, as on the desktop: PHX_HOST comes
+      # from it, and Phoenix refuses a socket whose origin names another host.
+      assert src =~ ~s|.env("PHX_HOST", "localhost")|
+      assert src =~ ~s|"http://localhost:{port}/"|
+
+      # `mix ex_tauri.ios dev` points it at the Mac's dev server instead.
+      assert src =~ "EX_TAURI_DEV_URL"
+    end
+  end
+
   describe "main.rs generation" do
     test "generates valid main.rs with V2 plugin system" do
       host = "localhost"
@@ -187,7 +231,9 @@ defmodule ExTauriIntegrationTest do
     test "starts the sidecar so Burrito 1.6 neither halts it nor hides it from signals" do
       main_src = Helpers.main_src("localhost", "4000", "test_app")
 
-      assert main_src =~ ~s{.args(["--no-halt"])}
+      # A Burrito sidecar gets --no-halt; an ampoule one is told apart at launch.
+      assert main_src =~ ~s{vec!["--no-halt".to_string()]}
+      assert main_src =~ ".args(args)"
       assert main_src =~ ".set_process_group(true)"
       assert main_src =~ "EX_TAURI_SHELL_PID"
       assert main_src =~ "fn beam_pid(root: u32)"

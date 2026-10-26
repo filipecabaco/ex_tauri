@@ -40,7 +40,7 @@ defmodule ExTauri.MixProject do
       main: "readme",
       source_url: @source_url,
       source_ref: "v#{@version}",
-      extras: ["README.md", "CHANGELOG.md", "guides/releasing.md"]
+      extras: ["README.md", "CHANGELOG.md", "guides/releasing.md", "guides/ios.md"]
     ]
   end
 

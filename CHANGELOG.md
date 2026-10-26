@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **iPhone and iPad, in the iOS simulator.** `mix ex_tauri.ios init` prepares
+  `src-tauri` for iOS without touching the desktop build: an iOS shell in
+  `src/lib.rs` (all `#[cfg(mobile)]`), a `[lib]` in `Cargo.toml` with
+  `tauri-plugin-single-instance` moved to a desktop-only table, and a
+  `tauri.ios.conf.json`. `mix ex_tauri.ios run` packs the release with ampoule
+  for the Mac's architecture, bundles it into the app, and runs it there: the
+  app starts it as a child process on loopback and points its window at it.
+  `mix ex_tauri.ios dev` points the simulator at your dev server instead, live
+  reload included. A device forbids starting a process and ampoule's
+  executable memory, so this is simulator-only; see `guides/ios.md`.
+- **The ampoule packager.** `config :ex_tauri, :packager, :ampoule` makes
+  `mix ex_tauri.build` pack the release with
+  [ampoule](https://github.com/filipecabaco/ampoule) instead of wrapping it with
+  Burrito: one executable running the BEAM as WebAssembly on OTP 28, nothing to
+  unpack on first launch. macOS and Linux. The release is built with
+  `BURRITO_SKIP=true`; the generated shell recognises an ampoule sidecar by its
+  trailer at launch, so `main.rs` and `tauri.conf.json` do not change.
+- `ExTauri.Paths.documents_dir/0` — the user's documents folder; on iOS, the one
+  the Files app shows for the app.
+- `ExTauri.ShutdownManager` has a `:stdin` transport, chosen with
+  `EX_TAURI_HEARTBEAT_STDIN=1`: no listener, and the backend stops when stdin
+  closes. The iOS shell uses it, since a Unix socket path inside a simulator's
+  app container is longer than macOS allows.
+
+### Changed
+
+- `ExTauri.Paths` honours `EX_TAURI_HOME` and `EX_TAURI_HOST_OS` (`macos`, `ios`,
+  `linux`), which the generated shells set for an ampoule sidecar: its own home
+  is a private `/tmp` deleted on exit, and it reports Linux on every host — so
+  without them its data would vanish, or land in `~/.local/share` on a Mac.
+- The OTP version check follows the packager: OTP 27 for Burrito, OTP 28 for
+  ampoule.
+- `mix ex_tauri.build --target <triple>` now packages the sidecar for that
+  triple rather than the host's.
+
 ## [0.4.2] - 2026-10-20
 
 ### Fixed

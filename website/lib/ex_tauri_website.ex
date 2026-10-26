@@ -29,6 +29,8 @@ defmodule ExTauriWebsite do
         tw_css: Francis.Static.static_path("tw.css"),
         site_js: Francis.Static.static_path("site.js"),
         hero_image: Francis.Static.static_path("images/hero.png"),
+        ipad_image: Francis.Static.static_path("images/ios-ipad.png"),
+        iphone_image: Francis.Static.static_path("images/ios-iphone.png"),
         base_url: @base_url,
         og_image: @base_url <> Francis.Static.static_path("images/og.png"),
         year: Date.utc_today().year

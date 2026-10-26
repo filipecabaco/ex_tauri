@@ -18,6 +18,11 @@ sidecar, and bundles platform packages into `src-tauri/target/release/bundle/`:
 | Linux    | `.deb`, `.appimage` |
 | Windows  | `.msi`, `.exe` (NSIS) |
 
+With `config :ex_tauri, :packager, :ampoule` the release is packed by
+[ampoule](https://github.com/filipecabaco/ampoule) instead: one executable that
+runs the BEAM as WebAssembly, built on OTP 28, with no ERTS to unpack on first
+launch. macOS and Linux only; see the README's "Packaging with ampoule".
+
 At runtime the app picks a **free ephemeral port** for Phoenix (no collisions
 with other software) and passes `PORT`, `PHX_SERVER=true`, `PHX_HOST`, and a
 generated `SECRET_KEY_BASE` to the sidecar — the standard Phoenix
@@ -130,7 +135,14 @@ uploads the bundles to a GitHub release. Copy it to
 - **Cross-compilation** is limited: build each platform's artifacts on that
   platform (the CI matrix handles this). Burrito can cross-wrap the BEAM, but
   Tauri's bundler and signing are per-OS.
-- **OTP 27** is required for Burrito's precompiled ERTS (see README).
+- **OTP 27** is required for Burrito's precompiled ERTS (see README); the
+  ampoule packager needs **OTP 28** instead, the OTP of its runtime.
+- **ampoule and notarization:** ampoule loads its precompiled engine into
+  executable memory at launch. Signing with the hardened runtime likely needs
+  the `com.apple.security.cs.allow-unsigned-executable-memory` entitlement on
+  the sidecar; this has not been verified against a notarized build yet.
+- **iOS** builds run in the simulator only, and are not distributable — see
+  the [iOS guide](ios.md).
 - Sessions are signed with a per-launch `SECRET_KEY_BASE` by default; set the
   env var yourself (e.g. store one in the app's data dir) if you need sessions
   to survive restarts.

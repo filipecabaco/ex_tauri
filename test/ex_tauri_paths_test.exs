@@ -41,9 +41,17 @@ defmodule ExTauri.PathsTest do
       Application.put_env(:ex_tauri, :app_name, "Home Test")
       System.put_env("EX_TAURI_HOME", tmp_dir)
 
+      # On Linux an XDG variable rightly wins over the home, and CI runners set
+      # them; these tests are about the home, so clear them for the duration.
+      xdg = ~w(XDG_DATA_HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_STATE_HOME XDG_DOCUMENTS_DIR)
+      saved = Map.new(xdg, &{&1, System.get_env(&1)})
+      Enum.each(xdg, &System.delete_env/1)
+
       on_exit(fn ->
         System.delete_env("EX_TAURI_HOME")
         System.delete_env("EX_TAURI_HOST_OS")
+
+        for {key, value} <- saved, value != nil, do: System.put_env(key, value)
       end)
 
       :ok

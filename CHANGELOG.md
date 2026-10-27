@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `usage-rules.md` ships with the package: a condensed reference for agents
+  working in an app that uses ex_tauri (setup, calling desktop APIs, plugins,
+  packaging with Burrito or ampoule, and iPhone and iPad in the simulator).
+
 ## [0.5.1] - 2026-10-27
 
 ### Fixed

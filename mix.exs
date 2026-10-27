@@ -1,7 +1,7 @@
 defmodule ExTauri.MixProject do
   use Mix.Project
 
-  @version "0.4.2"
+  @version "0.5.0"
   @source_url "https://github.com/filipecabaco/ex_tauri"
 
   def project do
@@ -40,7 +40,7 @@ defmodule ExTauri.MixProject do
       main: "readme",
       source_url: @source_url,
       source_ref: "v#{@version}",
-      extras: ["README.md", "CHANGELOG.md", "guides/releasing.md"]
+      extras: ["README.md", "CHANGELOG.md", "guides/releasing.md", "guides/ios.md"]
     ]
   end
 

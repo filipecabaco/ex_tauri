@@ -139,6 +139,13 @@ defmodule ExTauri.ShutdownManager do
   `:tcp` on Windows). It can be forced with the `:heartbeat_transport` config
   key or the `:transport` start option, which is mainly useful for tests.
 
+  A third transport, `:stdin`, is what the iOS shell asks for with
+  `EX_TAURI_HEARTBEAT_STDIN=1` (see `Mix.Tasks.ExTauri.Ios`). No listener is
+  opened — a Unix socket path inside a simulator's app container is longer than
+  the 104 bytes macOS allows — and the shell holds this process's stdin open
+  instead: EOF on it means the app is gone, however it went, and stops the
+  backend. `ExTauri.Desktop` commands answer `{:error, :not_connected}` there.
+
   ## The desktop channel
 
   Beyond liveness, the socket carries a newline-delimited JSON protocol in both
@@ -217,6 +224,14 @@ defmodule ExTauri.ShutdownManager do
 
     {listen_socket, endpoint, cleanup_paths} =
       open_listener(transport, opts[:endpoint] || endpoint_from_env(transport), socket_name)
+
+    # The :stdin transport has no listener: the shell holds our stdin open, so
+    # EOF on it is the window going away. Injectable for the suite, whose stdin
+    # is the test runner's.
+    if transport == :stdin do
+      read = opts[:stdin_read] || fn -> IO.read(:stdio, :line) end
+      Task.Supervisor.start_child(ExTauri.TaskSupervisor, fn -> watch_stdin(read) end)
+    end
 
     # Spawn acceptor process under the ExTauri TaskSupervisor
     if listen_socket do
@@ -424,6 +439,11 @@ defmodule ExTauri.ShutdownManager do
     end
   end
 
+  def handle_info(:stdin_closed, state) do
+    Logger.warning("[ExTauri.ShutdownManager] stdin closed - the app that spawned us is gone")
+    initiate_shutdown(state)
+  end
+
   @impl true
   def handle_info(:execute_shutdown, state) do
     Logger.info("[ExTauri.ShutdownManager] Stopping application...")
@@ -475,9 +495,10 @@ defmodule ExTauri.ShutdownManager do
   end
 
   defp default_transport do
-    case :os.type() do
-      {:win32, _} -> :tcp
-      _ -> :unix
+    cond do
+      System.get_env("EX_TAURI_HEARTBEAT_STDIN") == "1" -> :stdin
+      match?({:win32, _}, :os.type()) -> :tcp
+      true -> :unix
     end
   end
 
@@ -486,6 +507,7 @@ defmodule ExTauri.ShutdownManager do
 
   defp endpoint_from_env(:unix), do: System.get_env("EX_TAURI_HEARTBEAT_SOCKET")
   defp endpoint_from_env(:tcp), do: System.get_env("EX_TAURI_HEARTBEAT_PORT_FILE")
+  defp endpoint_from_env(:stdin), do: nil
 
   defp open_listener(:unix, socket_path, socket_name) do
     socket_path =
@@ -517,6 +539,8 @@ defmodule ExTauri.ShutdownManager do
         {nil, socket_path, []}
     end
   end
+
+  defp open_listener(:stdin, _endpoint, _socket_name), do: {nil, "stdin", []}
 
   defp open_listener(:tcp, port_file, socket_name) do
     port_file = port_file || Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.port")
@@ -578,6 +602,23 @@ defmodule ExTauri.ShutdownManager do
   defp schedule_heartbeat_check(interval) do
     Process.send_after(self(), :check_heartbeat, interval)
     System.monotonic_time(:millisecond) + interval
+  end
+
+  # Blocks on stdin until it ends. Lines are ignored; only the close matters.
+  defp watch_stdin(read) do
+    case read.() do
+      :eof ->
+        send(__MODULE__, :stdin_closed)
+
+      {:error, reason} ->
+        Logger.error(
+          "[ExTauri.ShutdownManager] stdin unreadable (#{inspect(reason)}) - " <>
+            "cannot tell when the app goes away"
+        )
+
+      _line ->
+        watch_stdin(read)
+    end
   end
 
   defp accept_loop(listen_socket) do

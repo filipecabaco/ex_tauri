@@ -4,6 +4,8 @@ defmodule ExTauri.Install.Helpers do
 
   @main_rs_template Path.join(:code.priv_dir(:ex_tauri), "templates/main.rs.eex")
   @external_resource @main_rs_template
+  @mobile_rs_template Path.join(:code.priv_dir(:ex_tauri), "templates/mobile.rs.eex")
+  @external_resource @mobile_rs_template
 
   @doc """
   Installs the Tauri CLI via cargo and initializes the Tauri project structure.
@@ -436,6 +438,25 @@ defmodule ExTauri.Install.Helpers do
   # always-present PORT and SECRET_KEY_BASE. Defaults to the Phoenix signals so
   # existing apps are unchanged; override with `config :ex_tauri, :sidecar_env`
   # (a map or keyword list) to target another framework — e.g. `[]` for Francis.
+  @doc """
+  The iOS shell, written to `src-tauri/src/lib.rs` by `mix ex_tauri.ios init`.
+  """
+  def mobile_src(host, scheme \\ "http") do
+    unless to_string(host) =~ ~r/\A[a-zA-Z0-9\.\-]+\z/ do
+      raise ArgumentError, "host contains invalid characters: #{inspect(host)}"
+    end
+
+    unless to_string(scheme) in ["http", "https"] do
+      raise ArgumentError, "scheme must be http or https, got: #{inspect(scheme)}"
+    end
+
+    EEx.eval_file(@mobile_rs_template,
+      host: to_string(host),
+      scheme: to_string(scheme),
+      sidecar_env: sidecar_env(host)
+    )
+  end
+
   defp sidecar_env(host) do
     default = [{"PHX_SERVER", "true"}, {"PHX_HOST", to_string(host)}]
 

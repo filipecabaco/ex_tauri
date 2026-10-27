@@ -17,10 +17,11 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 - **Native Events in LiveView** — Subscribe to drag-and-drop, deep links, or custom Rust events and handle them like any other LiveView event
 - **True Hot Reload** — `mix ex_tauri.dev` runs your Phoenix dev server inside the native window: code reloading and live reload just work
 - **Multi-Window** — Open and close secondary native windows from LiveView
-- **Single Binary Distribution** — Uses [Burrito](https://github.com/burrito-elixir/burrito) to bundle everything into one executable
+- **Single Binary Distribution** — Uses [Burrito](https://github.com/burrito-elixir/burrito) to bundle everything into one executable — or [ampoule](https://github.com/filipecabaco/ampoule), which runs the BEAM as WebAssembly on OTP 28 with nothing to unpack
+- **iPhone and iPad (simulator)** — `mix ex_tauri.ios` runs the same app in the iOS simulator, its backend packed by ampoule; see the [iOS guide](guides/ios.md)
 - **Graceful Shutdown** — Heartbeat-based mechanism ensures clean shutdown on CMD+Q, crashes, or force-quit
 - **Automated Setup** — Uses [Igniter](https://hexdocs.pm/igniter) for safe, AST-aware project configuration
-- **Cross-Platform** — Build for macOS, Windows, and Linux
+- **Cross-Platform** — Build for macOS, Windows, and Linux; run in the iOS simulator
 
 ## Prerequisites
 
@@ -30,6 +31,9 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 - **Platform dependencies** — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
 > **Note:** `mix ex_tauri.dev` skips Burrito, so Zig is only needed for `mix ex_tauri.build`.
+>
+> With the [ampoule packager](#packaging-with-ampoule) you need neither Zig nor
+> OTP 27: the release is built on **OTP 28** and packed by ampoule instead.
 
 ## Getting Started
 
@@ -163,6 +167,55 @@ Your app bundle will be at `src-tauri/target/release/bundle/` with platform-spec
 - **Linux:** `.deb` and `.appimage`
 - **Windows:** `.msi` and `.exe`
 
+### Packaging with ampoule
+
+[ampoule](https://github.com/filipecabaco/ampoule) packs a release into one
+executable that runs the BEAM as WebAssembly: there is no ERTS to unpack on
+first launch, and the release runs on **OTP 28**. macOS and Linux (Windows
+stays on Burrito).
+
+```elixir
+# config/config.exs
+config :ex_tauri, :packager, :ampoule
+# optional — defaults to `ampoule` on PATH
+config :ex_tauri, :ampoule_path, "/path/to/ampoule"
+```
+
+`mix ex_tauri.build` then packs with ampoule instead of Burrito. It builds the
+release with `BURRITO_SKIP=true`, so a Burrito step that is conditional on it —
+as `mix ex_tauri.dev --sidecar release` already expects — needs no change:
+
+```elixir
+steps: [:assemble] ++ if(System.get_env("BURRITO_SKIP") == "true", do: [], else: [&Burrito.wrap/1])
+```
+
+The output path is still `burrito_out/<release>-<triple>`, and the generated
+shell recognises an ampoule sidecar at launch, so switching packagers changes
+neither `tauri.conf.json` nor `main.rs`. ampoule shows the sidecar only what is
+mounted into it; the shell mounts your home and the heartbeat socket and tells
+`ExTauri.Paths` where they are (`EX_TAURI_HOME`, `EX_TAURI_HOST_OS`), so data
+lands where a Burrito build would put it. Code that reads `System.user_home!/0`
+directly sees ampoule's private `/tmp` instead — use `ExTauri.Paths`.
+
+## iPhone and iPad
+
+```bash
+mix ex_tauri.ios init    # once: prepare src-tauri for iOS
+mix ex_tauri.ios dev     # the simulator on your dev server, live reload
+mix ex_tauri.ios run     # the backend packed with ampoule, as it would ship
+```
+
+Tauri apps cannot ship a sidecar on iOS, so `init` writes an iOS shell to
+`src-tauri/src/lib.rs` that starts your release — packed by ampoule and bundled
+into the app — as a child process on loopback, and points the window at it. The
+desktop build is untouched. **This runs in the simulator only**: a device forbids
+starting a process and the executable memory ampoule's engine maps. Running the
+backend inside the app process is the path to devices.
+
+The [iOS guide](guides/ios.md) covers requirements, where files go
+(`ExTauri.Paths.documents_dir/0`), and designing for iPhone and iPad with media
+queries and safe-area insets.
+
 ## Mix Tasks
 
 | Task | Description |
@@ -171,6 +224,7 @@ Your app bundle will be at `src-tauri/target/release/bundle/` with platform-spec
 | `mix ex_tauri.add` | Add Tauri plugins (dialogs, filesystem, shortcuts, ...) |
 | `mix ex_tauri.dev` | Run in development mode with hot-reload |
 | `mix ex_tauri.build` | Build for production |
+| `mix ex_tauri.ios` | Run in the iOS simulator (`init`, `dev`, `run`, `build`) |
 
 Run `mix help ex_tauri.<task>` for detailed options.
 
@@ -393,7 +447,9 @@ config :ex_tauri,
 config :ex_tauri,
   heartbeat_interval: 500,    # How often to check heartbeat (ms)
   heartbeat_timeout: 1500,    # Time without heartbeat before shutdown (ms)
-  scheme: "http"              # URL scheme (http or https)
+  scheme: "http",             # URL scheme (http or https)
+  packager: :burrito,         # :burrito or :ampoule (see Packaging with ampoule)
+  ampoule_path: "ampoule"     # ampoule binary, when not on PATH
 ```
 
 ## Troubleshooting

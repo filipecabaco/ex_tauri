@@ -6,7 +6,7 @@ defmodule ExTauri.TaskHelpers do
   Validates that the Tauri project is set up and Rust toolchain is available.
   Raises with actionable error messages if anything is missing.
   """
-  def preflight_check! do
+  def preflight_check!(opts \\ []) do
     unless File.dir?("src-tauri") do
       Mix.raise("""
       Tauri project not found. Run this first:
@@ -25,17 +25,30 @@ defmodule ExTauri.TaskHelpers do
       """)
     end
 
-    check_otp_version()
+    # Tasks that pack nothing themselves, or check for another packager, skip it.
+    if Keyword.get(opts, :otp, true), do: check_otp_version()
   end
 
   @doc """
-  Warns if the OTP version is not compatible with Burrito's ERTS availability.
+  Warns if the OTP version is not one the packager can ship: OTP 27 for
+  Burrito's prebuilt ERTS, OTP 28 for ampoule's runtime.
   """
-  def check_otp_version do
+  def check_otp_version(packager \\ ExTauri.Packager.packager()) do
     otp_release = :erlang.system_info(:otp_release) |> List.to_string()
 
-    case Integer.parse(otp_release) do
-      {major, _} when major < 27 ->
+    case {packager, Integer.parse(otp_release)} do
+      {:ampoule, {major, _}} when major < 28 ->
+        Mix.raise("""
+        The ampoule packager needs OTP 28 but you are running OTP #{otp_release}:
+        the release must match the OTP of ampoule's runtime (`ampoule version`).
+
+            mise install erlang 28
+        """)
+
+      {:ampoule, _} ->
+        :ok
+
+      {_, {major, _}} when major < 27 ->
         Mix.raise("""
         ExTauri requires OTP 27 but you are running OTP #{otp_release}.
         Burrito does not have pre-compiled ERTS available for other versions.
@@ -46,7 +59,7 @@ defmodule ExTauri.TaskHelpers do
             mise install erlang 27.2
         """)
 
-      {major, _} when major > 27 ->
+      {_, {major, _}} when major > 27 ->
         Mix.shell().info("""
         Warning: ExTauri targets OTP 27 but you are running OTP #{otp_release}.
         Burrito may not have pre-compiled ERTS for OTP #{major} yet.

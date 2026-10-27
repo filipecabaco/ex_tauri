@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
@@ -26,7 +26,7 @@ jobs:
           otp-version: ${{ env.OTP_VERSION }}
 
       - name: Cache deps
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             deps
@@ -58,7 +58,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # erlef/setup-beam doesn't support macOS runners; Homebrew's Elixir is
       # current enough for the unit suite (OTP-version warnings are expected).
@@ -83,7 +83,7 @@ jobs:
     needs: unit-tests
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
@@ -95,7 +95,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -118,7 +118,7 @@ jobs:
             python3
 
       - name: Cache Mix deps
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             deps
@@ -146,7 +146,7 @@ jobs:
     needs: unit-tests
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
@@ -158,13 +158,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies and build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            /tmp/cargo-target-cli-flow
-            /tmp/tauri-cli-cache
+            ${{ runner.temp }}/cargo-target-cli-flow
+            ${{ runner.temp }}/tauri-cli-cache
           key: ${{ runner.os }}-cargo-cli-flow-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-cargo-cli-flow-
@@ -194,8 +194,11 @@ jobs:
         timeout-minutes: 30
         env:
           MIX_ENV: dev
-          CARGO_TARGET_DIR: /tmp/cargo-target-cli-flow
-          TAURI_CLI_CACHE: /tmp/tauri-cli-cache
+          CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-target-cli-flow
+          TAURI_CLI_CACHE: ${{ runner.temp }}/tauri-cli-cache
+          # Off /tmp: the runner's /tmp has a quota the restored Rust cache alone
+          # fills, and the next write there (Mix fetching an installer) fails.
+          TMPDIR: ${{ runner.temp }}
 
   francis-flow-test:
     name: Francis CLI Flow (Linux)
@@ -203,7 +206,7 @@ jobs:
     needs: unit-tests
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Francis's generator targets elixir ~> 1.18, newer than the rest of CI.
       - name: Set up Elixir
@@ -216,13 +219,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies and build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            /tmp/cargo-target-francis-flow
-            /tmp/tauri-cli-cache
+            ${{ runner.temp }}/cargo-target-francis-flow
+            ${{ runner.temp }}/tauri-cli-cache
           key: ${{ runner.os }}-cargo-francis-flow-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-cargo-francis-flow-
@@ -252,5 +255,8 @@ jobs:
         timeout-minutes: 30
         env:
           MIX_ENV: dev
-          CARGO_TARGET_DIR: /tmp/cargo-target-francis-flow
-          TAURI_CLI_CACHE: /tmp/tauri-cli-cache
+          CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-target-francis-flow
+          TAURI_CLI_CACHE: ${{ runner.temp }}/tauri-cli-cache
+          # Off /tmp: the runner's /tmp has a quota the restored Rust cache alone
+          # fills, and the next write there (Mix fetching an installer) fails.
+          TMPDIR: ${{ runner.temp }}

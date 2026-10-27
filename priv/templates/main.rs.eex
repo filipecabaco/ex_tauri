@@ -371,15 +371,21 @@ fn spawn_sidecar(app: &tauri::AppHandle, port: u16) -> Result<(), String> {
 
     // `--no-halt`: from Burrito 1.6 the launcher boots the BEAM with
     // `-s elixir start_cli`, which halts the VM right after boot unless told
-    // not to. Release scripts and the dev shim ignore the argument.
-    //
+    // not to. Release scripts and the dev shim ignore the argument. An ampoule
+    // sidecar takes a command instead, and a view of the host (see ampoule_args).
+    let args = if sidecar_is_ampoule() {
+        ampoule_args(&mut env)
+    } else {
+        vec!["--no-halt".to_string()]
+    };
+
     // Its own process group, so the final kill takes everything with it: a
     // Burrito launcher spawns the BEAM as a child, and the BEAM spawns ports.
     let command = app
         .shell()
         .sidecar("<%= release_name %>")
         .map_err(|error| format!("the `<%= release_name %>` sidecar is missing from the app bundle ({})", error))?
-        .args(["--no-halt"])
+        .args(args)
         .envs(env)
         .set_process_group(true);
 
@@ -445,6 +451,64 @@ async fn watch_sidecar(
             _ => {}
         }
     }
+}
+
+// ampoule (ExTauri.Packager) appends its payload to the executable and ends it
+// with this marker; a Burrito sidecar or a dev shim does not. Reading it at
+// launch lets one main.rs run either, so switching :packager needs no
+// regeneration. Tauri resolves sidecars next to this executable.
+#[cfg(unix)]
+fn sidecar_is_ampoule() -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let Ok(exe) = std::env::current_exe() else { return false };
+    let Ok(mut file) = std::fs::File::open(exe.with_file_name("<%= release_name %>")) else {
+        return false;
+    };
+    let mut trailer = [0u8; 8];
+    file.seek(SeekFrom::End(-8)).is_ok()
+        && file.read_exact(&mut trailer).is_ok()
+        && &trailer == b"AMPOULE1"
+}
+
+// ampoule has no Windows runtime.
+#[cfg(windows)]
+fn sidecar_is_ampoule() -> bool {
+    false
+}
+
+// An ampoule sidecar sees only its release, a private /tmp deleted when it
+// exits, and what is mounted in. So: the heartbeat socket's directory is
+// mounted at /run/ex_tauri and the sidecar is told the path inside it; the real
+// home is mounted and named in EX_TAURI_HOME, since its own HOME is that /tmp;
+// and EX_TAURI_HOST_OS names the OS, since it reports Linux on every host.
+// ExTauri.ShutdownManager and ExTauri.Paths read all three.
+#[cfg(unix)]
+fn ampoule_args(env: &mut std::collections::HashMap<String, String>) -> Vec<String> {
+    let mut mounts = Vec::new();
+
+    let socket = env.get("EX_TAURI_HEARTBEAT_SOCKET").map(std::path::PathBuf::from);
+    if let Some((dir, name)) = socket.as_ref().and_then(|s| Some((s.parent()?, s.file_name()?))) {
+        mounts.push(format!("{}:/run/ex_tauri", dir.display()));
+        env.insert(
+            "EX_TAURI_HEARTBEAT_SOCKET".to_string(),
+            format!("/run/ex_tauri/{}", name.to_string_lossy()),
+        );
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        mounts.push(format!("{home}:{home}"));
+        env.insert("EX_TAURI_HOME".to_string(), home);
+    }
+
+    env.insert("EX_TAURI_HOST_OS".to_string(), std::env::consts::OS.to_string());
+
+    vec!["--mount".to_string(), mounts.join(","), "start".to_string()]
+}
+
+#[cfg(windows)]
+fn ampoule_args(_env: &mut std::collections::HashMap<String, String>) -> Vec<String> {
+    vec!["start".to_string()]
 }
 
 fn describe_exit(code: Option<i32>, signal: Option<i32>) -> String {

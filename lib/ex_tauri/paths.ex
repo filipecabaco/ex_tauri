@@ -14,8 +14,22 @@ defmodule ExTauri.Paths do
   | `config_dir/0`| `~/Library/Application Support/<app>`    | `~/.config/<app>`                  | `%APPDATA%/<app>`                  |
   | `cache_dir/0` | `~/Library/Caches/<app>`                 | `~/.cache/<app>`                   | `%LOCALAPPDATA%/<app>/cache`       |
   | `log_dir/0`   | `~/Library/Logs/<app>`                   | `~/.local/state/<app>/log`         | `%LOCALAPPDATA%/<app>/log`         |
+  | `documents_dir/0` | `~/Documents`                        | `$XDG_DOCUMENTS_DIR` or `~/Documents` | `%USERPROFILE%/Documents`       |
+
+  iOS uses the macOS layout inside the app's sandbox container, where
+  `documents_dir/0` is the folder the Files app shows for the app.
 
   All directories are created automatically if they don't exist.
+
+  ## Under ampoule
+
+  An ampoule sidecar (see `ExTauri.Packager`) sees its own home as a private
+  temporary directory that is deleted when it exits, and reports itself as
+  Linux on every host. The generated shells therefore name both: `~` is
+  `EX_TAURI_HOME` when set, otherwise `System.user_home!/0`, and the platform is
+  `EX_TAURI_HOST_OS` (`macos`, `ios` or `linux`) when set, otherwise
+  `:os.type/0`. Without them, data written here would vanish with the sidecar,
+  or a macOS app would keep it under `~/.local/share`.
 
   ## Configuration
 
@@ -71,6 +85,17 @@ defmodule ExTauri.Paths do
   end
 
   @doc """
+  Returns the user's documents directory.
+
+  Not specific to the app: this is where people keep files they open and save
+  themselves. On iOS it is the app's own Documents folder, the one the Files
+  app shows.
+  """
+  def documents_dir do
+    ensure_dir(documents_dir_path())
+  end
+
+  @doc """
   Returns the normalized app name used for directory names.
 
   Converts the configured `:app_name` to a filesystem-safe identifier.
@@ -103,66 +128,84 @@ defmodule ExTauri.Paths do
   # Platform-specific path resolution
 
   defp data_dir_path do
-    case :os.type() do
+    case os_type() do
       {:unix, :darwin} ->
-        Path.join([System.user_home!(), "Library", "Application Support", app_identifier()])
+        Path.join([home(), "Library", "Application Support", app_identifier()])
 
       {:unix, _} ->
         xdg_or_default("XDG_DATA_HOME", ".local/share")
 
       {:win32, _} ->
-        appdata = System.get_env("APPDATA") || Path.join(System.user_home!(), "AppData/Roaming")
+        appdata = System.get_env("APPDATA") || Path.join(home(), "AppData/Roaming")
         Path.join(appdata, app_identifier())
     end
   end
 
   defp config_dir_path do
-    case :os.type() do
+    case os_type() do
       {:unix, :darwin} ->
-        Path.join([System.user_home!(), "Library", "Application Support", app_identifier()])
+        Path.join([home(), "Library", "Application Support", app_identifier()])
 
       {:unix, _} ->
         xdg_or_default("XDG_CONFIG_HOME", ".config")
 
       {:win32, _} ->
-        appdata = System.get_env("APPDATA") || Path.join(System.user_home!(), "AppData/Roaming")
+        appdata = System.get_env("APPDATA") || Path.join(home(), "AppData/Roaming")
         Path.join(appdata, app_identifier())
     end
   end
 
   defp cache_dir_path do
-    case :os.type() do
+    case os_type() do
       {:unix, :darwin} ->
-        Path.join([System.user_home!(), "Library", "Caches", app_identifier()])
+        Path.join([home(), "Library", "Caches", app_identifier()])
 
       {:unix, _} ->
         xdg_or_default("XDG_CACHE_HOME", ".cache")
 
       {:win32, _} ->
-        local = System.get_env("LOCALAPPDATA") || Path.join(System.user_home!(), "AppData/Local")
+        local = System.get_env("LOCALAPPDATA") || Path.join(home(), "AppData/Local")
         Path.join([local, app_identifier(), "cache"])
     end
   end
 
   defp log_dir_path do
-    case :os.type() do
+    case os_type() do
       {:unix, :darwin} ->
-        Path.join([System.user_home!(), "Library", "Logs", app_identifier()])
+        Path.join([home(), "Library", "Logs", app_identifier()])
 
       {:unix, _} ->
         xdg_or_default("XDG_STATE_HOME", ".local/state")
         |> Path.join("log")
 
       {:win32, _} ->
-        local = System.get_env("LOCALAPPDATA") || Path.join(System.user_home!(), "AppData/Local")
+        local = System.get_env("LOCALAPPDATA") || Path.join(home(), "AppData/Local")
         Path.join([local, app_identifier(), "log"])
+    end
+  end
+
+  defp documents_dir_path do
+    case os_type() do
+      {:unix, :linux} -> System.get_env("XDG_DOCUMENTS_DIR") || Path.join(home(), "Documents")
+      _ -> Path.join(home(), "Documents")
+    end
+  end
+
+  defp home, do: System.get_env("EX_TAURI_HOME") || System.user_home!()
+
+  # iOS keeps the macOS layout inside its sandbox container.
+  defp os_type do
+    case System.get_env("EX_TAURI_HOST_OS") do
+      os when os in ["macos", "ios"] -> {:unix, :darwin}
+      "linux" -> {:unix, :linux}
+      _ -> :os.type()
     end
   end
 
   defp xdg_or_default(env_var, default_suffix) do
     base =
       System.get_env(env_var) ||
-        Path.join(System.user_home!(), default_suffix)
+        Path.join(home(), default_suffix)
 
     Path.join(base, app_identifier())
   end

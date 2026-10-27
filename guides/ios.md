@@ -35,7 +35,7 @@ mix ex_tauri.ios run     # the packed backend, as it would ship
 | `src-tauri/src/lib.rs` | The iOS shell. Replaces the stub `cargo tauri init` leaves there; refuses a `lib.rs` with code of its own unless `--force`. Everything in it is `#[cfg(mobile)]`, so the desktop crate compiles past it. |
 | `src-tauri/Cargo.toml` | A `[lib]` the iOS build links, and `tauri-plugin-single-instance` moved to a desktop-only table (only `main.rs` uses it, and it does not build for iOS). |
 | `src-tauri/tauri.ios.conf.json` | Merged over `tauri.conf.json` for iOS: the backend as a resource instead of a sidecar, a bundled loading page, an identifier iOS accepts. |
-| `src-tauri/mobile/index.html` | The loading page. |
+| `src-tauri/mobile/index.html` | The loading page. Written only when missing: restyle it in the app's own look, and rerunning `init` keeps it. |
 
 It then runs `cargo tauri ios init` to generate the Xcode project in
 `src-tauri/gen/apple`. Rerunning `init` is safe; it regenerates only what it

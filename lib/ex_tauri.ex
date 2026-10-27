@@ -32,7 +32,12 @@ defmodule ExTauri do
   defp validate_config do
     otp_release = :erlang.system_info(:otp_release) |> List.to_string()
 
-    case {ExTauri.Packager.packager(), Integer.parse(otp_release)} do
+    # A backend the shell started under ampoule (it names the host OS) runs on
+    # ampoule's OTP whatever this app's :packager says for its desktop builds.
+    packager =
+      if System.get_env("EX_TAURI_HOST_OS"), do: :ampoule, else: ExTauri.Packager.packager()
+
+    case {packager, Integer.parse(otp_release)} do
       {:ampoule, {major, _}} when major < 28 ->
         Logger.warning("""
         The ampoule packager runs releases built with OTP 28, but you are running OTP #{otp_release}.

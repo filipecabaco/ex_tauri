@@ -40,7 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is a private `/tmp` deleted on exit, and it reports Linux on every host — so
   without them its data would vanish, or land in `~/.local/share` on a Mac.
 - The OTP version check follows the packager: OTP 27 for Burrito, OTP 28 for
-  ampoule.
+  ampoule. A backend an iOS or ampoule shell started (`EX_TAURI_HOST_OS` set) is
+  held to OTP 28 whatever `:packager` says for the desktop build.
 - `mix ex_tauri.build --target <triple>` now packages the sidecar for that
   triple rather than the host's.
 

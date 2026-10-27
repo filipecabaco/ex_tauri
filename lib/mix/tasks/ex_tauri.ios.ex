@@ -77,8 +77,15 @@ defmodule Mix.Tasks.ExTauri.Ios do
 
     base = base_conf()
     write_json("src-tauri/tauri.ios.conf.json", Ios.ios_conf(base))
-    File.mkdir_p!("src-tauri/mobile")
-    File.write!("src-tauri/mobile/index.html", Ios.loading_page(base["productName"] || "the app"))
+    # Written once: it is the app's to restyle, and rerunning init keeps it.
+    unless File.exists?("src-tauri/mobile/index.html") do
+      File.mkdir_p!("src-tauri/mobile")
+
+      File.write!(
+        "src-tauri/mobile/index.html",
+        Ios.loading_page(base["productName"] || "the app")
+      )
+    end
 
     if opts[:force] || not File.dir?("src-tauri/gen/apple") do
       ExTauri.run_simple(["ios", "init", "--ci"])

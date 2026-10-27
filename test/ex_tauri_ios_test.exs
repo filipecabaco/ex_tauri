@@ -125,6 +125,24 @@ defmodule ExTauri.IosTest do
       assert Ios.bundle_id(%{"identifier" => "app.markdn.desktop"}, conf) == "app.markdn.desktop"
     end
 
+    test "pins the iOS minimum, which an older Tauri CLI sets below what Xcode builds" do
+      assert %{"bundle" => %{"iOS" => %{"minimumSystemVersion" => "15.0"}}} =
+               Ios.ios_conf(%{"identifier" => "app.markdn.desktop"})
+    end
+
+    test "raises an older project's minimum, and leaves a higher one alone" do
+      yml = "options:\n  deploymentTarget:\n    iOS: 14.0\n"
+      assert Ios.raise_deployment_target(yml) =~ "iOS: 15.0"
+
+      pbx = "IPHONEOS_DEPLOYMENT_TARGET = 14.0;\nIPHONEOS_DEPLOYMENT_TARGET = 14.0;"
+
+      assert Ios.raise_deployment_target(pbx) ==
+               "IPHONEOS_DEPLOYMENT_TARGET = 15.0;\nIPHONEOS_DEPLOYMENT_TARGET = 15.0;"
+
+      assert Ios.raise_deployment_target("IPHONEOS_DEPLOYMENT_TARGET = 16.4;") ==
+               "IPHONEOS_DEPLOYMENT_TARGET = 16.4;"
+    end
+
     test "gives iOS an identifier it accepts" do
       conf = Ios.ios_conf(%{"identifier" => "you.app.my_app"})
 

@@ -91,6 +91,8 @@ defmodule Mix.Tasks.ExTauri.Ios do
       ExTauri.run_simple(["ios", "init", "--ci"])
     end
 
+    raise_deployment_target()
+
     Mix.shell().info("""
 
     iOS ready. Run it in the simulator with:
@@ -142,6 +144,9 @@ defmodule Mix.Tasks.ExTauri.Ios do
         File.write!(Ios.backend_path(), "")
       end
     end
+
+    # A project generated before the minimum was pinned keeps the old one.
+    raise_deployment_target()
 
     # Xcode's build phase runs `cargo tauri ios xcode-script`, so the CLI ex_tauri
     # installed has to be on PATH as a cargo subcommand.
@@ -280,6 +285,12 @@ defmodule Mix.Tasks.ExTauri.Ios do
       {_, 0} -> :ok
       {output, status} -> Mix.raise("xcrun #{Enum.join(args, " ")} failed (#{status}): #{output}")
     end
+  end
+
+  defp raise_deployment_target do
+    ["src-tauri/gen/apple/project.yml", "src-tauri/gen/apple/*.xcodeproj/project.pbxproj"]
+    |> Enum.flat_map(&Path.wildcard/1)
+    |> Enum.each(&update_file(&1, fn text -> Ios.raise_deployment_target(text) end))
   end
 
   defp base_conf, do: read_json("src-tauri/tauri.conf.json")

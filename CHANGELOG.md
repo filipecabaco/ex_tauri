@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-27
+
+### Fixed
+
+- `mix ex_tauri.ios init` pins the iOS minimum to 15.0 in `tauri.ios.conf.json`.
+  Tauri CLIs before 2.12 default it to 14.0, which Xcode 27 refuses to build
+  for, so `mix ex_tauri.ios run` failed for apps with an older CLI installed.
+  An Xcode project already generated with 14.0 is raised in place on the next
+  `init`, `build` or `run`; a higher minimum an app set itself is kept.
+
 ## [0.5.0] - 2026-10-27
 
 ### Added
@@ -289,7 +299,8 @@ throttled, and leave nothing behind to say why. Regenerate `src-tauri/src/main.r
 
 Initial release.
 
-[Unreleased]: https://github.com/filipecabaco/ex_tauri/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/filipecabaco/ex_tauri/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.1
 [0.5.0]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.0
 [0.4.2]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.4.2
 [0.4.1]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.4.1

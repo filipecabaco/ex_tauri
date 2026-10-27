@@ -17,6 +17,8 @@ defmodule ExTauri.Ios do
   # Where `mix ex_tauri.ios build` puts the backend, and where the iOS bundle
   # takes it from (relative to src-tauri, as Tauri resolves resources).
   @backend "burrito_out/ios/backend"
+  # The oldest iOS that current Xcode builds for.
+  @ios_minimum "15.0"
 
   @desktop_only ~s{[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]}
 
@@ -124,7 +126,11 @@ defmodule ExTauri.Ios do
       "build" => %{"frontendDist" => "mobile"},
       "bundle" => %{
         "externalBin" => [],
-        "resources" => %{"../#{@backend}" => "ex_tauri/backend"}
+        "resources" => %{"../#{@backend}" => "ex_tauri/backend"},
+        # The Xcode project's IPHONEOS_DEPLOYMENT_TARGET. Tauri CLIs before 2.12
+        # default it to 14.0, which Xcode 27 refuses to build for; pinned so the
+        # project builds whichever CLI an app has installed.
+        "iOS" => %{"minimumSystemVersion" => @ios_minimum}
       }
     }
 
@@ -138,6 +144,33 @@ defmodule ExTauri.Ios do
       _ ->
         conf
     end
+  end
+
+  @doc """
+  Raises the iOS minimum in a generated Xcode project (`project.yml` or
+  `project.pbxproj`) to the one `ios_conf/1` pins.
+
+  `cargo tauri ios init` writes the project once and leaves it alone after, so a
+  project made by a CLI that defaulted to 14.0 keeps it, whatever
+  `tauri.ios.conf.json` says now, and Xcode 27 will not build it. Only versions
+  below the minimum change; anything an app raised itself is left as it is.
+  """
+  def raise_deployment_target(text) do
+    Regex.replace(
+      ~r/(IPHONEOS_DEPLOYMENT_TARGET = |deploymentTarget:\n\s+iOS: )(\d+(?:\.\d+)*)/,
+      text,
+      fn whole, prefix, version ->
+        if Version.compare(semver(version), semver(@ios_minimum)) == :lt,
+          do: prefix <> @ios_minimum,
+          else: whole
+      end
+    )
+  end
+
+  defp semver(version) do
+    parts = version |> String.split(".") |> Enum.map(&String.to_integer/1)
+    [major, minor, patch] = Enum.take(parts ++ [0, 0, 0], 3)
+    Version.parse!("#{major}.#{minor}.#{patch}")
   end
 
   @doc "The identifier the iOS app is installed under."

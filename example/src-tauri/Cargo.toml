@@ -1,6 +1,6 @@
 [package]
 name = "example_desktop"
-version = "0.4.2"
+version = "0.5.0"
 default-run = "example_desktop"
 edition = "2021"
 build = "src/build.rs"

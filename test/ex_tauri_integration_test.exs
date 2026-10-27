@@ -148,6 +148,13 @@ defmodule ExTauriIntegrationTest do
       assert src =~ ~s|cfg!(target_abi = "sim")|
       assert src =~ ~s|.join("ex_tauri/backend")|
 
+      # Renamed into place, never copied over: a relaunch starts while the last
+      # backend still runs from that file, and one started from a binary
+      # rewritten under it never comes up.
+      assert src =~ "std::fs::copy(&resource, &staged)"
+      assert src =~ "std::fs::rename(&staged, &exe)"
+      refute src =~ "std::fs::copy(&resource, &exe)"
+
       # Loopback only, stdin as the heartbeat, the container as the home.
       assert src =~ ~s|"--listen-host",\n                "127.0.0.1"|
       assert src =~ ~s|.env("EX_TAURI_HEARTBEAT_STDIN", "1")|

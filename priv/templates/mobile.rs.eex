@@ -101,6 +101,11 @@ mod mobile {
 
     // Bundled resources lose the executable bit, so the backend runs as a copy in
     // the app's own temporary directory.
+    //
+    // The copy is written beside it and renamed into place, never written over
+    // it: a relaunch starts while the last backend is still shutting down from
+    // that file, and a backend started from a binary rewritten under a running
+    // one never comes up. The rename leaves the old process its own file.
     fn backend_executable(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
         let resource = app
             .path()
@@ -114,12 +119,17 @@ mod mobile {
             .map_err(|e| format!("no temp dir: {e}"))?
             .join("ex_tauri_backend");
 
-        std::fs::copy(&resource, &exe)
+        let staged = exe.with_extension(format!("{}.tmp", std::process::id()));
+
+        std::fs::copy(&resource, &staged)
             .map_err(|e| format!("the bundled backend is missing ({}: {e})", resource.display()))?;
 
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))
+        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755))
             .map_err(|e| format!("could not make the backend executable: {e}"))?;
+
+        std::fs::rename(&staged, &exe)
+            .map_err(|e| format!("could not put the backend in place: {e}"))?;
 
         Ok(exe)
     }

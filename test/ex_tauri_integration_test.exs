@@ -169,6 +169,27 @@ defmodule ExTauriIntegrationTest do
       # `mix ex_tauri.ios dev` points it at the Mac's dev server instead.
       assert src =~ "EX_TAURI_DEV_URL"
     end
+
+    test "the iOS shell restarts a backend that dies under the open window" do
+      src = Helpers.mobile_src("localhost")
+
+      # Watched from the moment it starts; restarted on the same port, a few
+      # times with backoff, with the secret the window's cookies were signed with.
+      assert src =~ "child.wait()"
+      assert src =~ "fn recover_backend("
+      assert src =~ "const MAX_RESTARTS: u32 = 3;"
+      assert src =~ "STABLE_UPTIME"
+      assert src =~ "static SECRET_KEY_BASE: OnceLock<String>"
+      assert src =~ "start_backend(app, port)"
+
+      # A wait gives up once the backend it waits on is gone.
+      assert src =~ ~s|"the backend exited while starting"|
+
+      # What the window shows meanwhile is a page sized for a phone.
+      assert src =~ "Page::Restarting"
+      assert src =~ "Page::Stopped"
+      assert src =~ "viewport-fit=cover"
+    end
   end
 
   describe "main.rs generation" do

@@ -117,6 +117,21 @@ end
 - **No orphan sweep.** `ExTauri.Sidecar.Orphan` needs `ps`; it degrades to
   "cannot tell". The stdin heartbeat is what stops the backend.
 
+### Sleep, suspension, and crashes
+
+| What happens | What the app does |
+|--------------|-------------------|
+| The app goes to the background, or the device locks | Nothing to recover: the backend keeps running beside the simulator, and stdin, not a timer, decides when it stops |
+| iOS reclaims the suspended app's web content | WebKit reloads the page from the backend, which is still up |
+| iOS ends the app | The backend's stdin closes and it stops; opening the app starts a new one |
+| The backend dies while the app is open | The shell shows a "Restarting" page and starts it again on the same port, up to three times with backoff, with the same session secret |
+
+In the last three cases the page is loaded afresh, so whatever lived only in
+the browser is gone: the open document, the view, unsaved edits. Browser
+storage cannot carry them, because the backend's port, and with it the page's
+origin, changes on every launch. Keep that state with the backend instead,
+under `ExTauri.Paths.config_dir/0`, and hand it back when the page loads.
+
 ## Designing for iPhone and iPad
 
 The window is a WKWebView, so this is responsive web design with a few

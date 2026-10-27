@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `mix ex_tauri.ios dev` points the simulator at your dev server instead, live
   reload included. A device forbids starting a process and ampoule's
   executable memory, so this is simulator-only; see `guides/ios.md`.
+  As on the desktop, a backend that dies under the open app is restarted on
+  the same port (three times, with backoff) while the window says so; the app
+  being suspended, locked or ended by iOS needs no help, since the backend's
+  stdin, not a timer, decides when it stops.
 - **The ampoule packager.** `config :ex_tauri, :packager, :ampoule` makes
   `mix ex_tauri.build` pack the release with
   [ampoule](https://github.com/filipecabaco/ampoule) instead of wrapping it with

@@ -8,16 +8,29 @@
 #[cfg(mobile)]
 mod mobile {
     use std::fmt::Write;
-    use std::process::{Child, Command, Stdio};
-    use std::sync::Mutex;
+    use std::process::{ChildStdin, Command, Stdio};
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    use std::sync::{Arc, Mutex, OnceLock};
     use std::time::{Duration, Instant};
     use tauri::Manager;
 
     // Held for as long as the app runs: the backend's stdin is the heartbeat.
     // ExTauri.ShutdownManager stops it on EOF, which the kernel delivers however
     // this process ends — a Unix socket path in the app container would be longer
-    // than macOS allows.
-    struct Backend(Mutex<Option<Child>>);
+    // than macOS allows. The process itself belongs to the thread waiting on it.
+    struct Backend(Mutex<Option<ChildStdin>>);
+
+    // One secret for the life of the app, so a restarted backend still accepts the
+    // session cookies the window already holds.
+    static SECRET_KEY_BASE: OnceLock<String> = OnceLock::new();
+
+    // As on the desktop: a backend that dies under the open window is restarted on
+    // the same port, a few times, before the window says it has stopped.
+    static RESTARTS: AtomicU32 = AtomicU32::new(0);
+    const MAX_RESTARTS: u32 = 3;
+    // A backend that stayed up this long before dying gets a fresh set of restarts.
+    const STABLE_UPTIME: Duration = Duration::from_secs(60);
+    const STARTUP_DEADLINE: Duration = Duration::from_secs(60);
 
     pub fn run() {
         tauri::Builder::default()
@@ -29,7 +42,7 @@ mod mobile {
                 std::thread::spawn(move || {
                     if let Err(error) = boot(&handle) {
                         eprintln!("[ex_tauri] {error}");
-                        show_error(&handle, &error);
+                        show_page(&handle, Page::StartFailed, &error);
                     }
                 });
                 Ok(())
@@ -44,7 +57,8 @@ mod mobile {
         // there, live reload included, and no backend is started here.
         if let Ok(url) = std::env::var("EX_TAURI_DEV_URL") {
             let port = url.rsplit(':').next().and_then(|p| p.trim_end_matches('/').parse().ok());
-            wait_for(port.ok_or(format!("EX_TAURI_DEV_URL has no port: {url}"))?)?;
+            let port = port.ok_or(format!("EX_TAURI_DEV_URL has no port: {url}"))?;
+            wait_for(port, &AtomicBool::new(false))?;
             return navigate(app, &url);
         }
 
@@ -59,6 +73,13 @@ mod mobile {
             .map(|addr| addr.port())
             .map_err(|error| format!("no free loopback port: {error}"))?;
 
+        start_backend(app, port)
+    }
+
+    // Starts the backend on `port`, waits for it to answer and points the window
+    // at it. Its exit is watched from then on: one that dies before it answered
+    // is this call's error, one that dies after is restarted.
+    fn start_backend(app: &tauri::AppHandle, port: u16) -> Result<(), String> {
         let backend = backend_executable(app)?;
 
         // The app's sandbox container. ampoule shows the backend only what is
@@ -80,23 +101,85 @@ mod mobile {
                 "start",
             ])
             .env("PORT", port.to_string())
-            .env("SECRET_KEY_BASE", secret_key_base())
+            .env("SECRET_KEY_BASE", SECRET_KEY_BASE.get_or_init(secret_key_base))
             .env("EX_TAURI_HOME", &home)
             .env("EX_TAURI_HOST_OS", "ios")
             .env("EX_TAURI_HEARTBEAT_STDIN", "1")<%= for {k, v} <- sidecar_env do %>
             .env("<%= k %>", "<%= v %>")<% end %>
             .stdin(Stdio::piped());
 
-        let child = command
+        let mut child = command
             .spawn()
             .map_err(|error| format!("the backend could not be started ({error})"))?;
-        println!("[ex_tauri] backend started (pid {}, port {port})", child.id());
-        *app.state::<Backend>().0.lock().unwrap() = Some(child);
+        let pid = child.id();
+        println!("[ex_tauri] backend started (pid {pid}, port {port})");
+        *app.state::<Backend>().0.lock().unwrap() = child.stdin.take();
 
-        wait_for(port)?;
+        let exited = Arc::new(AtomicBool::new(false));
+        let ready = Arc::new(AtomicBool::new(false));
+        let started = Instant::now();
+
+        {
+            let (app, exited, ready) = (app.clone(), exited.clone(), ready.clone());
+            std::thread::spawn(move || {
+                let exit = match child.wait() {
+                    Ok(status) => format!("the backend stopped ({status})"),
+                    Err(error) => format!("the backend was lost ({error})"),
+                };
+                exited.store(true, Ordering::SeqCst);
+                eprintln!("[ex_tauri] {exit} (pid {pid})");
+
+                if ready.load(Ordering::SeqCst) {
+                    recover_backend(&app, port, exit, started.elapsed());
+                }
+            });
+        }
+
+        wait_for(port, &exited)?;
+        // Answering is the line: from here a death is the window's to recover from.
+        ready.store(true, Ordering::SeqCst);
         // The configured host, as on the desktop: PHX_HOST is set from it, and
         // Phoenix refuses a LiveView socket whose origin names another host.
         navigate(app, &format!("<%= scheme %>://<%= host %>:{port}/"))
+    }
+
+    // Restarts a backend that died under the open window, on the same port so the
+    // app's URL stays good: up to MAX_RESTARTS times with backoff, then a page
+    // that says it stopped instead of a window pointed at a dead port.
+    fn recover_backend(app: &tauri::AppHandle, port: u16, exit: String, uptime: Duration) {
+        if uptime >= STABLE_UPTIME {
+            RESTARTS.store(0, Ordering::SeqCst);
+        }
+
+        let mut last = exit;
+
+        loop {
+            let attempt = RESTARTS.fetch_add(1, Ordering::SeqCst) + 1;
+
+            if attempt > MAX_RESTARTS {
+                eprintln!("[ex_tauri] giving up after {MAX_RESTARTS} restarts");
+                show_page(
+                    app,
+                    Page::Stopped,
+                    &format!("{last}, and it stopped again after each of {MAX_RESTARTS} restarts."),
+                );
+                return;
+            }
+
+            show_page(app, Page::Restarting, &format!("{last}. Restart {attempt} of {MAX_RESTARTS}."));
+            std::thread::sleep(Duration::from_secs(1 << (attempt - 1)));
+
+            match start_backend(app, port) {
+                Ok(()) => {
+                    println!("[ex_tauri] backend restarted (attempt {attempt})");
+                    return;
+                }
+                Err(reason) => {
+                    eprintln!("[ex_tauri] restart {attempt} failed: {reason}");
+                    last = reason;
+                }
+            }
+        }
     }
 
     // Bundled resources lose the executable bit, so the backend runs as a copy in
@@ -134,15 +217,20 @@ mod mobile {
         Ok(exe)
     }
 
-    fn wait_for(port: u16) -> Result<(), String> {
-        let deadline = Instant::now() + Duration::from_secs(60);
+    // Gives up the moment the backend it is waiting on has exited, rather than at
+    // the deadline.
+    fn wait_for(port: u16, exited: &AtomicBool) -> Result<(), String> {
+        let deadline = Instant::now() + STARTUP_DEADLINE;
         while Instant::now() < deadline {
             if std::net::TcpStream::connect(("<%= host %>", port)).is_ok() {
                 return Ok(());
             }
+            if exited.load(Ordering::SeqCst) {
+                return Err("the backend exited while starting".to_string());
+            }
             std::thread::sleep(Duration::from_millis(100));
         }
-        Err(format!("nothing answered on <%= host %>:{port} within 60s"))
+        Err(format!("nothing answered on <%= host %>:{port} within {}s", STARTUP_DEADLINE.as_secs()))
     }
 
     fn navigate(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
@@ -151,18 +239,90 @@ mod mobile {
         window.navigate(url).map_err(|e| e.to_string())
     }
 
-    fn show_error(app: &tauri::AppHandle, message: &str) {
+    enum Page {
+        StartFailed,
+        Restarting,
+        Stopped,
+    }
+
+    // Replaces the window's content when there is no backend to show: a data:
+    // page, because the backend is the thing missing. Sized for a phone, and kept
+    // clear of the notch and the home indicator.
+    fn show_page(app: &tauri::AppHandle, page: Page, detail: &str) {
+        let name = app.package_info().name.clone();
+        let (title, lead) = match page {
+            Page::StartFailed => (
+                format!("{name} could not start"),
+                "The backend never came up, so there is nothing to show. Close the app and open it again.",
+            ),
+            Page::Restarting => (
+                "Restarting".to_string(),
+                "The backend stopped unexpectedly and is being restarted. This page will be replaced as soon as it is back.",
+            ),
+            Page::Stopped => (
+                format!("{name} stopped"),
+                "The backend stopped unexpectedly and could not be restarted. Close the app and open it again.",
+            ),
+        };
+
+        // Details are written mid-sentence ("the backend stopped ..."); here one
+        // stands on its own.
+        let mut chars = detail.chars();
+        let detail = match chars.next() {
+            Some(first) => first.to_uppercase().chain(chars).collect::<String>(),
+            None => String::new(),
+        };
+
+        let html = format!(
+            concat!(
+                "<!doctype html><meta charset=\"utf-8\">",
+                "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">",
+                "<title>{title}</title>",
+                "<style>",
+                ":root {{ color-scheme: light dark; }}",
+                "html, body {{ margin: 0; height: 100%; }}",
+                "body {{ display: flex; align-items: center; justify-content: center; ",
+                "padding: env(safe-area-inset-top) env(safe-area-inset-right) ",
+                "env(safe-area-inset-bottom) env(safe-area-inset-left); box-sizing: border-box; ",
+                "font: 17px/1.45 -apple-system, system-ui, sans-serif; ",
+                "background: Canvas; color: CanvasText; }}",
+                ".box {{ max-width: 34rem; padding: 1.5rem; }}",
+                "h1 {{ font-size: 1.25rem; margin: 0 0 0.75rem; }}",
+                "p {{ margin: 0 0 0.75rem; opacity: 0.85; }}",
+                "</style>",
+                "<div class=\"box\"><h1>{title}</h1><p>{lead}</p><p>{detail}</p></div>"
+            ),
+            title = html_escape(&title),
+            lead = html_escape(lead),
+            detail = html_escape(&detail),
+        );
+
         if let Some(window) = app.get_webview_window("main") {
-            let text = serde_json::to_string(message).unwrap_or_default();
-            let _ = window.eval(&format!(
-                "document.body.innerHTML = '<p style=\"font:16px -apple-system,sans-serif;padding:2rem\"></p>';\
-                 document.body.firstChild.textContent = {text};"
-            ));
+            if let Ok(url) = data_url(&html).parse() {
+                let _ = window.navigate(url);
+            }
         }
     }
 
-    // Signs session cookies for this launch only: sessions reset between
-    // launches, which is fine for a local app.
+    fn html_escape(text: &str) -> String {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+    }
+
+    fn data_url(html: &str) -> String {
+        let mut url = String::from("data:text/html;charset=utf-8,");
+        for byte in html.bytes() {
+            if byte.is_ascii_alphanumeric() || b"-_.~".contains(&byte) {
+                url.push(byte as char);
+            } else {
+                let _ = write!(url, "%{byte:02X}");
+            }
+        }
+        url
+    }
+
     fn secret_key_base() -> String {
         let mut bytes = [0u8; 48];
         if let Ok(mut urandom) = std::fs::File::open("/dev/urandom") {

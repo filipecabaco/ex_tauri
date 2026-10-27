@@ -31,7 +31,8 @@ defmodule ExTauri.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib priv guides .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
+      files:
+        ~w(lib priv guides .formatter.exs mix.exs README.md LICENSE CHANGELOG.md usage-rules.md)
     ]
   end
 

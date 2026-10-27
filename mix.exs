@@ -1,7 +1,7 @@
 defmodule ExTauri.MixProject do
   use Mix.Project
 
-  @version "0.5.1"
+  @version "0.5.2"
   @source_url "https://github.com/filipecabaco/ex_tauri"
 
   def project do
@@ -9,9 +9,8 @@ defmodule ExTauri.MixProject do
       app: :ex_tauri,
       version: @version,
       elixir: "~> 1.17",
-      # Limited to OTP 27 due to Burrito pre-compiled ERTS availability
-      # OTP 28 doesn't have universal macOS binaries available yet
-      otp_release: "~> 27.0",
+      # No OTP pin here: Burrito builds need OTP 27 and ampoule (and iOS) OTP 28,
+      # which ExTauri checks at boot for the packager in use (lib/ex_tauri.ex).
       start_permanent: Mix.env() == :prod,
       description: "Build native desktop applications with Phoenix and Elixir, powered by Tauri",
       package: package(),
@@ -48,8 +47,11 @@ defmodule ExTauri.MixProject do
   defp deps do
     [
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:burrito, "~> 1.6"},
-      {:igniter, "~> 0.7"},
+      # Build tools, used only by the mix tasks and the Burrito release step:
+      # runtime: false keeps them, and everything they pull in (rewrite,
+      # sourceror, owl, req...), out of every app's packaged release.
+      {:burrito, "~> 1.6", runtime: false},
+      {:igniter, "~> 0.7", runtime: false},
       {:jason, "~> 1.4"}
     ]
   end

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-27
+
+### Fixed
+
+- `igniter` and `burrito` are build-time dependencies (`runtime: false`), so they
+  and everything they pull in (`rewrite`, `sourceror`, `owl`, ...) no longer ship
+  inside every app's release. They are only ever used by the mix tasks and the
+  Burrito release step, which still have them.
+
 ### Added
 
 - `usage-rules.md` ships with the package: a condensed reference for agents
@@ -305,7 +314,8 @@ throttled, and leave nothing behind to say why. Regenerate `src-tauri/src/main.r
 
 Initial release.
 
-[Unreleased]: https://github.com/filipecabaco/ex_tauri/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/filipecabaco/ex_tauri/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.2
 [0.5.1]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.1
 [0.5.0]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.0
 [0.4.2]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.4.2

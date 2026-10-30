@@ -334,6 +334,24 @@ defmodule ExTauri.ShutdownManagerTest do
     end
   end
 
+  describe "the :in_process transport" do
+    test "opens no listener and never stops, even when an orphan check would say so", ctx do
+      # The BEAM inside the iOS app's own process goes when the app does; a
+      # heartbeat or an orphan check has nothing to tell it.
+      pid =
+        start_manager(ctx,
+          transport: :in_process,
+          heartbeat_orphan_grace: 0,
+          orphan_check: fn -> true end
+        )
+
+      refute_receive :shutdown_triggered, @timeout * 5
+      assert Process.alive?(pid)
+      assert :sys.get_state(pid).listen_socket == nil
+      refute File.exists?(ctx.socket_path)
+    end
+  end
+
   describe "cleanup" do
     test "removes the socket file on terminate", ctx do
       start_manager(ctx)

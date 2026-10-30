@@ -21,12 +21,32 @@ defmodule ExTauri do
   @doc false
   def start(_, _) do
     validate_config()
+    load_bundled_cacerts()
 
     children = [
       {Task.Supervisor, name: ExTauri.TaskSupervisor}
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: ExTauri.Supervisor)
+  end
+
+  # Inside an iOS app (see Mix.Tasks.ExTauri.Ios) OTP cannot read the system's
+  # trusted roots: iOS lets no app list them, and macOS's way, running
+  # `security`, starts a process iOS forbids. Loading CAStore's bundle makes
+  # :public_key.cacerts_get/0 return it for the whole VM, so every client that
+  # asks for "the system CAs" (Req, Mint, :httpc, MQTT) verifies against it.
+  # ex_tauri starts before the app, so this is in place before its first request.
+  defp load_bundled_cacerts do
+    # An app without :ssl ships no :public_key, and needs no CA store either.
+    if System.get_env("EX_TAURI_IN_PROCESS") == "1" and Code.ensure_loaded?(:public_key) do
+      case :public_key.cacerts_load(String.to_charlist(CAStore.file_path())) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.error("[ExTauri] could not load CA certificates: #{inspect(reason)}")
+      end
+    end
   end
 
   defp validate_config do

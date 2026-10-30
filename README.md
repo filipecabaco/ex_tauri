@@ -18,10 +18,10 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 - **True Hot Reload** — `mix ex_tauri.dev` runs your Phoenix dev server inside the native window: code reloading and live reload just work
 - **Multi-Window** — Open and close secondary native windows from LiveView
 - **Single Binary Distribution** — Uses [Burrito](https://github.com/burrito-elixir/burrito) to bundle everything into one executable — or [ampoule](https://github.com/filipecabaco/ampoule), which runs the BEAM as WebAssembly on OTP 28 with nothing to unpack
-- **iPhone and iPad (simulator)** — `mix ex_tauri.ios` runs the same app in the iOS simulator, its backend packed by ampoule; see the [iOS guide](guides/ios.md)
+- **iPhone and iPad** — `mix ex_tauri.ios` runs the same app in the iOS simulator and on real devices, with the BEAM running inside the app; see the [iOS guide](guides/ios.md)
 - **Graceful Shutdown** — Heartbeat-based mechanism ensures clean shutdown on CMD+Q, crashes, or force-quit
 - **Automated Setup** — Uses [Igniter](https://hexdocs.pm/igniter) for safe, AST-aware project configuration
-- **Cross-Platform** — Build for macOS, Windows, and Linux; run in the iOS simulator
+- **Cross-Platform** — Build for macOS, Windows, and Linux; run on iPhone and iPad
 
 ## Prerequisites
 
@@ -200,19 +200,20 @@ directly sees ampoule's private `/tmp` instead — use `ExTauri.Paths`.
 ## iPhone and iPad
 
 ```bash
-mix ex_tauri.ios init    # once: prepare src-tauri for iOS
-mix ex_tauri.ios dev     # the simulator on your dev server, live reload
-mix ex_tauri.ios run     # the backend packed with ampoule, as it would ship
+mix ex_tauri.ios init      # once: prepare src-tauri for iOS
+mix ex_tauri.ios dev       # the simulator on your dev server, live reload
+mix ex_tauri.ios run       # the simulator, as it would ship
+mix ex_tauri.ios device    # an iPhone or iPad, as it would ship
 ```
 
-Tauri apps cannot ship a sidecar on iOS, so `init` writes an iOS shell to
-`src-tauri/src/lib.rs` that starts your release — packed by ampoule and bundled
-into the app — as a child process on loopback, and points the window at it. The
-desktop build is untouched. **This runs in the simulator only**: a device forbids
-starting a process and the executable memory ampoule's engine maps. Running the
-backend inside the app process is the path to devices.
+iOS lets an app start no other process, and a device maps no executable memory,
+so the backend runs inside the app: `init` writes an iOS shell
+(`src-tauri/src/lib.rs`) and a `build.rs` that links ERTS in, and `run`/`device`
+stage your release with `ampoule pack --target ios` (ampoule 0.1.9+, OTP 28).
+The app boots the release on a thread of its own and points its window at it.
+The desktop build is untouched.
 
-The [iOS guide](guides/ios.md) covers requirements, where files go
+The [iOS guide](guides/ios.md) covers requirements (signing for a device), where files go
 (`ExTauri.Paths.documents_dir/0`), and designing for iPhone and iPad with media
 queries and safe-area insets.
 
@@ -224,7 +225,7 @@ queries and safe-area insets.
 | `mix ex_tauri.add` | Add Tauri plugins (dialogs, filesystem, shortcuts, ...) |
 | `mix ex_tauri.dev` | Run in development mode with hot-reload |
 | `mix ex_tauri.build` | Build for production |
-| `mix ex_tauri.ios` | Run in the iOS simulator (`init`, `dev`, `run`, `build`) |
+| `mix ex_tauri.ios` | Run on iPhone and iPad, in the simulator or on a device (`init`, `dev`, `run`, `device`, `build`) |
 
 Run `mix help ex_tauri.<task>` for detailed options.
 

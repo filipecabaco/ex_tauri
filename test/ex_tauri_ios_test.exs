@@ -62,6 +62,97 @@ defmodule ExTauri.IosTest do
     end
   end
 
+  describe "build_rs/0 and build_rs_action/1" do
+    test "links the staged runtime into iOS builds only, and turns on the code that starts it" do
+      src = Ios.build_rs()
+
+      assert src =~ "tauri_build::build()"
+      assert src =~ ~s|if !target.contains("apple-ios") {\n    return;|
+      assert src =~ ~s|.join("../_build/ex_tauri_ios/liberlang.xcframework")|
+      # The simulator and devices each have their slice.
+      assert src =~ ~s|if target.ends_with("-sim") { "ios-arm64-simulator" } else { "ios-arm64" }|
+      assert src =~ ~s|println!("cargo:rustc-link-lib=static=erlang");|
+      assert src =~ ~s|println!("cargo:rustc-cfg=ex_tauri_in_process");|
+      # No runtime staged (`mix ex_tauri.ios dev`): links nothing, builds anyway.
+      assert src =~ ~s|if !framework.exists() {\n    return;|
+    end
+
+    test "writes when there is none, over Tauri's own, and over its own" do
+      assert :write = Ios.build_rs_action(nil)
+      assert :write = Ios.build_rs_action("fn main() {\n  tauri_build::build()\n}\n")
+      assert :write = Ios.build_rs_action(Ios.build_rs())
+    end
+
+    test "leaves a build.rs with code of its own alone" do
+      own = "fn main() {\n  println!(\"cargo:rustc-env=X=1\");\n  tauri_build::build()\n}\n"
+
+      assert {:refuse, message} = Ios.build_rs_action(own)
+      assert message =~ "--force"
+    end
+  end
+
+  describe "allow_build_script/1" do
+    test "turns off the script sandboxing that keeps Tauri's build phase from its options" do
+      pbx =
+        "ENABLE_USER_SCRIPT_SANDBOXING = YES;\nOTHER = YES;\nENABLE_USER_SCRIPT_SANDBOXING = NO;"
+
+      assert Ios.allow_build_script(pbx) ==
+               "ENABLE_USER_SCRIPT_SANDBOXING = NO;\nOTHER = YES;\nENABLE_USER_SCRIPT_SANDBOXING = NO;"
+    end
+  end
+
+  describe "pick_physical_device/2" do
+    # The shape of `xcrun devicectl list devices --json-output`, trimmed.
+    defp device(name, udid, opts) do
+      %{
+        "deviceProperties" => %{
+          "name" => name,
+          "developerModeStatus" => Keyword.get(opts, :dev, "enabled")
+        },
+        "hardwareProperties" => %{
+          "udid" => udid,
+          "reality" => Keyword.get(opts, :reality, "physical"),
+          "platform" => "iOS"
+        },
+        "connectionProperties" => %{
+          "pairingState" => "paired",
+          "tunnelState" => Keyword.get(opts, :tunnel, "disconnected")
+        }
+      }
+    end
+
+    defp devices(list), do: %{"result" => %{"devices" => list}}
+
+    defp phone, do: device("iPhone", "0001", [])
+    defp pad, do: device("iPad", "0002", tunnel: "connected")
+
+    defp sim,
+      do: device("iPad Pro 13-inch (M5)", "SIM-1", reality: "simulated", tunnel: "connected")
+
+    test "takes the one asked for, by name or UDID" do
+      assert {:ok, %{"hardwareProperties" => %{"udid" => "0001"}}} =
+               Ios.pick_physical_device(devices([phone(), pad()]), "iPhone")
+
+      pad = pad()
+      assert {:ok, ^pad} = Ios.pick_physical_device(devices([phone(), pad]), "0002")
+    end
+
+    test "otherwise the first one connected right now, never a simulator" do
+      {pad, phone} = {pad(), phone()}
+      assert {:ok, ^pad} = Ios.pick_physical_device(devices([sim(), phone, pad]), nil)
+      assert {:ok, ^phone} = Ios.pick_physical_device(devices([sim(), phone]), nil)
+    end
+
+    test "says what is paired, and that Developer Mode must be on" do
+      assert {:error, message} = Ios.pick_physical_device(devices([sim()]), nil)
+      assert message =~ "Paired: none"
+
+      off = device("iPhone", "0001", dev: "disabled")
+      assert {:error, message} = Ios.pick_physical_device(devices([off]), nil)
+      assert message =~ "Developer Mode"
+    end
+  end
+
   describe "mobile_cargo_toml/1" do
     test "adds the lib the iOS build links, named apart from the desktop binary" do
       toml = Ios.mobile_cargo_toml(@cargo_toml)
@@ -110,16 +201,18 @@ defmodule ExTauri.IosTest do
   end
 
   describe "ios_conf/1" do
-    test "bundles the backend as a resource instead of a sidecar" do
+    test "bundles the staged release as a resource instead of a sidecar" do
       conf = Ios.ios_conf(%{"identifier" => "app.markdn.desktop"})
 
       assert %{
                "build" => %{"frontendDist" => "mobile"},
                "bundle" => %{
                  "externalBin" => [],
-                 "resources" => %{"../burrito_out/ios/backend" => "ex_tauri/backend"}
+                 "resources" => %{"../_build/ex_tauri_ios/release/" => "ex_tauri/release/"}
                }
              } = conf
+
+      assert Ios.release_dir() == "_build/ex_tauri_ios/release"
 
       refute Map.has_key?(conf, "identifier")
       assert Ios.bundle_id(%{"identifier" => "app.markdn.desktop"}, conf) == "app.markdn.desktop"
@@ -141,6 +234,17 @@ defmodule ExTauri.IosTest do
 
       assert Ios.raise_deployment_target("IPHONEOS_DEPLOYMENT_TARGET = 16.4;") ==
                "IPHONEOS_DEPLOYMENT_TARGET = 16.4;"
+    end
+
+    test "keeps the signing team a device build needs" do
+      existing = %{"bundle" => %{"iOS" => %{"developmentTeam" => "ABCDE12345"}}}
+
+      assert %{
+               "bundle" => %{
+                 "iOS" => %{"developmentTeam" => "ABCDE12345", "minimumSystemVersion" => "15.0"}
+               }
+             } =
+               Ios.ios_conf(%{"identifier" => "app.markdn.desktop"}, existing)
     end
 
     test "gives iOS an identifier it accepts" do

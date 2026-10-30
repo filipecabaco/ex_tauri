@@ -4,7 +4,7 @@ defmodule ExampleDesktop.MixProject do
   def project do
     [
       app: :example_desktop,
-      version: "0.5.2",
+      version: "0.6.0",
       elixir: "~> 1.14",
       # Limited to OTP 27 due to Burrito pre-compiled ERTS availability
       # OTP 28 doesn't have universal macOS binaries available yet

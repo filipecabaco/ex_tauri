@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-30
+
 ### Added
 
 - iPhone and iPad: `mix ex_tauri.ios device` builds, signs, installs and
@@ -342,7 +344,8 @@ throttled, and leave nothing behind to say why. Regenerate `src-tauri/src/main.r
 
 Initial release.
 
-[Unreleased]: https://github.com/filipecabaco/ex_tauri/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/filipecabaco/ex_tauri/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.6.0
 [0.5.2]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.2
 [0.5.1]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.1
 [0.5.0]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.0

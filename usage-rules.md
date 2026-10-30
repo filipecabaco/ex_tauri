@@ -11,7 +11,7 @@ heartbeat + a duplex desktop channel.
 
 - Requires **Elixir ≥ 1.17** and **Rust** (rustup), on **OTP 27** for Burrito
   builds (its precompiled ERTS stops at 27) or **OTP 28** for the ampoule
-  packager and iOS. Add `{:ex_tauri, "~> 0.5"}`, then `mix deps.get` and
+  packager and iOS. Add `{:ex_tauri, "~> 0.6"}`, then `mix deps.get` and
   `mix ex_tauri.install`.
 - `mix ex_tauri.install` is Igniter-driven and idempotent: it sets
   `app_name`/`host`/`port`/`version` config, scaffolds `src-tauri/`, adds

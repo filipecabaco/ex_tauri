@@ -130,24 +130,29 @@ end
   port in the macro options instead — they are spliced into the generated
   `start/2`, so `System.get_env("PORT")` is still read at boot.
 
-## iPhone and iPad (simulator only)
+## iPhone and iPad
 
-- `mix ex_tauri.ios init` once, then `mix ex_tauri.ios run` (the backend packed
-  with ampoule, as it ships) or `mix ex_tauri.ios dev` (the simulator on your
-  dev server, live reload). Needs Xcode and `ampoule` on PATH, on OTP 28.
-- `init` writes the iOS shell to `src-tauri/src/lib.rs` (all `#[cfg(mobile)]`,
-  the desktop build is untouched), a `[lib]` in `Cargo.toml`,
+- `mix ex_tauri.ios init` once, then `mix ex_tauri.ios run` (the simulator, as
+  it ships), `mix ex_tauri.ios device` (an iPhone or iPad) or
+  `mix ex_tauri.ios dev` (the simulator on your dev server, live reload). Needs
+  Xcode, and for `run`/`device` ampoule 0.1.9+ with its iOS runtime, on OTP 28.
+- The BEAM runs inside the app (iOS starts no other process): `init` writes the
+  iOS shell to `src-tauri/src/lib.rs` (all `#[cfg(mobile)]`, the desktop build is
+  untouched), a `build.rs` that links ERTS in, a `[lib]` in `Cargo.toml`,
   `tauri.ios.conf.json`, and a loading page in `src-tauri/mobile/index.html`
-  that is yours to restyle (rerunning `init` keeps it). It refuses a `lib.rs`
-  with code of its own unless `--force`.
-- A real device forbids starting a process, so this runs in the simulator only.
+  that is yours to restyle. It refuses a `lib.rs` or `build.rs` with code of its
+  own unless `--force`.
+- `device` needs a signing team: an Apple ID in Xcode, and its team ID in
+  `tauri.ios.conf.json` (`bundle.iOS.developmentTeam`), kept across `init`.
+- No `System.cmd`/ports to programs, and no NIFs beyond OTP's (crypto, asn1).
+  TLS verifies against the bundled CA store ExTauri loads at boot
+  (`:public_key.cacerts_get/0` returns it); DNS uses Erlang's resolver.
 - Keep files under `ExTauri.Paths` — on iOS they resolve inside the app's
   container; `ExTauri.Paths.documents_dir/0` is the folder the Files app shows.
-  `System.user_home!/0` is a private `/tmp` deleted when the app stops.
-- The app reloads its page when iOS reclaims it or ends it, and after the shell
-  restarts a crashed backend. Browser storage does not survive a launch (the
-  origin's port changes), so keep state that must survive (open document,
-  unsaved edits) with the backend, under `ExTauri.Paths.config_dir/0`.
+- The app reloads its page when iOS reclaims it, and a new BEAM starts when the
+  app is opened again. Browser storage does not survive a launch (the origin's
+  port changes), so keep state that must survive (open document, unsaved edits)
+  with the backend, under `ExTauri.Paths.config_dir/0`.
 - Lay out for the phone and the tablet with CSS media queries and
   `env(safe-area-inset-*)`, with `viewport-fit=cover` in the viewport meta.
   `"__TAURI__" in window && navigator.maxTouchPoints > 0` is the shell on

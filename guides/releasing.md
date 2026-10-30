@@ -141,8 +141,9 @@ uploads the bundles to a GitHub release. Copy it to
   executable memory at launch. Signing with the hardened runtime likely needs
   the `com.apple.security.cs.allow-unsigned-executable-memory` entitlement on
   the sidecar; this has not been verified against a notarized build yet.
-- **iOS** builds run in the simulator only, and are not distributable — see
-  the [iOS guide](ios.md).
+- **iOS** builds run in the simulator and, development-signed, on your own
+  iPhone or iPad (`mix ex_tauri.ios device`); App Store and TestFlight
+  distribution is not covered yet — see the [iOS guide](ios.md).
 - Sessions are signed with a per-launch `SECRET_KEY_BASE` by default; set the
   env var yourself (e.g. store one in the app's data dir) if you need sessions
   to survive restarts.

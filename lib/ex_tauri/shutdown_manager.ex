@@ -139,17 +139,18 @@ defmodule ExTauri.ShutdownManager do
   `:tcp` on Windows). It can be forced with the `:heartbeat_transport` config
   key or the `:transport` start option, which is mainly useful for tests.
 
-  A third transport, `:stdin`, is what the iOS shell asks for with
-  `EX_TAURI_HEARTBEAT_STDIN=1` (see `Mix.Tasks.ExTauri.Ios`). No listener is
-  opened — a Unix socket path inside a simulator's app container is longer than
-  the 104 bytes macOS allows — and the shell holds this process's stdin open
-  instead: EOF on it means the app is gone, however it went, and stops the
-  backend. `ExTauri.Desktop` commands answer `{:error, :not_connected}` there.
+  A third transport, `:stdin`, is for a shell that starts the backend as a
+  child process where no socket fits, with `EX_TAURI_HEARTBEAT_STDIN=1` (the
+  iOS shell did, in the simulator, before it linked ERTS in). No listener is
+  opened — a Unix socket path inside an app container is longer than the 104
+  bytes macOS allows — and the shell holds this process's stdin open instead:
+  EOF on it means the app is gone, however it went, and stops the backend.
+  `ExTauri.Desktop` commands answer `{:error, :not_connected}` there.
 
-  A fourth, `:in_process`, is what the iOS shell asks for on a real device with
-  `EX_TAURI_IN_PROCESS=1`: the BEAM runs inside the app's own process (a device
-  forbids starting a child one), so it ends when the app does and nothing needs
-  watching. No listener is opened and the orphan check always answers no.
+  A fourth, `:in_process`, is what the iOS shell asks for with
+  `EX_TAURI_IN_PROCESS=1` (see `Mix.Tasks.ExTauri.Ios`): the BEAM runs inside
+  the app's own process (iOS starts no child one), so it ends when the app does
+  and nothing needs watching. No listener is opened and the orphan check always answers no.
   `ExTauri.Desktop` commands answer `{:error, :not_connected}` there too.
 
   ## The desktop channel

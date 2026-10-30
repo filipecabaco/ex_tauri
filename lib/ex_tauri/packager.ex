@@ -12,7 +12,8 @@ defmodule ExTauri.Packager do
     * `:ampoule` — packs the release with
       [ampoule](https://github.com/filipecabaco/ampoule), which runs the BEAM as
       WebAssembly inside one executable: nothing is unpacked on first launch and
-      the release runs on OTP 28. macOS and Linux, plus the iOS simulator (see
+      the release runs on OTP 28. macOS and Linux; for iPhone and iPad it stages
+      the release with ERTS to link into the app instead (`package_ios/1`, see
       `Mix.Tasks.ExTauri.Ios`). ampoule packs an ordinary release, so it builds
       with `BURRITO_SKIP=true`, the convention `mix ex_tauri.dev --sidecar
       release` already uses: a release whose `:steps` add `&Burrito.wrap/1`
@@ -94,6 +95,39 @@ defmodule ExTauri.Packager do
       {:error, message} ->
         Mix.raise(message)
     end
+  end
+
+  @doc """
+  Builds the release and stages it for the iOS app in `dir`: `release/` (what
+  the bundle carries), `liberlang.xcframework` (ERTS, which the generated
+  `build.rs` links in) and `runtime.json`, from `ampoule pack --target ios`.
+
+  The release must be built with ampoule's OTP, as for any ampoule pack, and may
+  carry no native code beyond OTP's own (crypto, asn1 are linked in).
+  """
+  @spec package_ios(String.t()) :: :ok
+  def package_ios(dir) do
+    release = release!()
+    out = Path.join(["_build", "prod", "ampoule"])
+    args = ["release", "--name", release, "--target", "ios", "--out", out]
+
+    run!(ampoule_path!(), args, [{"BURRITO_SKIP", "true"}], """
+    `ampoule pack --target ios` needs ampoule 0.1.9 or later (`ampoule version`)
+    and its iOS runtime: the ios/ directory from an ampoule release for macOS
+    next to the binary, or AMPOULE_IOS_RUNTIME. The release is built with
+    BURRITO_SKIP=true and must use ampoule's OTP; native code other than OTP's
+    own cannot load on iOS.
+    """)
+
+    packed = Path.join(out, "#{release}-ios")
+    File.rm_rf!(dir)
+    File.mkdir_p!(dir)
+
+    for name <- ~w(release liberlang.xcframework runtime.json) do
+      File.rename!(Path.join(packed, name), Path.join(dir, name))
+    end
+
+    :ok
   end
 
   @doc """

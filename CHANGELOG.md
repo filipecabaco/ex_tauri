@@ -9,11 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- iPhone and iPad: `mix ex_tauri.ios device` builds, signs, installs and
+  launches the app on a real device. The backend runs inside the app, which is
+  what iOS allows: `ampoule pack --target ios` (ampoule 0.1.9+) stages the
+  release and `liberlang.xcframework`, the `build.rs` `init` now writes links
+  ERTS in, and the shell boots the release with `erl_start` on a thread of its
+  own. `mix ex_tauri.ios run` uses the same build in the simulator.
+- Inside the iOS app, `ExTauri` loads `CAStore`'s bundle at boot, so
+  `:public_key.cacerts_get/0`, and with it Req, Mint and `:ssl`, verify TLS on
+  iOS, which lets no app read its trusted roots. `castore` is now a dependency.
 - `ExTauri.ShutdownManager` has an `:in_process` transport, chosen with
   `EX_TAURI_IN_PROCESS=1`: for a BEAM running inside the app's own process, as on a
   real iPhone or iPad, which forbids starting the backend as a child process. It
   opens no listener and never stops on a missing heartbeat or an orphan check, since
   the VM ends exactly when the app does.
+
+### Changed
+
+- The iOS shell no longer starts the backend as a child process, packed by
+  ampoule for the simulator, with a stdin heartbeat and restarts: it links ERTS
+  in. A backend that halts ends the app. `mix ex_tauri.ios run` needs ampoule
+  0.1.9+ with its iOS runtime; rerun `mix ex_tauri.ios init` to regenerate
+  `lib.rs` and write `build.rs`.
+- `init` keeps the signing team (`bundle.iOS.developmentTeam`) of an existing
+  `tauri.ios.conf.json`, and every iOS build turns off the Xcode user script
+  sandboxing that keeps Tauri's build phase from its options.
 
 ## [0.5.2] - 2026-10-27
 

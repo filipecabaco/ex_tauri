@@ -139,55 +139,52 @@ defmodule ExTauriIntegrationTest do
       assert src =~ ~s|mounts.join(","), "start".to_string()|
     end
 
-    test "the iOS shell runs the bundled backend in the simulator only" do
+    test "the iOS shell boots the bundled release with ERTS linked into the app" do
       src = Helpers.mobile_src("localhost")
 
       # Compiled into the desktop crate too, so everything is gated on mobile.
       assert src =~ "#[cfg(mobile)]\nmod mobile {"
       assert src =~ "#[tauri::mobile_entry_point]"
-      assert src =~ ~s|cfg!(target_abi = "sim")|
-      assert src =~ ~s|.join("ex_tauri/backend")|
 
-      # Renamed into place, never copied over: a relaunch starts while the last
-      # backend still runs from that file, and one started from a binary
-      # rewritten under it never comes up.
-      assert src =~ "std::fs::copy(&resource, &staged)"
-      assert src =~ "std::fs::rename(&staged, &exe)"
-      refute src =~ "std::fs::copy(&resource, &exe)"
+      # No child process (a device forbids it): erl_start on a thread of the
+      # app's, from the release the bundle carries, when build.rs linked ERTS in.
+      assert src =~ "#[cfg(ex_tauri_in_process)]\n    mod in_process {"
+      assert src =~ ~s|fn erl_start(argc: c_int, argv: *mut *mut c_char);|
+      assert src =~ ~s|.join("ex_tauri/release")|
+      assert src =~ ~s|.spawn(move \|\| unsafe { erl_start(argc, argv as *mut *mut c_char) })|
+      refute src =~ "Command::new"
+      refute src =~ "EX_TAURI_HEARTBEAT_STDIN"
 
-      # Loopback only, stdin as the heartbeat, the container as the home.
-      assert src =~ ~s|"--listen-host",\n                "127.0.0.1"|
-      assert src =~ ~s|.env("EX_TAURI_HEARTBEAT_STDIN", "1")|
-      assert src =~ ~s|.env("EX_TAURI_HOST_OS", "ios")|
-      assert src =~ ".stdin(Stdio::piped())"
+      # What the release's start script does: runtime config into a writable copy
+      # of sys.config, the RELEASE_* variables, the release's own boot script.
+      assert src =~ ~s|tmp.join("sys.runtime.config")|
+      assert src =~ ~s|("RELEASE_ROOT", path(&root))|
+      assert src =~ ~s|"-boot_var".into(),\n                "RELEASE_LIB".into(),|
+
+      # DNS without inet_gethost, the :in_process transport and CA store, the
+      # container as the home.
+      assert src =~ ~s|("ERL_INETRC", path(&inetrc))|
+      assert src =~ "{lookup, [file, dns]}."
+      assert src =~ ~s|("EX_TAURI_IN_PROCESS", "1".into())|
+      assert src =~ ~s|("EX_TAURI_HOST_OS", "ios".into())|
 
       # The configured host and :sidecar_env, as on the desktop: PHX_HOST comes
       # from it, and Phoenix refuses a socket whose origin names another host.
-      assert src =~ ~s|.env("PHX_HOST", "localhost")|
+      assert src =~ ~s|("PHX_HOST", "localhost".into())|
       assert src =~ ~s|"http://localhost:{port}/"|
 
-      # `mix ex_tauri.ios dev` points it at the Mac's dev server instead.
+      # `mix ex_tauri.ios dev` points it at the Mac's dev server instead, and a
+      # build with no runtime linked says how to get one.
       assert src =~ "EX_TAURI_DEV_URL"
+      assert src =~ "#[cfg(not(ex_tauri_in_process))]"
+      assert src =~ "this build has no Erlang runtime linked in"
     end
 
-    test "the iOS shell restarts a backend that dies under the open window" do
+    test "the iOS shell shows a page sized for a phone when the backend does not come up" do
       src = Helpers.mobile_src("localhost")
 
-      # Watched from the moment it starts; restarted on the same port, a few
-      # times with backoff, with the secret the window's cookies were signed with.
-      assert src =~ "child.wait()"
-      assert src =~ "fn recover_backend("
-      assert src =~ "const MAX_RESTARTS: u32 = 3;"
-      assert src =~ "STABLE_UPTIME"
-      assert src =~ "static SECRET_KEY_BASE: OnceLock<String>"
-      assert src =~ "start_backend(app, port)"
-
-      # A wait gives up once the backend it waits on is gone.
+      assert src =~ "fn show_start_failed("
       assert src =~ ~s|"the backend exited while starting"|
-
-      # What the window shows meanwhile is a page sized for a phone.
-      assert src =~ "Page::Restarting"
-      assert src =~ "Page::Stopped"
       assert src =~ "viewport-fit=cover"
     end
   end

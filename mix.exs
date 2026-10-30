@@ -52,7 +52,10 @@ defmodule ExTauri.MixProject do
       # sourceror, owl, req...), out of every app's packaged release.
       {:burrito, "~> 1.6", runtime: false},
       {:igniter, "~> 0.7", runtime: false},
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      # The trusted roots an app inside iOS verifies TLS against: OTP cannot read
+      # the system's there (see ExTauri.start/2).
+      {:castore, "~> 1.0"}
     ]
   end
 end

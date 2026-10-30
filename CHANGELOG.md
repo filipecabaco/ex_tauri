@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ExTauri.ShutdownManager` has an `:in_process` transport, chosen with
+  `EX_TAURI_IN_PROCESS=1`: for a BEAM running inside the app's own process, as on a
+  real iPhone or iPad, which forbids starting the backend as a child process. It
+  opens no listener and never stops on a missing heartbeat or an orphan check, since
+  the VM ends exactly when the app does.
+
 ## [0.5.2] - 2026-10-27
 
 ### Fixed

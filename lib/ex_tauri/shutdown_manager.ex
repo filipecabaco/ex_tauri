@@ -146,6 +146,12 @@ defmodule ExTauri.ShutdownManager do
   instead: EOF on it means the app is gone, however it went, and stops the
   backend. `ExTauri.Desktop` commands answer `{:error, :not_connected}` there.
 
+  A fourth, `:in_process`, is what the iOS shell asks for on a real device with
+  `EX_TAURI_IN_PROCESS=1`: the BEAM runs inside the app's own process (a device
+  forbids starting a child one), so it ends when the app does and nothing needs
+  watching. No listener is opened and the orphan check always answers no.
+  `ExTauri.Desktop` commands answer `{:error, :not_connected}` there too.
+
   ## The desktop channel
 
   Beyond liveness, the socket carries a newline-delimited JSON protocol in both
@@ -212,9 +218,14 @@ defmodule ExTauri.ShutdownManager do
 
     # Injectable so the suite can exercise the orphan path without reparenting a
     # real OS process. In production it only runs where the answer means
-    # something: a packaged build, or any build whose shell named itself.
+    # something: a packaged build, or any build whose shell named itself. A BEAM
+    # inside the app's own process cannot be orphaned: it goes when the app does.
     orphan_check =
-      opts[:orphan_check] || fn -> shell_known?() and ExTauri.Sidecar.Orphan.orphan?() end
+      cond do
+        transport == :in_process -> fn -> false end
+        opts[:orphan_check] -> opts[:orphan_check]
+        true -> fn -> shell_known?() and ExTauri.Sidecar.Orphan.orphan?() end
+      end
 
     # Asked before a heartbeat timeout stops anything. `true` means the window
     # provably still exists and the silence is throttling, not death.
@@ -496,6 +507,7 @@ defmodule ExTauri.ShutdownManager do
 
   defp default_transport do
     cond do
+      System.get_env("EX_TAURI_IN_PROCESS") == "1" -> :in_process
       System.get_env("EX_TAURI_HEARTBEAT_STDIN") == "1" -> :stdin
       match?({:win32, _}, :os.type()) -> :tcp
       true -> :unix
@@ -508,6 +520,7 @@ defmodule ExTauri.ShutdownManager do
   defp endpoint_from_env(:unix), do: System.get_env("EX_TAURI_HEARTBEAT_SOCKET")
   defp endpoint_from_env(:tcp), do: System.get_env("EX_TAURI_HEARTBEAT_PORT_FILE")
   defp endpoint_from_env(:stdin), do: nil
+  defp endpoint_from_env(:in_process), do: nil
 
   defp open_listener(:unix, socket_path, socket_name) do
     socket_path =
@@ -541,6 +554,7 @@ defmodule ExTauri.ShutdownManager do
   end
 
   defp open_listener(:stdin, _endpoint, _socket_name), do: {nil, "stdin", []}
+  defp open_listener(:in_process, _endpoint, _socket_name), do: {nil, "the app's own process", []}
 
   defp open_listener(:tcp, port_file, socket_name) do
     port_file = port_file || Path.join(System.tmp_dir!(), "tauri_heartbeat_#{socket_name}.port")

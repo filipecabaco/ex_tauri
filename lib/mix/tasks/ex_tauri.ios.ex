@@ -371,15 +371,22 @@ defmodule Mix.Tasks.ExTauri.Ios do
     scheme = Application.get_env(:ex_tauri, :scheme, "http")
     url = "#{scheme}://#{host}:#{port}"
 
+    # One token for the shell and the dev server (ExTauri.Token): the window opens
+    # with it, as from an app's own backend.
+    token = 32 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
+
     # Launched first: the shell waits for the URL, and the dev server below
     # holds the terminal until it is stopped.
-    launch(built, Keyword.put(opts, :console, false), [{"EX_TAURI_DEV_URL", url}])
+    launch(built, Keyword.put(opts, :console, false), [
+      {"EX_TAURI_DEV_URL", url},
+      {"EX_TAURI_TOKEN", token}
+    ])
 
     command = ExTauri.Sidecar.DevServer.command()
     Mix.shell().info("Starting `#{command}` for the simulator at #{url} (Ctrl-C to stop)")
 
     System.cmd("sh", ["-c", command],
-      env: [{"PORT", to_string(port)}],
+      env: [{"PORT", to_string(port)}, {"EX_TAURI_TOKEN", token}],
       into: IO.stream(:stdio, :line),
       stderr_to_stdout: true
     )

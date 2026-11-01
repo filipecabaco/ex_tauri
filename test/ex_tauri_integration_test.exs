@@ -184,7 +184,7 @@ defmodule ExTauriIntegrationTest do
       # The configured host and :sidecar_env, as on the desktop: PHX_HOST comes
       # from it, and Phoenix refuses a socket whose origin names another host.
       assert src =~ ~s|("PHX_HOST", "localhost".into())|
-      assert src =~ ~s|"http://localhost:{port}/"|
+      assert src =~ ~s|"http://localhost:{port}/?ex_tauri_token={token}"|
 
       # `mix ex_tauri.ios dev` points it at the Mac's dev server instead, and a
       # build with no runtime linked says how to get one.

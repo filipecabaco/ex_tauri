@@ -23,6 +23,11 @@ heartbeat + a duplex desktop channel.
   `mix ex_tauri.build`.
 - Config lives under `config :ex_tauri` — `app_name`, `host`, `port` are
   required; `app_name` also keys the heartbeat socket and all `ExTauri.Paths` dirs.
+- Guard the backend with `plug ExTauri.Token.Plug` (before the router;
+  `only: ["/api"]` to guard some paths): loopback is reachable by every program
+  on the machine. The shell opens the window with a per-launch token
+  (`EX_TAURI_TOKEN`) that the plug trades for a cookie. Without the shell the
+  backend logs the link to open; scripts send `Authorization: Bearer $EX_TAURI_TOKEN`.
 
 ## Calling desktop APIs from LiveView
 

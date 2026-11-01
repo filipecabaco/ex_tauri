@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ExTauri.Token` and `ExTauri.Token.Plug`: only the app's own window can reach
+  the backend. Loopback is open to every program on the machine, and to every
+  running app on an iPhone, and a native program sets whatever `Host` and
+  `Origin` it likes. The shell now makes a random token at launch (never written
+  to disk), hands it to the backend as `EX_TAURI_TOKEN`, and opens the window at
+  `/?ex_tauri_token=…`. `plug ExTauri.Token.Plug` (before the router; `only:`
+  limits it to some paths) trades that for an `HttpOnly`, `SameSite=Strict`
+  cookie named for the port, redirects without the token, and answers 401 to
+  any guarded request without the cookie or `Authorization: Bearer <token>`. A
+  backend started without the shell makes its own token and logs the link to
+  open. `mix ex_tauri.ios dev` shares one token between the simulator and the
+  dev server. Plug is an optional dependency. Regenerate the shell
+  (`mix ex_tauri.install`, `mix ex_tauri.ios init`) to pick it up; until the
+  plug is added the token is ignored.
+
 - An ampoule sidecar on macOS keeps ampoule's compiled engine in the per-user
   cache directory outside the home (`/var/folders/…/C/ampoule`), so launches
   after the first map it instead of decompressing it into memory private to the

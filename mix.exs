@@ -62,6 +62,9 @@ defmodule ExTauri.MixProject do
       {:burrito, "~> 1.6", runtime: false},
       {:igniter, "~> 0.7", runtime: false},
       {:jason, "~> 1.4"},
+      # ExTauri.Token.Plug, for apps that serve their window with Plug (Phoenix,
+      # Francis, Bandit): compiled only when the app has Plug.
+      {:plug, "~> 1.14", optional: true},
       # The trusted roots an app inside iOS verifies TLS against: OTP cannot read
       # the system's there (see ExTauri.start/2).
       {:castore, "~> 1.0"}

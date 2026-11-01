@@ -409,6 +409,26 @@ collisions with other software. The Rust shell passes `PORT`, `PHX_SERVER`,
 `runtime.exs` picks these up) and navigates the window once the server is up.
 In dev, `EX_TAURI_PORT` pins the configured port so live reload URLs match.
 
+### Only your window reaches the backend
+
+The backend listens on loopback, which every program on the machine (and every
+running app on an iPhone) can reach too. The shell makes a random token at
+launch, passes it to the backend as `EX_TAURI_TOKEN`, and opens the window at
+`/?ex_tauri_token=…`. Add the plug before your router (in a Phoenix endpoint,
+before `plug MyAppWeb.Router`):
+
+```elixir
+plug ExTauri.Token.Plug                  # every path
+plug ExTauri.Token.Plug, only: ["/api"]  # or only some
+```
+
+It trades the token for an `HttpOnly`, `SameSite=Strict` cookie, redirects to
+the same URL without it, and answers 401 to guarded requests that carry neither
+the cookie nor `Authorization: Bearer <token>` (for scripts: set
+`EX_TAURI_TOKEN` yourself). LiveView's socket carries the cookie like any other
+request. A backend started without the shell (`mix phx.server`) makes its own
+token and logs the link to open.
+
 ### Heartbeat-Based Shutdown
 
 ExTauri uses a local socket heartbeat to detect when the Tauri frontend exits:

@@ -18,6 +18,11 @@ mod mobile {
     #[cfg_attr(not(ex_tauri_in_process), allow(dead_code))]
     static SECRET_KEY_BASE: OnceLock<String> = OnceLock::new();
 
+    // What only the window and the backend know (ExTauri.Token): every running
+    // app on the device can reach the backend's loopback port.
+    #[cfg_attr(not(ex_tauri_in_process), allow(dead_code))]
+    static TOKEN: OnceLock<String> = OnceLock::new();
+
     const STARTUP_DEADLINE: Duration = Duration::from_secs(60);
 
     pub fn run() {
@@ -50,6 +55,11 @@ mod mobile {
             let port = url.rsplit(':').next().and_then(|p| p.trim_end_matches('/').parse().ok());
             let port = port.ok_or(format!("EX_TAURI_DEV_URL has no port: {url}"))?;
             wait_for(port, &AtomicBool::new(false))?;
+            // The dev server's token, which `mix ex_tauri.ios dev` launches with.
+            let url = match std::env::var("EX_TAURI_TOKEN") {
+                Ok(token) => format!("{}/?ex_tauri_token={token}", url.trim_end_matches('/')),
+                Err(_) => url,
+            };
             return navigate(app, &url);
         }
 
@@ -142,7 +152,8 @@ mod mobile {
                 ("BINDIR", path(&root.join("bin"))),
                 ("ERL_INETRC", path(&inetrc)),
                 ("PORT", port.to_string()),
-                ("SECRET_KEY_BASE", super::SECRET_KEY_BASE.get_or_init(super::secret_key_base).clone()),
+                ("SECRET_KEY_BASE", super::SECRET_KEY_BASE.get_or_init(super::random_secret).clone()),
+                ("EX_TAURI_TOKEN", super::TOKEN.get_or_init(super::random_secret).clone()),
                 ("EX_TAURI_HOME", path(&home)),
                 ("EX_TAURI_HOST_OS", "ios".into()),
                 // ExTauri.ShutdownManager's :in_process transport, and the bundled
@@ -216,7 +227,9 @@ mod mobile {
             super::wait_for(port, &AtomicBool::new(false))?;
             // The configured host, as on the desktop: PHX_HOST is set from it, and
             // Phoenix refuses a LiveView socket whose origin names another host.
-            super::navigate(app, &format!("<%= scheme %>://<%= host %>:{port}/"))
+            // With the token: ExTauri.Token.Plug trades it for a cookie and redirects.
+            let token = super::TOKEN.get_or_init(super::random_secret);
+            super::navigate(app, &format!("<%= scheme %>://<%= host %>:{port}/?ex_tauri_token={token}"))
         }
 
         // The release's name is its .rel file's, beside start.boot.
@@ -324,7 +337,7 @@ mod mobile {
     }
 
     #[cfg_attr(not(ex_tauri_in_process), allow(dead_code))]
-    fn secret_key_base() -> String {
+    fn random_secret() -> String {
         let mut bytes = [0u8; 48];
         if let Ok(mut urandom) = std::fs::File::open("/dev/urandom") {
             use std::io::Read;

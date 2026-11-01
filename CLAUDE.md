@@ -13,6 +13,7 @@ file orients agents working **on the library**. For using it in an app, the
 | Enable a Tauri plugin (`mix ex_tauri.add`) when an API no-ops | `ex-tauri-plugins` |
 | Install/configure in an app, sidecar, non-Phoenix, DB/migrations | `ex-tauri-setup` |
 | Build, sign, notarize, auto-update, CI | `ex-tauri-release` |
+| iPhone/iPad: `mix ex_tauri.ios`, native plugins, `ExTauri.Native`, distribution on a phone, device-only bugs | `ex-tauri-mobile` |
 | **Change the library itself** (bridge, new API, Rust template, shutdown, version bump) | `ex-tauri-internals` |
 
 `usage-rules.md` (repo root) is the condensed reference that ships with the Hex

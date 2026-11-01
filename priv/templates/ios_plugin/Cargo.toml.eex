@@ -1,0 +1,13 @@
+[package]
+name = "<%= @crate %>"
+version = "0.1.0"
+edition = "2021"
+publish = false
+# Tauri's plugin build links the Swift package in ios/ into the app.
+links = "<%= @crate %>"
+
+[dependencies]
+tauri = "2"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- An ampoule sidecar on macOS keeps ampoule's compiled engine in the per-user
+  cache directory outside the home (`/var/folders/…/C/ampoule`), so launches
+  after the first map it instead of decompressing it into memory private to the
+  backend. ampoule never uses a cache the app can write, and its default sits
+  under the home the shell mounts into the sidecar. The shell only moves that
+  default (`CACHE_DIRECTORY`): `native_cache` in `ampoule.toml` (`"off"` for
+  read-only or kiosk installs, or a directory) and `AMPOULE_NATIVE_CACHE` still
+  win. On Linux the backend loads the engine in memory, as before, and says so
+  in the log. See "Packaging with ampoule" in the README, which also covers
+  `AMPOULE_MODE=interactive`. Regenerate `src-tauri/src/main.rs` with
+  `mix ex_tauri.install` to pick it up. **Pending:** this needs the ampoule
+  release after 0.1.9, not yet published; with 0.1.9 the variable is ignored.
+
+## [0.7.0] - 2026-10-31
+
+### Added
+
+- Native plugins on iOS: `mix ex_tauri.ios plugin NAME` scaffolds a Tauri
+  plugin in `src-tauri/plugins/NAME` (a Rust crate and a Swift package), for
+  what only Swift can reach: Bluetooth, Multipeer Connectivity, HealthKit, the
+  camera. `mix ex_tauri.ios init` registers every plugin in `src-tauri/plugins/*`,
+  and every crate in `config :ex_tauri, :ios_plugins`, in the generated shell and
+  in an iOS-only table of `Cargo.toml`, so `lib.rs` never needs editing (and
+  stays regenerable).
+- `ExTauri.Native`: channels between Elixir and those plugins. Add it to your
+  supervision tree; `subscribe/1` and `send/2` exchange JSON with the plugin's
+  `ExTauriNative` (Swift, shipped in every scaffolded plugin and kept current by
+  `init`). It listens on loopback and only accepts a plugin holding the token it
+  writes, at every launch, inside the app's container. Off iOS it is `:ignore`d,
+  and so under `mix ex_tauri.ios dev`, whose BEAM runs on the Mac.
+- `ExTauri.Resume` brings listening sockets back after iOS suspended the app
+  and reclaimed them, which left the window on "connecting" and plugins unable
+  to reconnect until the app was quit. ex_tauri starts it (apps list nothing);
+  `ExTauri.Native` watches its own listener, and an app watches its HTTP
+  endpoint with `ExTauri.Resume.watch(:http, port, restart)` and reconnects
+  what it must with `ExTauri.Resume.on_resume/2`.
+- The iOS app's keyboard behaves like an app's: no previous / next / done bar
+  above it, a downward swipe puts it away, and the web view shrinks to the
+  space above it, so the text field being typed in stays in sight (the page
+  gets `<html data-keyboard="open">` and `--ex-tauri-keyboard-height`). This is
+  ex_tauri's own iOS plugin (`priv/ios_shell`), registered by
+  `mix ex_tauri.ios init` from the dependency;
+  `config :ex_tauri, :ios, form_accessory_bar: true`,
+  `dismiss_keyboard_on_swipe: false` or `keyboard_resize: false` turn each off.
+- Every page in the iOS app is app-like without the app doing anything: a
+  viewport that does not zoom and draws under the notch, and touch CSS (no
+  double-tap zoom, no tap flash, no text inflation), injected before the page's
+  own code (`config :ex_tauri, :ios, app_like_page: false` to opt out).
+- `mix ex_tauri.ios doctor` checks an app against the rules of an iOS build: a
+  plugin using a framework without its `Info.ios.plist` permission key (an error:
+  iOS ends the app on first use), processes, the home directory, native
+  dependencies, and plugins the app never starts `ExTauri.Native` for. `init`,
+  `run` and `device` run it; `run` and `device` stop on an error unless
+  `--skip-doctor`.
+- "Rules for a mobile app" and "Debugging on a device" in `guides/ios.md`: what
+  breaks on a real iPhone or iPad and how to avoid it, and how to read a
+  device's logs.
+
+### Fixed
+
+- Inside the iOS app, starting Erlang distribution (`Node.start/2`) no longer
+  fails with `eperm`: OTP tried to create `$HOME/.erlang.cookie` in the app
+  container's root, which iOS does not let an app write. `ExTauri` now leaves a
+  random cookie in the user config directory at boot, where OTP looks next.
+
 ## [0.6.0] - 2026-10-30
 
 ### Added
@@ -344,7 +411,8 @@ throttled, and leave nothing behind to say why. Regenerate `src-tauri/src/main.r
 
 Initial release.
 
-[Unreleased]: https://github.com/filipecabaco/ex_tauri/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/filipecabaco/ex_tauri/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.7.0
 [0.6.0]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.6.0
 [0.5.2]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.2
 [0.5.1]: https://github.com/filipecabaco/ex_tauri/releases/tag/v0.5.1

@@ -139,6 +139,19 @@ defmodule ExTauriIntegrationTest do
       assert src =~ ~s|mounts.join(","), "start".to_string()|
     end
 
+    test "points ampoule's engine cache outside the home it mounts into the sidecar" do
+      src = Helpers.main_src("localhost", "4000", "test_app", "App", "http", "test_app_desktop")
+
+      # ampoule refuses a cache the app can write, and its default sits under
+      # the mounted home. CACHE_DIRECTORY moves only that default, so a packed
+      # `native_cache` or AMPOULE_NATIVE_CACHE still wins, and one the
+      # environment already sets is kept.
+      assert src =~ ~s|env.insert("CACHE_DIRECTORY".to_string(), dir)|
+      assert src =~ ~s|std::env::var_os("CACHE_DIRECTORY").is_none()|
+      assert src =~ ~s|.arg("DARWIN_USER_CACHE_DIR")|
+      assert src =~ ~s|#[cfg(all(unix, not(target_os = "macos")))]\nfn engine_cache_root()|
+    end
+
     test "the iOS shell boots the bundled release with ERTS linked into the app" do
       src = Helpers.mobile_src("localhost")
 

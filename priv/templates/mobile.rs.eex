@@ -21,7 +21,11 @@ mod mobile {
     const STARTUP_DEADLINE: Duration = Duration::from_secs(60);
 
     pub fn run() {
-        tauri::Builder::default()
+        let builder = tauri::Builder::default();
+<%= for plugin <- plugins do %>        // <%= plugin.crate %> (`mix ex_tauri.ios init` registers every iOS plugin)
+        #[cfg(target_os = "ios")]
+        let builder = builder.plugin(<%= plugin.init %>);
+<% end %>        builder
             .setup(|app| {
                 let handle = app.handle().clone();
                 // Off the main thread: waiting for the backend here would stall

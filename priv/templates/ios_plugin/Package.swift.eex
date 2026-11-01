@@ -1,0 +1,19 @@
+// swift-tools-version:5.5
+// Scaffolded by `mix ex_tauri.ios plugin <%= @name %>`.
+
+import PackageDescription
+
+let package = Package(
+  name: "<%= @crate %>",
+  platforms: [.iOS(.v15)],
+  products: [
+    .library(name: "<%= @crate %>", type: .static, targets: ["<%= @crate %>"])
+  ],
+  dependencies: [
+    // Placed here by the plugin's build (tauri-plugin), from the tauri crate.
+    .package(name: "Tauri", path: "../.tauri/tauri-api")
+  ],
+  targets: [
+    .target(name: "<%= @crate %>", dependencies: [.byName(name: "Tauri")], path: "Sources")
+  ]
+)

@@ -11,7 +11,7 @@ heartbeat + a duplex desktop channel.
 
 - Requires **Elixir ≥ 1.17** and **Rust** (rustup), on **OTP 27** for Burrito
   builds (its precompiled ERTS stops at 27) or **OTP 28** for the ampoule
-  packager and iOS. Add `{:ex_tauri, "~> 0.6"}`, then `mix deps.get` and
+  packager and iOS. Add `{:ex_tauri, "~> 0.7"}`, then `mix deps.get` and
   `mix ex_tauri.install`.
 - `mix ex_tauri.install` is Igniter-driven and idempotent: it sets
   `app_name`/`host`/`port`/`version` config, scaffolds `src-tauri/`, adds
@@ -131,6 +131,27 @@ end
   `start/2`, so `System.get_env("PORT")` is still read at boot.
 
 ## iPhone and iPad
+
+- `mix ex_tauri.ios doctor` checks the mobile rules (missing permission keys are
+  errors that stop `run`/`device`). The shell already makes pages app-like and the
+  keyboard behave (`config :ex_tauri, :ios`); do not re-implement that in apps.
+- Rules (see `guides/ios.md`, "Rules for a mobile app"): write only under
+  `ExTauri.Paths` (a device's container root is read-only), keep UI state in the
+  backend, reconnect on resume (iOS freezes the BEAM in the background), declare
+  permissions in `src-tauri/Info.ios.plist`, unicast only on the LAN, no page zoom,
+  and Erlang distribution only at runtime, opt-in, between trusted nodes.
+- Native (Swift) code: `mix ex_tauri.ios plugin NAME` scaffolds a plugin in
+  `src-tauri/plugins/NAME`; `init` registers every one there (and
+  `config :ex_tauri, :ios_plugins` crates) in the shell, so never edit the
+  generated `lib.rs`. Talk to it with `ExTauri.Native` (in the supervision tree;
+  `subscribe/1`, `send/2`, JSON both ways); its Swift side is `ExTauriNative`.
+  Run `init` first; plugins do not work under `dev` (the BEAM is on the Mac).
+- After a suspension iOS may have reclaimed listening sockets (the window stays
+  "connecting"). `ExTauri.Resume` restarts the ones it watches; ex_tauri starts
+  it, so never list it in children. Once the app's supervisor is up, call
+  `ExTauri.Resume.watch(:http, port, fn -> ExTauri.Resume.restart_child(MyApp.Supervisor, MyApp.Router) end)`
+  for the HTTP endpoint (and any other listener), and
+  `ExTauri.Resume.on_resume(name, fn suspended_ms -> ... end)` to reconnect.
 
 - `mix ex_tauri.ios init` once, then `mix ex_tauri.ios run` (the simulator, as
   it ships), `mix ex_tauri.ios device` (an iPhone or iPad) or

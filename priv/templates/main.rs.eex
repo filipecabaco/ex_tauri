@@ -503,7 +503,43 @@ fn ampoule_args(env: &mut std::collections::HashMap<String, String>) -> Vec<Stri
 
     env.insert("EX_TAURI_HOST_OS".to_string(), std::env::consts::OS.to_string());
 
+    // ampoule writes its compiled engine to a cache on the first launch and
+    // maps it from there afterwards, but never from a directory the app can
+    // write: its default, under the home mounted above, is turned down and the
+    // engine loaded in memory. CACHE_DIRECTORY is the first place its default
+    // (`auto`) looks, so pointing it outside the home moves only the default:
+    // `native_cache` in ampoule.toml, or AMPOULE_NATIVE_CACHE where the app is
+    // launched, still wins.
+    if std::env::var_os("CACHE_DIRECTORY").is_none() {
+        if let Some(dir) = engine_cache_root() {
+            env.insert("CACHE_DIRECTORY".to_string(), dir);
+        }
+    }
+
     vec!["--mount".to_string(), mounts.join(","), "start".to_string()]
+}
+
+// The per-user cache directory macOS keeps outside the home
+// (/var/folders/…/C), beside the temp dir rather than inside it: the heartbeat
+// socket's directory, mounted above, is the temp dir.
+#[cfg(target_os = "macos")]
+fn engine_cache_root() -> Option<String> {
+    let out = std::process::Command::new("/usr/bin/getconf")
+        .arg("DARWIN_USER_CACHE_DIR")
+        .output()
+        .ok()
+        .filter(|out| out.status.success())?;
+    let dir = String::from_utf8(out.stdout).ok()?;
+    let dir = dir.trim().trim_end_matches('/');
+    dir.starts_with('/').then(|| dir.to_string())
+}
+
+// Linux has no per-user cache directory outside the home: ampoule says in the
+// log that it loads the engine in memory. AMPOULE_NATIVE_CACHE (a directory
+// outside the home and /tmp) or `native_cache = "off"` settle it.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn engine_cache_root() -> Option<String> {
+    None
 }
 
 #[cfg(windows)]

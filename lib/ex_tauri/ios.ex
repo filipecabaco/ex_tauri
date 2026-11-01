@@ -23,6 +23,11 @@ defmodule ExTauri.Ios do
   @ios_minimum "15.0"
 
   @desktop_only ~s{[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]}
+  @ios_only ~s{[target.'cfg(target_os = "ios")'.dependencies]}
+  @ios_plugins_note "# iOS plugins, registered in the shell by `mix ex_tauri.ios init` (src-tauri/plugins/*, config :ex_tauri, :ios_plugins)."
+  @plugin_name ~r/\A[a-z][a-z0-9]*(-[a-z0-9]+)*\z/
+  # Taken by ex_tauri's own plugin (`tauri-plugin-ex-tauri`, priv/ios_shell).
+  @reserved_plugin_names ["ex-tauri"]
 
   @doc "Where the backend is staged, relative to the project root."
   def stage_dir, do: @stage
@@ -204,6 +209,184 @@ defmodule ExTauri.Ios do
   end
 
   @doc """
+  The Tauri plugins the iOS shell registers, as `%{crate, dep, init}`:
+
+    * ex_tauri's own (`priv/ios_shell`): the keyboard behaves like an app's, see
+      `shell_plugin_config/1`. It is used from the dependency, never copied;
+    * every crate in `src-tauri/plugins/*` with an `ios/` directory (what
+      `mix ex_tauri.ios plugin NAME` scaffolds), as a path dependency;
+    * every entry of `config :ex_tauri, :ios_plugins`: a crate name with a
+      version requirement (`{"tauri-plugin-haptics", "2"}`) or options
+      (`{"tauri-plugin-x", path: "../x"}`, `init: "tauri_plugin_x::init()"`).
+
+  `init` is the Rust expression that builds the plugin, `<crate>::init()` by
+  default, the convention of every Tauri plugin.
+  """
+  @spec ios_plugins(Path.t(), list()) :: [%{crate: String.t(), dep: String.t(), init: String.t()}]
+  def ios_plugins(
+        src_tauri \\ "src-tauri",
+        configured \\ Application.get_env(:ex_tauri, :ios_plugins, [])
+      ) do
+    local =
+      for dir <- src_tauri |> Path.join("plugins/*") |> Path.wildcard() |> Enum.sort(),
+          File.dir?(Path.join(dir, "ios")),
+          {:ok, toml} <- [File.read(Path.join(dir, "Cargo.toml"))],
+          [_, crate] <- [Regex.run(~r/^\[package\][^\[]*?^name\s*=\s*"([^"]+)"/ms, toml)] do
+        plugin(crate, path: Path.relative_to(dir, src_tauri))
+      end
+
+    configured =
+      for entry <- configured do
+        case entry do
+          {crate, version} when is_binary(version) -> plugin(crate, version: version)
+          {crate, opts} when is_list(opts) -> plugin(crate, opts)
+          crate when is_binary(crate) -> plugin(crate, version: "2")
+        end
+      end
+
+    shell =
+      plugin("tauri-plugin-ex-tauri",
+        path: Path.relative_to(shell_plugin(), Path.expand(src_tauri), force: true)
+      )
+
+    Enum.uniq_by([shell | local ++ configured], & &1.crate)
+  end
+
+  # ex_tauri's own iOS plugin, used from the dependency where it is. Looked up
+  # when called rather than compiled in, and past the priv symlink Mix leaves in
+  # _build/<env>, so the path in Cargo.toml is the same in every MIX_ENV.
+  defp shell_plugin do
+    priv = to_string(:code.priv_dir(:ex_tauri))
+
+    priv =
+      case :file.read_link(priv) do
+        {:ok, target} -> Path.expand(to_string(target), Path.dirname(priv))
+        {:error, _} -> priv
+      end
+
+    Path.join(priv, "ios_shell")
+  end
+
+  @doc """
+  The settings of ex_tauri's own iOS plugin, from `config :ex_tauri, :ios`:
+
+    * `:form_accessory_bar` (default `false`) — WKWebView's previous / next / done
+      bar above the keyboard, which an app rarely wants;
+    * `:dismiss_keyboard_on_swipe` (default `true`) — a downward swipe puts the
+      keyboard away, as in Messages;
+    * `:keyboard_resize` (default `true`) — while the keyboard is up, the web view
+      is only as tall as the space above it, and the page gets
+      `<html data-keyboard="open">` and `--ex-tauri-keyboard-height`;
+    * `:app_like_page` (default `true`) — every page gets a viewport that does not
+      zoom and draws under the notch, and touch CSS (no double-tap zoom, no tap
+      flash, no text inflation), before its own code runs.
+  """
+  @spec shell_plugin_config(keyword()) :: map()
+  def shell_plugin_config(ios \\ Application.get_env(:ex_tauri, :ios, [])) do
+    %{
+      "formAccessoryBar" => Keyword.get(ios, :form_accessory_bar, false),
+      "dismissKeyboardOnSwipe" => Keyword.get(ios, :dismiss_keyboard_on_swipe, true),
+      "keyboardResize" => Keyword.get(ios, :keyboard_resize, true),
+      "appLikePage" => Keyword.get(ios, :app_like_page, true)
+    }
+  end
+
+  defp plugin(crate, opts) do
+    unless crate =~ ~r/\A[a-z0-9_-]+\z/,
+      do: raise(ArgumentError, "not a crate name: #{inspect(crate)}")
+
+    dep =
+      cond do
+        path = opts[:path] -> ~s(#{crate} = { path = "#{path}" })
+        version = opts[:version] -> ~s(#{crate} = "#{version}")
+        true -> ~s(#{crate} = "2")
+      end
+
+    %{crate: crate, dep: dep, init: opts[:init] || String.replace(crate, "-", "_") <> "::init()"}
+  end
+
+  @doc """
+  Puts the iOS plugins' dependencies in their own iOS-only table of Cargo.toml,
+  replacing what an earlier run put there; without plugins, the table goes.
+  """
+  @spec ios_plugin_deps(String.t(), [map()]) :: String.t()
+  def ios_plugin_deps(toml, plugins) do
+    toml = remove_ios_plugin_table(toml)
+
+    if plugins == [] do
+      toml
+    else
+      lines = Enum.map_join(plugins, "\n", & &1.dep)
+
+      String.trim_trailing(toml) <>
+        "\n\n" <> @ios_plugins_note <> "\n" <> @ios_only <> "\n" <> lines <> "\n"
+    end
+  end
+
+  defp remove_ios_plugin_table(toml) do
+    case String.split(toml, @ios_plugins_note <> "\n" <> @ios_only, parts: 2) do
+      [before, rest] ->
+        # The table runs to the next header, or the end.
+        after_table =
+          case Regex.split(~r/^(?=\[)/m, rest, parts: 2) do
+            [_, next] -> "\n" <> next
+            [_] -> ""
+          end
+
+        String.trim_trailing(before) <> "\n" <> after_table
+
+      [_] ->
+        toml
+    end
+  end
+
+  @plugin_templates Path.expand("../../priv/templates/ios_plugin", __DIR__)
+  @native_swift Path.expand("../../priv/templates/ExTauriNative.swift", __DIR__)
+  @external_resource @native_swift
+
+  @doc "The Swift side of `ExTauri.Native`, which every scaffolded plugin carries."
+  @spec native_swift() :: String.t()
+  def native_swift, do: File.read!(@native_swift)
+
+  @doc false
+  def native_swift_file, do: "ExTauriNative.swift"
+
+  @doc """
+  The files of a new iOS plugin named `name` (`near-radio`), relative to its
+  directory: a Tauri plugin crate whose Swift class (`NearRadioPlugin`) opens
+  the `ExTauri.Native` channel `name`.
+  """
+  @spec plugin_scaffold(String.t()) :: [{Path.t(), String.t()}]
+  def plugin_scaffold(name) do
+    assigns = [
+      name: name,
+      crate: "tauri-plugin-#{name}",
+      ident: String.replace(name, "-", "_"),
+      class: (name |> String.split("-") |> Enum.map_join(&String.capitalize/1)) <> "Plugin"
+    ]
+
+    files =
+      for {path, template} <- [
+            {"Cargo.toml", "Cargo.toml.eex"},
+            {"build.rs", "build.rs.eex"},
+            {"src/lib.rs", "lib.rs.eex"},
+            {"ios/Package.swift", "Package.swift.eex"},
+            {"ios/Sources/#{assigns[:class]}.swift", "Plugin.swift.eex"},
+            {".gitignore", "gitignore.eex"}
+          ],
+          do: {path, EEx.eval_file(Path.join(@plugin_templates, template), assigns: assigns)}
+
+    files ++ [{"ios/Sources/" <> native_swift_file(), native_swift()}]
+  end
+
+  @doc """
+  Checks a name for `mix ex_tauri.ios plugin`: lowercase words joined by dashes,
+  other than `ex-tauri`, ex_tauri's own plugin.
+  """
+  @spec valid_plugin_name?(String.t()) :: boolean()
+  def valid_plugin_name?(name), do: name =~ @plugin_name and name not in @reserved_plugin_names
+
+  @doc """
   `src-tauri/tauri.ios.conf.json`, which Tauri merges over `tauri.conf.json`
   for iOS builds: the staged release as a resource instead of a sidecar, a
   bundled loading page instead of the desktop's first URL, and an identifier iOS
@@ -214,6 +397,7 @@ defmodule ExTauri.Ios do
   def ios_conf(base, existing \\ %{}) do
     conf = %{
       "build" => %{"frontendDist" => "mobile"},
+      "plugins" => %{"ex-tauri" => shell_plugin_config()},
       "bundle" => %{
         "externalBin" => [],
         "resources" => %{"../#{@stage}/release/" => "ex_tauri/release/"},

@@ -1,0 +1,22 @@
+//! <%= @name %>: Swift on iOS (ios/Sources), reached from Elixir through
+//! `ExTauri.Native` on the channel "<%= @name %>". Scaffolded by
+//! `mix ex_tauri.ios plugin <%= @name %>`; `mix ex_tauri.ios init` registers it.
+
+use tauri::{
+    plugin::{Builder, TauriPlugin},
+    Runtime,
+};
+
+#[cfg(target_os = "ios")]
+tauri::ios_plugin_binding!(init_plugin_<%= @ident %>);
+
+pub fn init<R: Runtime>() -> TauriPlugin<R> {
+    Builder::new("<%= @name %>")
+        .setup(|_app, _api| {
+            // Creating the Swift class starts it: it connects to the BEAM itself.
+            #[cfg(target_os = "ios")]
+            _api.register_ios_plugin(init_plugin_<%= @ident %>)?;
+            Ok(())
+        })
+        .build()
+}

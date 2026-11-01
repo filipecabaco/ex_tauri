@@ -1,0 +1,4 @@
+# Copied in by Tauri's plugin build.
+/.tauri
+/ios/.build
+/ios/.swiftpm

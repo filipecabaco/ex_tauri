@@ -441,7 +441,7 @@ defmodule ExTauri.Install.Helpers do
   @doc """
   The iOS shell, written to `src-tauri/src/lib.rs` by `mix ex_tauri.ios init`.
   """
-  def mobile_src(host, scheme \\ "http") do
+  def mobile_src(host, scheme \\ "http", plugins \\ []) do
     unless to_string(host) =~ ~r/\A[a-zA-Z0-9\.\-]+\z/ do
       raise ArgumentError, "host contains invalid characters: #{inspect(host)}"
     end
@@ -453,7 +453,8 @@ defmodule ExTauri.Install.Helpers do
     EEx.eval_file(@mobile_rs_template,
       host: to_string(host),
       scheme: to_string(scheme),
-      sidecar_env: sidecar_env(host)
+      sidecar_env: sidecar_env(host),
+      plugins: plugins
     )
   end
 

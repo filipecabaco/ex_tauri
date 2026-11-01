@@ -46,6 +46,11 @@ static CHANNEL_TX: Mutex<Option<mpsc::Sender<String>>> = Mutex::new(None);
 // session cookies the window already holds.
 static SECRET_KEY_BASE: OnceLock<String> = OnceLock::new();
 
+// What only the window and the backend know (ExTauri.Token): anything else on the
+// machine can reach the backend's loopback port too. One for the life of the app,
+// like the secret above, so a restarted backend still accepts the window's cookie.
+static TOKEN: OnceLock<String> = OnceLock::new();
+
 const MAX_RESTARTS: u32 = 3;
 // A backend that stayed up this long before dying gets a fresh set of restarts.
 const STABLE_UPTIME: Duration = Duration::from_secs(60);
@@ -273,10 +278,16 @@ fn resolve_port() -> u16 {
 // provided; otherwise generate a per-launch secret — sessions reset between
 // launches, which is fine for a local desktop app.
 fn secret_key_base() -> String {
-    if let Ok(secret) = std::env::var("SECRET_KEY_BASE") {
-        return secret;
-    }
+    std::env::var("SECRET_KEY_BASE").unwrap_or_else(|_| random_secret())
+}
 
+// The window's token: EX_TAURI_TOKEN when set (to drive the backend from a
+// script too), otherwise made now. It never touches the disk.
+fn launch_token() -> String {
+    std::env::var("EX_TAURI_TOKEN").unwrap_or_else(|_| random_secret())
+}
+
+fn random_secret() -> String {
     #[cfg(unix)]
     {
         use std::io::Read;
@@ -288,8 +299,8 @@ fn secret_key_base() -> String {
         }
     }
 
-    // Fallback entropy: hash of time + pid. Weak, but only signs local
-    // session cookies for a single-user desktop app.
+    // Fallback entropy: hash of time + pid. Weak, but it only guards a local
+    // single-user desktop app.
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
     let nanos = std::time::SystemTime::now()
@@ -340,14 +351,16 @@ fn spawn_sidecar(app: &tauri::AppHandle, port: u16) -> Result<(), String> {
         return Err("the app is quitting".to_string());
     }
 
-    // PORT and SECRET_KEY_BASE are always injected: every server needs a port,
-    // and SECRET_KEY_BASE is a random per-launch secret (inert if unused). The
+    // PORT, SECRET_KEY_BASE and EX_TAURI_TOKEN are always injected: every server
+    // needs a port, SECRET_KEY_BASE is a random per-launch secret (inert if
+    // unused), and the token is what ExTauri.Token.Plug lets the window in by. The
     // remaining pairs come from `config :ex_tauri, :sidecar_env` — the Phoenix
     // defaults (PHX_SERVER/PHX_HOST) unless overridden for another framework.
     let secret = SECRET_KEY_BASE.get_or_init(secret_key_base).clone();
     let mut env: std::collections::HashMap<String, String> = std::collections::HashMap::from([
         ("PORT".to_string(), port.to_string()),
-        ("SECRET_KEY_BASE".to_string(), secret),<%= for {k, v} <- sidecar_env do %>
+        ("SECRET_KEY_BASE".to_string(), secret),
+        ("EX_TAURI_TOKEN".to_string(), TOKEN.get_or_init(launch_token).clone()),<%= for {k, v} <- sidecar_env do %>
         ("<%= k %>".to_string(), "<%= v %>".to_string()),<% end %>
     ]);
 
@@ -503,7 +516,43 @@ fn ampoule_args(env: &mut std::collections::HashMap<String, String>) -> Vec<Stri
 
     env.insert("EX_TAURI_HOST_OS".to_string(), std::env::consts::OS.to_string());
 
+    // ampoule writes its compiled engine to a cache on the first launch and
+    // maps it from there afterwards, but never from a directory the app can
+    // write: its default, under the home mounted above, is turned down and the
+    // engine loaded in memory. CACHE_DIRECTORY is the first place its default
+    // (`auto`) looks, so pointing it outside the home moves only the default:
+    // `native_cache` in ampoule.toml, or AMPOULE_NATIVE_CACHE where the app is
+    // launched, still wins.
+    if std::env::var_os("CACHE_DIRECTORY").is_none() {
+        if let Some(dir) = engine_cache_root() {
+            env.insert("CACHE_DIRECTORY".to_string(), dir);
+        }
+    }
+
     vec!["--mount".to_string(), mounts.join(","), "start".to_string()]
+}
+
+// The per-user cache directory macOS keeps outside the home
+// (/var/folders/…/C), beside the temp dir rather than inside it: the heartbeat
+// socket's directory, mounted above, is the temp dir.
+#[cfg(target_os = "macos")]
+fn engine_cache_root() -> Option<String> {
+    let out = std::process::Command::new("/usr/bin/getconf")
+        .arg("DARWIN_USER_CACHE_DIR")
+        .output()
+        .ok()
+        .filter(|out| out.status.success())?;
+    let dir = String::from_utf8(out.stdout).ok()?;
+    let dir = dir.trim().trim_end_matches('/');
+    dir.starts_with('/').then(|| dir.to_string())
+}
+
+// Linux has no per-user cache directory outside the home: ampoule says in the
+// log that it loads the engine in memory. AMPOULE_NATIVE_CACHE (a directory
+// outside the home and /tmp) or `native_cache = "off"` settle it.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn engine_cache_root() -> Option<String> {
+    None
 }
 
 #[cfg(windows)]
@@ -652,7 +701,9 @@ fn wait_for_backend(port: u16) -> Result<(), String> {
 // even in dev this reload recovers the webview if it raced the server boot.
 fn navigate_main_window(app: &tauri::AppHandle, port: u16) {
     if let Some(window) = app.get_webview_window("main") {
-        let url = format!("<%= scheme %>://<%= host %>:{}", port);
+        // With the token: ExTauri.Token.Plug trades it for a cookie and redirects.
+        let token = TOKEN.get_or_init(launch_token);
+        let url = format!("<%= scheme %>://<%= host %>:{}/?ex_tauri_token={}", port, token);
         if let Ok(url) = url.parse() {
             let _ = window.navigate(url);
         }

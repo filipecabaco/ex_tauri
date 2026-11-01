@@ -148,7 +148,7 @@ end
 
 | What happens | What the app does |
 |--------------|-------------------|
-| The app goes to the background, or the device locks | iOS suspends the whole app, BEAM included; it carries on when the app comes back. Connections may have dropped meanwhile: reconnect on failure |
+| The app goes to the background, or the device locks | iOS suspends the whole app, BEAM included; it carries on when the app comes back. Connections may have dropped meanwhile: reconnect on failure. iOS may also have reclaimed listening sockets, the app's own HTTP endpoint included: `ExTauri.Resume` (below) listens again |
 | iOS reclaims the suspended app's web content | WebKit reloads the page from the backend, which is still up |
 | iOS ends the app | The BEAM ends with it; opening the app starts a new one |
 | The BEAM halts (`System.stop/1`, a crash of the top supervisor) | The app ends with it: ERTS cannot be restarted inside the same process |
@@ -157,17 +157,152 @@ Whatever lived only in the page is gone after a reload: the open document, the
 view, unsaved edits. Keep that state with the backend, under
 `ExTauri.Paths.config_dir/0`, and hand it back when the page loads.
 
+A listening socket iOS reclaimed while the app was suspended never accepts
+again, and the BEAM is not told: the window stays on "connecting" until the app
+is quit. `ExTauri.Resume`, which ex_tauri starts for you, notices the resume
+and restarts every listener it watches that no longer accepts.
+`ExTauri.Native` watches its own; watch your HTTP endpoint once your
+supervisor is up, and reconnect what else needs it:
+
+```elixir
+# application.ex
+{:ok, sup} = Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)
+
+ExTauri.Resume.watch(:http, Application.fetch_env!(:ex_tauri, :port), fn ->
+  ExTauri.Resume.restart_child(MyApp.Supervisor, MyApp.Router)
+end)
+
+ExTauri.Resume.on_resume(:links, fn _suspended_ms -> MyApp.reconnect() end)
+{:ok, sup}
+```
+
+## Native plugins
+
+Some of iOS is only reachable from Swift: Bluetooth, Multipeer Connectivity,
+HealthKit, the camera. A native plugin brings it to your Elixir code:
+
+```bash
+mix ex_tauri.ios plugin near-radio
+```
+
+writes `src-tauri/plugins/near-radio`, a Tauri plugin crate with a Swift package,
+and registers it in the shell. `mix ex_tauri.ios init` registers every plugin in
+`src-tauri/plugins/*` (and every crate in `config :ex_tauri, :ios_plugins`, such
+as `{"tauri-plugin-haptics", "2"}`) in the generated `lib.rs` and in an iOS-only
+table of `Cargo.toml`: you never edit `lib.rs`, and `init` can keep regenerating it.
+
+The plugin's Swift class talks to the BEAM on a channel named after it, through
+`ExTauri.Native`:
+
+```swift
+// src-tauri/plugins/near-radio/ios/Sources/NearRadioPlugin.swift
+let native = ExTauriNative(channel: "near-radio")
+
+native.on { message in /* from ExTauri.Native.send/2 */ }
+native.onConnect = { native.send(["hello": "from Swift"]) }
+native.start()
+```
+
+```elixir
+# application.ex
+children = [ExTauri.ShutdownManager, ExTauri.Native, ...]
+
+ExTauri.Native.subscribe("near-radio")
+# {:ex_tauri_native, "near-radio", :connected}
+# {:ex_tauri_native, "near-radio", %{"hello" => "from Swift"}}
+ExTauri.Native.send("near-radio", %{"op" => "start"})
+```
+
+Messages are JSON. `ExTauri.Native` listens on loopback at a free port and writes
+the port and a token, new at every launch, to
+`Library/Application Support/ex_tauri/native.json` inside the app's container
+(mode 600); `ExTauriNative.swift` reads them and must present the token first, so
+no other app can connect. The BEAM starts after the app, and the Swift side
+reconnects on its own. `ExTauriNative.swift` belongs to ex_tauri: `init` rewrites
+it to match the version in use. Run `mix ex_tauri.ios init` before
+`mix ex_tauri.ios plugin`.
+
+Native plugins work in `mix ex_tauri.ios run` and `device` builds only, not under
+`mix ex_tauri.ios dev`: there the BEAM runs on the Mac, `ExTauri.Native` is
+`:ignore`d (`send/2` answers `{:error, :not_connected}`), and the handoff file it
+would write is under the Mac's home, not in the simulator app's container where
+`ExTauriNative.swift` looks for it.
+
+Add the usage descriptions your frameworks need (`NSBluetoothAlwaysUsageDescription`,
+`NSBonjourServices`, ...) to `src-tauri/Info.ios.plist`, which Tauri merges into
+the app's `Info.plist`.
+
+## What the shell does for you
+
+ex_tauri registers its own iOS plugin in every app (`priv/ios_shell`, used from the
+dependency): the web view's keyboard behaves like an app's.
+
+| `config :ex_tauri, :ios` | Default | |
+|---|---|---|
+| `form_accessory_bar` | `false` | WKWebView's previous / next / done bar above the keyboard |
+| `dismiss_keyboard_on_swipe` | `true` | a downward swipe puts the keyboard away, as in Messages |
+| `app_like_page` | `true` | every page gets a non-zooming, full-screen viewport and touch CSS (no double-tap zoom, no tap flash, no text inflation) before its own code runs |
+| `keyboard_resize` | `true` | the web view shrinks to the space above the keyboard, so a layout at `100%` / `100dvh` keeps its text field in sight; the page gets `<html data-keyboard="open">` and `--ex-tauri-keyboard-height` (hide a tab bar with `html[data-keyboard="open"] nav { display: none }`) |
+
+Rerun `mix ex_tauri.ios init` after changing them (they are written to
+`tauri.ios.conf.json`). Something every app needs belongs here, in ex_tauri, not in
+each app's plugins.
+
+## Rules for a mobile app
+
+Each of these broke on a real device; most never show in the simulator.
+`mix ex_tauri.ios doctor` checks the ones it can (and `init`, `run` and `device`
+run it): a missing permission key stops `run` and `device`, the rest warn.
+
+- **Never edit the generated `lib.rs` or `build.rs`**: native code goes in a plugin
+  (`mix ex_tauri.ios plugin`), third-party Tauri plugins in
+  `config :ex_tauri, :ios_plugins`.
+- **No processes, no foreign NIFs**: no `System.cmd/3` or ports; only OTP's crypto
+  and asn1 NIFs.
+- **Write only under `ExTauri.Paths`**: the container's root is read-only on a
+  device (the simulator's is not).
+- **Keep state in the backend**: the page may be reloaded at any time.
+- **Expect to be frozen in the background**, BEAM included: watch every listener
+  with `ExTauri.Resume.watch/3` (your HTTP endpoint first, see
+  [Sleep, suspension, and crashes](#sleep-suspension-and-crashes)) and reconnect
+  in `ExTauri.Resume.on_resume/2`.
+- **Declare permissions in `src-tauri/Info.ios.plist`**: Local Network, Bonjour
+  services, Bluetooth, background modes.
+- **Unicast on the LAN**: broadcast and multicast need an Apple entitlement.
+- **No page zoom**: `maximum-scale=1, user-scalable=no` and
+  `touch-action: manipulation`; inputs at 16px or larger.
+- **Distribution is opt-in and full trust**: start it at runtime (there is no epmd;
+  `dist_listen: false`, or a `:kernel` `epmd_module` that derives ports from node
+  names); `ExTauri` places a cookie file where OTP can create none; never connect
+  untrusted nodes.
+
+## Debugging on a device
+
+iOS forwards none of the BEAM's output from a device. Log to a file under
+`ExTauri.Paths.config_dir/0` (`:logger.add_handler/3` with `:logger_std_h`) and
+copy it off:
+
+```bash
+xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer \
+  --domain-identifier <bundle id> \
+  --source "Library/Application Support/<app>/app.log" --destination ./device.log
+```
+
+`xcrun devicectl device info files` (same `--domain-*` options) lists what is there.
+
 ## Designing for iPhone and iPad
 
 The window is a WKWebView, so this is responsive web design with a few
 iOS-specific details. In your root layout:
 
 ```html
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 ```
 
-`viewport-fit=cover` lets the page draw under the notch and home indicator; pad
-for them with the safe-area insets:
+`viewport-fit=cover` lets the page draw under the notch and home indicator, and
+`maximum-scale=1, user-scalable=no` stops the page zooming like a document (add
+`html { touch-action: manipulation; }` for double taps). Pad for the notch and home
+indicator with the safe-area insets:
 
 ```css
 body {

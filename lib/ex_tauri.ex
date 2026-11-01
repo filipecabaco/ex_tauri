@@ -22,9 +22,13 @@ defmodule ExTauri do
   def start(_, _) do
     validate_config()
     load_bundled_cacerts()
+    ensure_cookie_file()
 
     children = [
-      {Task.Supervisor, name: ExTauri.TaskSupervisor}
+      {Task.Supervisor, name: ExTauri.TaskSupervisor},
+      # Here rather than in each app: ex_tauri starts before the app, so it is
+      # running by the time anything calls ExTauri.Resume.watch/3.
+      ExTauri.Resume
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: ExTauri.Supervisor)
@@ -47,6 +51,30 @@ defmodule ExTauri do
           Logger.error("[ExTauri] could not load CA certificates: #{inspect(reason)}")
       end
     end
+  end
+
+  # Inside an iOS app, starting distribution (`Node.start/2`, `:net_kernel.start/2`)
+  # fails with `eperm`: with no `-setcookie`, OTP reads $HOME/.erlang.cookie, else
+  # the user config dir, and creates the first when neither exists. HOME is the
+  # app container's root, which iOS will not let the app write, so the node is
+  # never named. A random cookie in the config dir (Library/Application Support,
+  # writable) is found second and nothing is written to HOME. Set your own with
+  # `Node.set_cookie/1` once the node is up.
+  defp ensure_cookie_file do
+    if System.get_env("EX_TAURI_IN_PROCESS") == "1" do
+      path = Path.join(to_string(:filename.basedir(:user_config, ~c"erlang")), ".erlang.cookie")
+
+      unless File.exists?(path) do
+        cookie = :rand.bytes(15) |> Base.encode32(padding: false)
+
+        with :ok <- File.mkdir_p(Path.dirname(path)),
+             :ok <- File.write(path, cookie) do
+          File.chmod(path, 0o400)
+        end
+      end
+    end
+
+    :ok
   end
 
   defp validate_config do

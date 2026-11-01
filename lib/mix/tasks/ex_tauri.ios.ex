@@ -10,6 +10,8 @@ defmodule Mix.Tasks.ExTauri.Ios do
       $ mix ex_tauri.ios device        # stage the backend, build, install and run on an iPhone or iPad
       $ mix ex_tauri.ios dev           # the simulator on your dev server, live reload
       $ mix ex_tauri.ios build         # build for the simulator, without running it
+      $ mix ex_tauri.ios plugin NAME   # scaffold a native (Swift) plugin, wired to the BEAM
+      $ mix ex_tauri.ios doctor        # check the app against the rules of an iOS build
 
   ## Options
 
@@ -21,6 +23,8 @@ defmodule Mix.Tasks.ExTauri.Ios do
       `device`).
     * `--force` — `init` replaces a `src-tauri/src/lib.rs` or `build.rs` it did
       not write, and regenerates the Xcode project.
+    * `--skip-doctor` — `run` and `device` build even when `doctor` finds an error
+      (see `ExTauri.Ios.Doctor`).
     * `--allow-older-runtime` — build even when the newest installed simulator
       runtime is older than Xcode's simulator SDK. `cargo tauri ios build`
       refuses that pairing although the app runs fine on the older runtime;
@@ -43,6 +47,19 @@ defmodule Mix.Tasks.ExTauri.Ios do
   runs in the foreground: the simulator shares the Mac's loopback, so live
   reload works as in a browser.
 
+  ## Native plugins
+
+  Some of iOS is only reachable from Swift: Bluetooth, Multipeer Connectivity,
+  HealthKit, the camera. `plugin NAME` scaffolds a Tauri plugin in
+  `src-tauri/plugins/NAME`: a Rust crate, a Swift package whose plugin class
+  connects to the BEAM through `ExTauri.Native`, and the Swift side of that
+  bridge (`ExTauriNative.swift`). `init` registers every plugin in
+  `src-tauri/plugins/*`, and every crate in `config :ex_tauri, :ios_plugins`, in
+  the shell and in `Cargo.toml`, so the generated `lib.rs` never needs editing.
+  `plugin` needs `init` to have run. Plugins reach the BEAM in `run` and `device`
+  builds only: under `dev` the BEAM runs on the Mac, where `ExTauri.Native`
+  does not start.
+
   ## Requirements
 
   Xcode with an iOS simulator runtime, the Rust iOS targets
@@ -59,7 +76,13 @@ defmodule Mix.Tasks.ExTauri.Ios do
 
   alias ExTauri.Ios
 
-  @switches [force: :boolean, device: :string, console: :boolean, allow_older_runtime: :boolean]
+  @switches [
+    force: :boolean,
+    device: :string,
+    console: :boolean,
+    allow_older_runtime: :boolean,
+    skip_doctor: :boolean
+  ]
 
   @impl true
   def run(args) do
@@ -67,12 +90,32 @@ defmodule Mix.Tasks.ExTauri.Ios do
     ExTauri.TaskHelpers.preflight_check!(otp: false)
 
     case rest do
-      ["init"] -> init(opts)
-      ["build"] -> build(opts, :simulator, backend: true)
-      ["run"] -> opts |> build(:simulator, backend: true) |> launch(opts, [])
-      ["device"] -> opts |> build(:device, backend: true) |> launch_on_device(opts)
-      ["dev"] -> dev(opts)
-      _ -> Mix.raise("Usage: mix ex_tauri.ios init|build|run|device|dev [options]")
+      ["init"] ->
+        init(opts)
+
+      ["build"] ->
+        build(opts, :simulator, backend: true)
+
+      ["run"] ->
+        opts |> doctor!() |> build(:simulator, backend: true) |> launch(opts, [])
+
+      ["device"] ->
+        opts |> doctor!() |> build(:device, backend: true) |> launch_on_device(opts)
+
+      ["doctor"] ->
+        if ExTauri.Ios.Doctor.report(ExTauri.Ios.Doctor.check()) == :error,
+          do: exit({:shutdown, 1})
+
+      ["dev"] ->
+        dev(opts)
+
+      ["plugin", name] ->
+        plugin(name, opts)
+
+      _ ->
+        Mix.raise(
+          "Usage: mix ex_tauri.ios init|build|run|device|dev|doctor|plugin NAME [options]"
+        )
     end
   end
 
@@ -80,7 +123,14 @@ defmodule Mix.Tasks.ExTauri.Ios do
     write_lib_rs(opts)
     write_build_rs(opts)
 
-    update_file("src-tauri/Cargo.toml", &Ios.mobile_cargo_toml/1)
+    plugins = Ios.ios_plugins()
+
+    update_file(
+      "src-tauri/Cargo.toml",
+      &(&1 |> Ios.mobile_cargo_toml() |> Ios.ios_plugin_deps(plugins))
+    )
+
+    refresh_native_bridge()
 
     base = base_conf()
 
@@ -105,6 +155,7 @@ defmodule Mix.Tasks.ExTauri.Ios do
     end
 
     prepare_xcode_project()
+    ExTauri.Ios.Doctor.report(ExTauri.Ios.Doctor.check())
 
     Mix.shell().info("""
 
@@ -126,12 +177,93 @@ defmodule Mix.Tasks.ExTauri.Ios do
       :write ->
         host = Application.get_env(:ex_tauri, :host, "localhost")
         scheme = Application.get_env(:ex_tauri, :scheme, "http")
-        File.write!(path, ExTauri.Install.Helpers.mobile_src(host, scheme))
+        File.write!(path, ExTauri.Install.Helpers.mobile_src(host, scheme, Ios.ios_plugins()))
         Mix.shell().info("* wrote #{path}")
 
       {:refuse, reason} ->
         Mix.raise(reason)
     end
+  end
+
+  # What a device would find out the hard way, before building for it.
+  defp doctor!(opts) do
+    case {ExTauri.Ios.Doctor.report(ExTauri.Ios.Doctor.check()), opts[:skip_doctor]} do
+      {:error, true} ->
+        opts
+
+      {:error, _} ->
+        Mix.raise("mix ex_tauri.ios doctor found errors (above); fix them, or pass --skip-doctor")
+
+      _ ->
+        opts
+    end
+  end
+
+  # Scaffolds src-tauri/plugins/NAME, then registers it as `init` would.
+  defp plugin(name, opts) do
+    unless Ios.valid_plugin_name?(name) do
+      Mix.raise(
+        "A plugin name is lowercase words joined by dashes, like `near-radio`, " <>
+          "and not `ex-tauri` (ex_tauri's own); got #{inspect(name)}"
+      )
+    end
+
+    # Before init the plugin would be half set up: registered in a lib.rs with
+    # no iOS shell around it, and no tauri.ios.conf.json or Xcode project.
+    lib_rs = "src-tauri/src/lib.rs"
+
+    unless File.exists?(lib_rs) and File.read!(lib_rs) =~ "ex_tauri:mobile-shell" and
+             File.exists?("src-tauri/tauri.ios.conf.json") do
+      Mix.raise(
+        "src-tauri is not prepared for iOS yet. Run: mix ex_tauri.ios init, then this again"
+      )
+    end
+
+    dir = Path.join("src-tauri/plugins", name)
+
+    if File.exists?(dir) and not opts[:force] do
+      Mix.raise("#{dir} exists; pass --force to write over it")
+    end
+
+    for {path, contents} <- Ios.plugin_scaffold(name) do
+      target = Path.join(dir, path)
+      File.mkdir_p!(Path.dirname(target))
+      File.write!(target, contents)
+      Mix.shell().info("* wrote #{target}")
+    end
+
+    write_lib_rs(force: false)
+    plugins = Ios.ios_plugins()
+    update_file("src-tauri/Cargo.toml", &Ios.ios_plugin_deps(&1, plugins))
+
+    Mix.shell().info("""
+
+    #{name} is registered in the iOS shell. Write its Swift in
+    #{dir}/ios/Sources, and talk to it from Elixir:
+
+        # once, in your application's children
+        ExTauri.Native
+
+        # its messages arrive as {:ex_tauri_native, "#{name}", data}
+        ExTauri.Native.subscribe("#{name}")
+
+        # and this reaches its `native.on` handler in Swift
+        ExTauri.Native.send("#{name}", %{"hello" => 1})
+    """)
+  end
+
+  # Every scaffolded plugin carries the Swift side of the bridge; init keeps it
+  # matching this version of ExTauri.Native.
+  defp refresh_native_bridge do
+    for dir <- Path.wildcard("src-tauri/plugins/*/ios/Sources"),
+        path = Path.join(dir, Ios.native_swift_file()),
+        File.exists?(path),
+        File.read!(path) != Ios.native_swift() do
+      File.write!(path, Ios.native_swift())
+      Mix.shell().info("* updated #{path}")
+    end
+
+    :ok
   end
 
   defp write_build_rs(opts) do
@@ -239,15 +371,22 @@ defmodule Mix.Tasks.ExTauri.Ios do
     scheme = Application.get_env(:ex_tauri, :scheme, "http")
     url = "#{scheme}://#{host}:#{port}"
 
+    # One token for the shell and the dev server (ExTauri.Token): the window opens
+    # with it, as from an app's own backend.
+    token = 32 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
+
     # Launched first: the shell waits for the URL, and the dev server below
     # holds the terminal until it is stopped.
-    launch(built, Keyword.put(opts, :console, false), [{"EX_TAURI_DEV_URL", url}])
+    launch(built, Keyword.put(opts, :console, false), [
+      {"EX_TAURI_DEV_URL", url},
+      {"EX_TAURI_TOKEN", token}
+    ])
 
     command = ExTauri.Sidecar.DevServer.command()
     Mix.shell().info("Starting `#{command}` for the simulator at #{url} (Ctrl-C to stop)")
 
     System.cmd("sh", ["-c", command],
-      env: [{"PORT", to_string(port)}],
+      env: [{"PORT", to_string(port)}, {"EX_TAURI_TOKEN", token}],
       into: IO.stream(:stdio, :line),
       stderr_to_stdout: true
     )

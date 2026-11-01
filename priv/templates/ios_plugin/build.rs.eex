@@ -1,0 +1,7 @@
+// Scaffolded by `mix ex_tauri.ios plugin <%= @name %>`.
+// No commands: the plugin talks to the BEAM through ExTauri.Native, not the webview.
+const COMMANDS: &[&str] = &[];
+
+fn main() {
+    tauri_plugin::Builder::new(COMMANDS).ios_path("ios").build();
+}

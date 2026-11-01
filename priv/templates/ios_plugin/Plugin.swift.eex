@@ -1,0 +1,36 @@
+// <%= @name %>, the native half. Scaffolded by `mix ex_tauri.ios plugin <%= @name %>`.
+//
+// The plugin talks to the BEAM over ExTauri.Native's channel "<%= @name %>":
+//
+//   Swift   native.send(["hello": "from Swift"])
+//   Elixir  receives {:ex_tauri_native, "<%= @name %>", %{"hello" => "from Swift"}}
+//
+//   Elixir  ExTauri.Native.send("<%= @name %>", %{"ping" => 1})
+//   Swift   the `native.on` handler gets ["ping": 1]
+
+import Foundation
+import Tauri
+
+class <%= @class %>: Plugin {
+  let native = ExTauriNative(channel: "<%= @name %>")
+
+  override init() {
+    super.init()
+
+    native.onConnect = { [weak self] in
+      // The BEAM is up (it starts after the app does, and again after a reload).
+      self?.native.send(["hello": "from Swift"])
+    }
+
+    native.on { message in
+      Logger.info("[<%= @name %>] from Elixir: \(message)")
+    }
+
+    native.start()
+  }
+}
+
+@_cdecl("init_plugin_<%= @ident %>")
+func initPlugin() -> Plugin {
+  return <%= @class %>()
+}

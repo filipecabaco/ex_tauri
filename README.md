@@ -43,7 +43,7 @@ ExTauri wraps [Tauri](https://tauri.app) to enable Phoenix LiveView applications
 # mix.exs
 def deps do
   [
-    {:ex_tauri, "~> 0.6"}
+    {:ex_tauri, "~> 0.7"}
   ]
 end
 ```
@@ -197,6 +197,27 @@ mounted into it; the shell mounts your home and the heartbeat socket and tells
 lands where a Burrito build would put it. Code that reads `System.user_home!/0`
 directly sees ampoule's private `/tmp` instead — use `ExTauri.Paths`.
 
+With the ampoule release after 0.1.9, the first launch writes ampoule's compiled
+engine (about 17 MiB) to a cache, and later launches map it from there: they
+skip decompressing it, and its pages are ones the OS can reclaim rather than
+memory private to the backend. ampoule never uses a cache the app can write, and
+its default is under the home the shell mounts, so the shell points it at
+macOS's per-user cache directory outside the home (`/var/folders/…/C/ampoule`).
+On Linux there is no such directory: the backend loads the engine in memory, as
+before, and says so in the app's log. To choose, put `native_cache` in an
+`ampoule.toml` beside `mix.exs`, which `mix ex_tauri.build` packs into the
+sidecar:
+
+```toml
+native_cache = "auto"   # the default: one cache per machine, which suits a desktop app
+# native_cache = "off"  # never write one: read-only or kiosk installs
+# native_cache = "/abs/dir"  # a directory of the user's, outside the home and the temp dir
+```
+
+`AMPOULE_NATIVE_CACHE`, and `AMPOULE_MODE=interactive` (load each module on first
+use rather than all at boot, for a smaller backend), reach the sidecar from the
+environment the app is launched with, and win over `ampoule.toml`.
+
 ## iPhone and iPad
 
 ```bash
@@ -225,7 +246,7 @@ queries and safe-area insets.
 | `mix ex_tauri.add` | Add Tauri plugins (dialogs, filesystem, shortcuts, ...) |
 | `mix ex_tauri.dev` | Run in development mode with hot-reload |
 | `mix ex_tauri.build` | Build for production |
-| `mix ex_tauri.ios` | Run on iPhone and iPad, in the simulator or on a device (`init`, `dev`, `run`, `device`, `build`) |
+| `mix ex_tauri.ios` | Run on iPhone and iPad, in the simulator or on a device (`init`, `dev`, `run`, `device`, `build`), scaffold native Swift plugins (`plugin NAME`) and check an app against the rules of an iOS build (`doctor`) |
 
 Run `mix help ex_tauri.<task>` for detailed options.
 
@@ -387,6 +408,26 @@ collisions with other software. The Rust shell passes `PORT`, `PHX_SERVER`,
 `PHX_HOST`, and a generated `SECRET_KEY_BASE` to the sidecar (standard Phoenix
 `runtime.exs` picks these up) and navigates the window once the server is up.
 In dev, `EX_TAURI_PORT` pins the configured port so live reload URLs match.
+
+### Only your window reaches the backend
+
+The backend listens on loopback, which every program on the machine (and every
+running app on an iPhone) can reach too. The shell makes a random token at
+launch, passes it to the backend as `EX_TAURI_TOKEN`, and opens the window at
+`/?ex_tauri_token=…`. Add the plug before your router (in a Phoenix endpoint,
+before `plug MyAppWeb.Router`):
+
+```elixir
+plug ExTauri.Token.Plug                  # every path
+plug ExTauri.Token.Plug, only: ["/api"]  # or only some
+```
+
+It trades the token for an `HttpOnly`, `SameSite=Strict` cookie, redirects to
+the same URL without it, and answers 401 to guarded requests that carry neither
+the cookie nor `Authorization: Bearer <token>` (for scripts: set
+`EX_TAURI_TOKEN` yourself). LiveView's socket carries the cookie like any other
+request. A backend started without the shell (`mix phx.server`) makes its own
+token and logs the link to open.
 
 ### Heartbeat-Based Shutdown
 

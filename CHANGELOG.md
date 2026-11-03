@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The README names the ampoule versions that matter now that they are out:
+  0.1.10 or later for the mapped engine cache, and 0.1.13 as the one to
+  install, with its one-line installer; since 0.1.13 `ampoule release --target`
+  fetches a missing runtime by itself. The window token and the engine cache
+  are listed under 0.7.0, the release that shipped them.
+
+## [0.7.0] - 2026-10-31
+
 ### Added
 
 - `ExTauri.Token` and `ExTauri.Token.Plug`: only the app's own window can reach
@@ -34,12 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   win. On Linux the backend loads the engine in memory, as before, and says so
   in the log. See "Packaging with ampoule" in the README, which also covers
   `AMPOULE_MODE=interactive`. Regenerate `src-tauri/src/main.rs` with
-  `mix ex_tauri.install` to pick it up. **Pending:** this needs the ampoule
-  release after 0.1.9, not yet published; with 0.1.9 the variable is ignored.
-
-## [0.7.0] - 2026-10-31
-
-### Added
+  `mix ex_tauri.install` to pick it up. It needs ampoule 0.1.10 or later;
+  with 0.1.9 the variable is ignored.
 
 - Native plugins on iOS: `mix ex_tauri.ios plugin NAME` scaffolds a Tauri
   plugin in `src-tauri/plugins/NAME` (a Rust crate and a Swift package), for

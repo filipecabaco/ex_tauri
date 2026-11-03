@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-03
+
+### Fixed
+
+- `mix ex_tauri.ios run`, `build` and `device` work more than once. The Tauri
+  CLI renames the bundle it built into `src-tauri/gen/apple/build/<arch>/`, and
+  that rename failed ("Directory not empty") whenever the previous build had
+  left its `.app` (or `.ipa`) there, so every build after the first stopped at
+  the end. The build now clears it first (`ExTauri.Ios.built_path/3`).
+
 ### Changed
 
 - The README names the ampoule versions that matter now that they are out:

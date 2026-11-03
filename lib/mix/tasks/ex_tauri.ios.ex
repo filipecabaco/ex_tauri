@@ -322,18 +322,14 @@ defmodule Mix.Tasks.ExTauri.Ios do
 
     target_args = if kind == :simulator, do: ["--target", simulator_target], else: []
 
+    # The CLI renames the new bundle into place, and a rename onto the last
+    # build's bundle fails, so every build after the first one did.
+    built = Ios.built_path(kind, simulator_target, name)
+    File.rm_rf!(built)
+
     ExTauri.run_simple(["ios", "build"] ++ target_args ++ ["--debug", "--ci"], [
       {"PATH", Enum.join(path, ":")}
     ])
-
-    built =
-      case kind do
-        :simulator ->
-          Path.join(["src-tauri/gen/apple/build", Ios.app_dir(simulator_target), name <> ".app"])
-
-        :device ->
-          Path.join(["src-tauri/gen/apple/build/arm64", name <> ".ipa"])
-      end
 
     File.exists?(built) || Mix.raise("the build reported success but #{built} is missing")
     Mix.shell().info("Built #{built}")

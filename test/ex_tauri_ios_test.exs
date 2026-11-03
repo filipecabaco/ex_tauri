@@ -46,6 +46,21 @@ defmodule ExTauri.IosTest do
   custom-protocol = [ "tauri/custom-protocol" ]
   """
 
+  describe "built_path/3" do
+    test "is the simulator's .app for its target" do
+      assert Ios.built_path(:simulator, "aarch64-sim", "markdn") ==
+               "src-tauri/gen/apple/build/arm64-sim/markdn.app"
+
+      assert Ios.built_path(:simulator, "x86_64", "My App") ==
+               "src-tauri/gen/apple/build/x86_64/My App.app"
+    end
+
+    test "is the device's .ipa whatever the simulator target" do
+      assert Ios.built_path(:device, "aarch64-sim", "markdn") ==
+               "src-tauri/gen/apple/build/arm64/markdn.ipa"
+    end
+  end
+
   describe "lib_rs_action/1" do
     test "writes when there is none, over Tauri's stub, and over its own" do
       assert :write = Ios.lib_rs_action(nil)

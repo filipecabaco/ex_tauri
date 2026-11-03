@@ -482,6 +482,26 @@ defmodule ExTauri.Ios do
   def app_dir("x86_64"), do: "x86_64"
 
   @doc """
+  Where `cargo tauri ios build` leaves the bundle for the app `name`: the
+  simulator's `.app` for its `target`, or the device's `.ipa`.
+
+  The CLI moves the archived bundle there with a rename, which fails ("Directory
+  not empty") when a previous build left one, so the build clears it first.
+
+      iex> ExTauri.Ios.built_path(:simulator, "aarch64-sim", "markdn")
+      "src-tauri/gen/apple/build/arm64-sim/markdn.app"
+
+      iex> ExTauri.Ios.built_path(:device, "aarch64-sim", "markdn")
+      "src-tauri/gen/apple/build/arm64/markdn.ipa"
+  """
+  @spec built_path(:simulator | :device, String.t(), String.t()) :: String.t()
+  def built_path(:simulator, target, name),
+    do: Path.join(["src-tauri/gen/apple/build", app_dir(target), name <> ".app"])
+
+  def built_path(:device, _target, name),
+    do: Path.join(["src-tauri/gen/apple/build/arm64", name <> ".ipa"])
+
+  @doc """
   Picks the simulator to run on from `xcrun simctl list devices available
   --json` output: the one named or whose UDID is `wanted`, else one already
   booted, else the first iPad.

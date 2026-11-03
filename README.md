@@ -174,6 +174,17 @@ executable that runs the BEAM as WebAssembly: there is no ERTS to unpack on
 first launch, and the release runs on **OTP 28**. macOS and Linux (Windows
 stays on Burrito).
 
+Install ampoule 0.1.13 or later, with every platform's runtime beside it:
+
+```bash
+curl -fsSL https://filipecabaco.github.io/ampoule/install.sh | sh
+```
+
+The release is built with the OTP of the runtime it runs on (`ampoule version`
+prints it; 0.1.13 embeds OTP 28.5.0.4), so pin that OTP beside ampoule's
+version. Since 0.1.13, `ampoule release --target` downloads a runtime that is
+not installed, checked against the release's `SHA256SUMS`.
+
 ```elixir
 # config/config.exs
 config :ex_tauri, :packager, :ampoule
@@ -197,7 +208,7 @@ mounted into it; the shell mounts your home and the heartbeat socket and tells
 lands where a Burrito build would put it. Code that reads `System.user_home!/0`
 directly sees ampoule's private `/tmp` instead — use `ExTauri.Paths`.
 
-With the ampoule release after 0.1.9, the first launch writes ampoule's compiled
+With ampoule 0.1.10 or later, the first launch writes ampoule's compiled
 engine (about 17 MiB) to a cache, and later launches map it from there: they
 skip decompressing it, and its pages are ones the OS can reclaim rather than
 memory private to the backend. ampoule never uses a cache the app can write, and

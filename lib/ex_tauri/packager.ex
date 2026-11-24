@@ -25,7 +25,9 @@ defmodule ExTauri.Packager do
 
   The output path stays `burrito_out/` for both, so `tauri.conf.json`'s
   `externalBin` does not change when switching. The generated shell tells the
-  two apart at launch by ampoule's trailer, so `main.rs` does not either.
+  two apart at launch by ampoule's marker — the `AMPOULE1` trailer, or on arm64
+  macOS from ampoule 0.1.15 the `__SUI,__ampoule` Mach-O section that lets the
+  sidecar be signed and notarized — so `main.rs` does not either.
   """
 
   @arches ~w(aarch64 x86_64)

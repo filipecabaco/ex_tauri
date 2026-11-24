@@ -124,11 +124,15 @@ defmodule ExTauriIntegrationTest do
     test "the desktop shell launches either packager's sidecar from one main.rs" do
       src = Helpers.main_src("localhost", "4000", "test_app", "App", "http", "test_app_desktop")
 
-      # Told apart at launch by ampoule's trailer: switching :packager never
-      # needs main.rs regenerated.
+      # Told apart at launch by ampoule's marker: switching :packager never
+      # needs main.rs regenerated. Both markers, because ampoule 0.1.15 moved
+      # the payload into a Mach-O section on arm64 macOS, where the file then
+      # ends with its signature rather than the trailer.
       assert src =~ "fn sidecar_is_ampoule() -> bool"
       assert src =~ ~s|exe.with_file_name("test_app_desktop")|
       assert src =~ ~s|b"AMPOULE1"|
+      assert src =~ "ends_with_trailer(&mut file) || has_payload_section(&mut file)"
+      assert src =~ ~s|named(&sect[..16], b"__ampoule") && named(&sect[16..32], b"__SUI")|
 
       # Burrito halts after boot without --no-halt; ampoule takes a command and
       # sees only what is mounted, so the socket dir and home go in.

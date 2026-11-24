@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-24
+
+### Fixed
+
+- A desktop app packed with ampoule 0.1.15 or later starts on macOS. ampoule
+  0.1.15 puts the release in a `__SUI,__ampoule` Mach-O section on arm64 macOS,
+  so the sidecar can be signed with a Developer ID and notarized, and the file
+  then ends with its code signature instead of the `AMPOULE1` trailer. The
+  generated `main.rs` looked only for the trailer, so it took the sidecar for a
+  Burrito build, started it with `--no-halt` instead of its runtime command,
+  and the backend exited at once. It now recognises either marker, reading only
+  the header and load commands. Apps generated before this release need the
+  same change in their `src-tauri/src/main.rs` (`sidecar_is_ampoule`), since
+  `mix ex_tauri.install` does not regenerate it.
+
 ## [0.7.1] - 2026-11-03
 
 ### Fixed

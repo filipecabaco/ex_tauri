@@ -466,22 +466,96 @@ async fn watch_sidecar(
     }
 }
 
-// ampoule (ExTauri.Packager) appends its payload to the executable and ends it
-// with this marker; a Burrito sidecar or a dev shim does not. Reading it at
-// launch lets one main.rs run either, so switching :packager needs no
-// regeneration. Tauri resolves sidecars next to this executable.
+// Whether the sidecar was packed by ampoule (ExTauri.Packager); a Burrito
+// sidecar or a dev shim was not. Reading it at launch lets one main.rs run
+// either, so switching :packager needs no regeneration. Tauri resolves sidecars
+// next to this executable.
+//
+// ampoule marks a packed binary two ways, and both have to be recognised:
+//
+// - Appended: the payload follows the executable and the file ends with
+//   `AMPOULE1`. Linux, and macOS before ampoule 0.1.15.
+// - In a Mach-O section, `__SUI,__ampoule`: arm64 macOS from ampoule 0.1.15,
+//   so the binary can be signed and notarized. The trailer is then inside the
+//   section and the file ends with the code signature.
+//
+// Checking only the trailer reads a 0.1.15 sidecar as Burrito: it is started
+// with `--no-halt` instead of its runtime command, and exits.
 #[cfg(unix)]
 fn sidecar_is_ampoule() -> bool {
-    use std::io::{Read, Seek, SeekFrom};
-
     let Ok(exe) = std::env::current_exe() else { return false };
     let Ok(mut file) = std::fs::File::open(exe.with_file_name("<%= release_name %>")) else {
         return false;
     };
+    ends_with_trailer(&mut file) || has_payload_section(&mut file)
+}
+
+#[cfg(unix)]
+fn ends_with_trailer(file: &mut std::fs::File) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+
     let mut trailer = [0u8; 8];
     file.seek(SeekFrom::End(-8)).is_ok()
         && file.read_exact(&mut trailer).is_ok()
         && &trailer == b"AMPOULE1"
+}
+
+// A 64-bit Mach-O whose load commands declare section `__ampoule` in segment
+// `__SUI`. Only the header and load commands are read, never the payload.
+#[cfg(unix)]
+fn has_payload_section(file: &mut std::fs::File) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+
+    const MH_MAGIC_64: u32 = 0xfeed_facf;
+    const LC_SEGMENT_64: u32 = 0x19;
+    let u32_at = |b: &[u8], at: usize| -> Option<u32> {
+        Some(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?))
+    };
+    let named = |field: &[u8], name: &[u8]| -> bool {
+        let end = field.iter().position(|&c| c == 0).unwrap_or(field.len());
+        &field[..end] == name
+    };
+
+    let mut header = [0u8; 32];
+    if file.seek(SeekFrom::Start(0)).is_err() || file.read_exact(&mut header).is_err() {
+        return false;
+    }
+    let (Some(magic), Some(ncmds), Some(size)) =
+        (u32_at(&header, 0), u32_at(&header, 16), u32_at(&header, 20))
+    else {
+        return false;
+    };
+    // A real binary's load commands are a few KB; anything far larger is not one.
+    if magic != MH_MAGIC_64 || size as usize > 1 << 20 {
+        return false;
+    }
+    let mut cmds = vec![0u8; size as usize];
+    if file.read_exact(&mut cmds).is_err() {
+        return false;
+    }
+
+    let mut at = 0usize;
+    for _ in 0..ncmds {
+        let (Some(cmd), Some(len)) = (u32_at(&cmds, at), u32_at(&cmds, at + 4)) else {
+            return false;
+        };
+        if cmd == LC_SEGMENT_64 {
+            let nsects = u32_at(&cmds, at + 64).unwrap_or(0) as usize;
+            for i in 0..nsects {
+                let s = at + 72 + i * 80;
+                if let Some(sect) = cmds.get(s..s + 32) {
+                    if named(&sect[..16], b"__ampoule") && named(&sect[16..32], b"__SUI") {
+                        return true;
+                    }
+                }
+            }
+        }
+        if len < 8 {
+            return false;
+        }
+        at += len as usize;
+    }
+    false
 }
 
 // ampoule has no Windows runtime.

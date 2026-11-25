@@ -4,7 +4,7 @@ defmodule ExTauriWebsite.MixProject do
   def project do
     [
       app: :ex_tauri_website,
-      version: "0.7.2",
+      version: "0.7.3",
       elixir: "~> 1.14",
       elixirc_paths: ["lib"],
       start_permanent: Mix.env() == :prod,

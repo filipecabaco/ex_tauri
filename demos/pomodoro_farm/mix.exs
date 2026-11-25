@@ -4,7 +4,7 @@ defmodule PomodoroFarm.MixProject do
   def project do
     [
       app: :pomodoro_farm,
-      version: "0.7.2",
+      version: "0.7.3",
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,

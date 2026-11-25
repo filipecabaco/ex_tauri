@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.3] - 2026-11-25
 
+### Fixed
+
+- ex_tauri compiles on Elixir 1.18 with OTP 28 again. Regexes kept in module attributes
+  (`ExTauri.Ios.Doctor`, `ExTauri.Ios`) hold a reference on OTP 28 that Elixir before 1.19 cannot
+  escape, so the package failed to compile there; they are functions now.
+
 ### Security
 
 - Releases are built and published with Elixir 1.20.5 on Erlang/OTP 28.5.0.9, whose patch releases

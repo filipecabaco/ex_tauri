@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-25
+
+### Security
+
+- Releases are built and published with Elixir 1.20.5 on Erlang/OTP 28.5.0.9, whose patch releases
+  fix CVEs in `URI.parse`, JSON decoding, `ssh` and `ssl`/`public_key` certificate validation. CI
+  runs the suite on those and on the oldest pair `mix.exs` accepts (Elixir 1.17, OTP 27).
+- Dependencies updated, among them `castore` 1.0.4 → 1.0.22: the CA bundle `ExTauri` downloads
+  Tauri's toolchain against was over a year of root-store changes out of date.
+
 ## [0.7.2] - 2026-11-24
 
 ### Fixed

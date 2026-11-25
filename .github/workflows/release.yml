@@ -24,8 +24,8 @@ permissions:
   contents: write
 
 env:
-  ELIXIR_VERSION: "1.17"
-  OTP_VERSION: "27"
+  ELIXIR_VERSION: "1.20.5"
+  OTP_VERSION: "28.5.0.9"
 
 jobs:
   publish:

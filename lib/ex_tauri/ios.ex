@@ -25,7 +25,8 @@ defmodule ExTauri.Ios do
   @desktop_only ~s{[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]}
   @ios_only ~s{[target.'cfg(target_os = "ios")'.dependencies]}
   @ios_plugins_note "# iOS plugins, registered in the shell by `mix ex_tauri.ios init` (src-tauri/plugins/*, config :ex_tauri, :ios_plugins)."
-  @plugin_name ~r/\A[a-z][a-z0-9]*(-[a-z0-9]+)*\z/
+  # A function, not an attribute: see `ExTauri.Ios.Doctor.permissions/0`.
+  defp plugin_name, do: ~r/\A[a-z][a-z0-9]*(-[a-z0-9]+)*\z/
   # Taken by ex_tauri's own plugin (`tauri-plugin-ex-tauri`, priv/ios_shell).
   @reserved_plugin_names ["ex-tauri"]
 
@@ -384,7 +385,7 @@ defmodule ExTauri.Ios do
   other than `ex-tauri`, ex_tauri's own plugin.
   """
   @spec valid_plugin_name?(String.t()) :: boolean()
-  def valid_plugin_name?(name), do: name =~ @plugin_name and name not in @reserved_plugin_names
+  def valid_plugin_name?(name), do: name =~ plugin_name() and name not in @reserved_plugin_names
 
   @doc """
   `src-tauri/tauri.ios.conf.json`, which Tauri merges over `tauri.conf.json`

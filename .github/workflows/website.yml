@@ -17,8 +17,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
         with:
-          elixir-version: "1.18"
-          otp-version: "27"
+          elixir-version: "1.20.5"
+          otp-version: "28.5.0.9"
       - uses: actions/cache@v6
         with:
           path: |

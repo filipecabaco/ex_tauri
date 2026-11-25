@@ -18,24 +18,29 @@ defmodule ExTauri.Ios.Doctor do
 
   # A framework a plugin imports (and, where importing it is not enough, a symbol
   # it uses), and the Info.plist keys iOS requires before it may be used.
-  @permissions [
-    {"CoreBluetooth", nil, ~w(NSBluetoothAlwaysUsageDescription)},
-    {"MultipeerConnectivity", nil, ~w(NSLocalNetworkUsageDescription NSBonjourServices)},
-    {"Network", ~r/NWBrowser|NWListener|includePeerToPeer/, ~w(NSLocalNetworkUsageDescription)},
-    {"CoreLocation", nil, ~w(NSLocationWhenInUseUsageDescription)},
-    {"AVFoundation", ~r/AVCaptureDevice|AVCaptureSession/, ~w(NSCameraUsageDescription)},
-    {"AVFoundation", ~r/AVAudioRecorder|requestRecordPermission|AVAudioApplication/,
-     ~w(NSMicrophoneUsageDescription)},
-    {"Photos", ~r/PHPhotoLibrary/, ~w(NSPhotoLibraryUsageDescription)},
-    {"Contacts", nil, ~w(NSContactsUsageDescription)},
-    {"HealthKit", nil, ~w(NSHealthShareUsageDescription)},
-    {"CoreMotion", nil, ~w(NSMotionUsageDescription)},
-    {"Speech", nil, ~w(NSSpeechRecognitionUsageDescription)},
-    {"LocalAuthentication", ~r/LAContext/, ~w(NSFaceIDUsageDescription)}
-  ]
+  #
+  # Functions rather than module attributes: on OTP 28 a compiled regex holds a
+  # reference, which Elixir before 1.19 cannot escape into an attribute, so
+  # ex_tauri did not compile at all on Elixir 1.18 with OTP 28.
+  defp permissions,
+    do: [
+      {"CoreBluetooth", nil, ~w(NSBluetoothAlwaysUsageDescription)},
+      {"MultipeerConnectivity", nil, ~w(NSLocalNetworkUsageDescription NSBonjourServices)},
+      {"Network", ~r/NWBrowser|NWListener|includePeerToPeer/, ~w(NSLocalNetworkUsageDescription)},
+      {"CoreLocation", nil, ~w(NSLocationWhenInUseUsageDescription)},
+      {"AVFoundation", ~r/AVCaptureDevice|AVCaptureSession/, ~w(NSCameraUsageDescription)},
+      {"AVFoundation", ~r/AVAudioRecorder|requestRecordPermission|AVAudioApplication/,
+       ~w(NSMicrophoneUsageDescription)},
+      {"Photos", ~r/PHPhotoLibrary/, ~w(NSPhotoLibraryUsageDescription)},
+      {"Contacts", nil, ~w(NSContactsUsageDescription)},
+      {"HealthKit", nil, ~w(NSHealthShareUsageDescription)},
+      {"CoreMotion", nil, ~w(NSMotionUsageDescription)},
+      {"Speech", nil, ~w(NSSpeechRecognitionUsageDescription)},
+      {"LocalAuthentication", ~r/LAContext/, ~w(NSFaceIDUsageDescription)}
+    ]
 
-  @processes ~r/System\.cmd\(|System\.shell\(|Port\.open\(\s*\{:spawn|:os\.cmd\(/
-  @home ~r/System\.user_home!?\(|Path\.expand\(\s*"~|"~\//
+  defp processes, do: ~r/System\.cmd\(|System\.shell\(|Port\.open\(\s*\{:spawn|:os\.cmd\(/
+  defp home_paths, do: ~r/System\.user_home!?\(|Path\.expand\(\s*"~|"~\//
 
   @doc "Every finding for the project in `root` (default: the current directory)."
   @spec check(Path.t()) :: [finding()]
@@ -64,7 +69,7 @@ defmodule ExTauri.Ios.Doctor do
 
     for file <- swift_sources(root),
         source = File.read!(file),
-        {framework, symbol, keys} <- @permissions,
+        {framework, symbol, keys} <- permissions(),
         source =~ ~r/^\s*import\s+#{framework}\b/m,
         symbol == nil or source =~ symbol,
         key <- keys,
@@ -81,7 +86,7 @@ defmodule ExTauri.Ios.Doctor do
   end
 
   defp processes(root) do
-    for {file, line} <- grep(root, @processes) do
+    for {file, line} <- grep(root, processes()) do
       %{
         level: :warning,
         rule: :process,
@@ -92,7 +97,7 @@ defmodule ExTauri.Ios.Doctor do
   end
 
   defp home(root) do
-    for {file, line} <- grep(root, @home) do
+    for {file, line} <- grep(root, home_paths()) do
       %{
         level: :warning,
         rule: :home,
